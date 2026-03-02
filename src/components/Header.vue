@@ -54,21 +54,22 @@ const openFindEvents = () => {
             :class="currentTab === 'explore' ? 'text-[#007a67]' : 'text-gray-400 hover:text-gray-600'"
             @click="setTab('explore')"
           >
-            EXPLORE
+            {{t('explore')}}
           </button>
           <button
             class="hidden md:block text-[14px] font-[700] transition-all"
             :class="currentTab === 'saved' ? 'text-red-500' : 'text-gray-400 hover:text-gray-600'"
             @click="setTab('saved')"
           >
-            SAVED
+            {{t('saved')}}
           </button>
+          <!-- TODO: Add sport type filter -->
           <a
             href="/search/pickleball"
             class="hidden text-[14px] font-[700] transition-all text-gray-400 hover:text-gray-600"
             @click.prevent="router.push('/search/pickleball'); setTab('explore');"
           >
-            PICKLEBALL
+            {{t('pickleball')}}
           </a>
         </nav>
       </div>
@@ -86,7 +87,7 @@ const openFindEvents = () => {
           class="hidden md:inline-flex px-4 py-2 rounded-[8px] font-[900] text-[14px] bg-[#007a67] text-white shadow-md hover:brightness-110 active:scale-95 transition-all"
           @click="openFindEvents"
         >
-          Find events
+          {{t('findEvents')}}
         </button>
 
         <div

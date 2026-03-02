@@ -27,7 +27,7 @@ const showVenueForm = ref(false);
 const editingVenue = ref<Venue | null>(null);
 const venueToDelete = ref<Venue | null>(null);
 const isLoading = ref(true);
-const mobileViewMode = ref<'map' | 'list'>('map');
+const mobileViewMode = ref<'map' | 'list'>('list');
 
 const venues = ref<Venue[]>([]);
 const sports = ref<{ id: number; name: string; name_zh?: string | null; slug: string }[]>([]);
