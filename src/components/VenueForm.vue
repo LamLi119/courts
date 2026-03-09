@@ -74,7 +74,8 @@ const defaultForm = {
   admin_password: '' as string | null,
   membership_enabled: false,
   membership_description: '' as string | null,
-  membership_join_link: '' as string | null
+  membership_join_link: '' as string | null,
+  court_count: null as number | null
 };
 
 const formData = reactive<any>(
@@ -87,6 +88,7 @@ if (formData.admin_password === undefined) formData.admin_password = '';
 if (formData.membership_enabled === undefined) formData.membership_enabled = false;
 if (formData.membership_description === undefined) formData.membership_description = null;
 if (formData.membership_join_link === undefined) formData.membership_join_link = null;
+if (formData.court_count === undefined) formData.court_count = null;
 
 const placesApiError = ref(false);
 const isUploading = ref(false);
@@ -824,7 +826,7 @@ const inputClass =
                 >
                   <span class="text-xs font-black text-[#007a67] w-5">{{ Number(index) + 1 }}</span>
                   <span class="font-bold text-sm">{{ (language === 'zh' && d.name_zh) ? d.name_zh : (d.name || d.slug) }}</span>
-                  <button type="button" class="p-1 rounded hover:bg-red-500/20 text-red-500" aria-label="Remove" @click="removeSportBySortedIndex(Number(index))">
+                  <button type="button" class="p-1 rounded hover:bg-red-500/20 text-red-500" aria-label="Remove" @click.stop="removeSportBySortedIndex(Number(index))">
                     ×
                   </button>
                 </div>
@@ -910,6 +912,16 @@ const inputClass =
               type="number"
               step="0.1"
               :class="inputClass"
+            />
+          </div>
+          <div>
+            <label :class="labelClass">{{ language === 'en' ? 'Number of courts' : '場地數量' }}</label>
+            <input
+              v-model.number="formData.court_count"
+              type="number"
+              min="0"
+              :class="inputClass"
+              :placeholder="language === 'en' ? 'Optional' : '選填'"
             />
           </div>
         </div>

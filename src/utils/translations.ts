@@ -32,7 +32,7 @@ export const translations = {
         description: "Description",
         location: "Location",
         openInGoogleMaps: "Open in Google Maps",
-        contact: "Contact via WhatsApp",
+        contact: "WhatsApp",
         startingFrom: "Starting from",
         hour: "hr",
         membership: "Membership",
@@ -56,7 +56,11 @@ export const translations = {
         sportTypesHint: "Add sports and set order for this court. Drag order is used per-sport on the admin list.",
         noSportTypesHint: "No sport types yet. Add them in Admin (Manage Courts → + Add sport) first.",
         chooseSportToAdd: "Choose a sport to add…",
-        sportAdded: "(added)"
+        sportAdded: "(added)",
+        court: "court",
+        courts: "courts",
+        share: "Share",
+        linkCopied: "Link copied!"
     },
     zh: {
         title: "香港匹克球場地搜尋",
@@ -112,7 +116,11 @@ export const translations = {
         sportTypesHint: "加入運動類型並設定此場地的順序。管理列表會依各運動的拖曳順序顯示。",
         noSportTypesHint: "尚未有運動類型。請先在管理後台（管理場地 → + Add sport）新增。",
         chooseSportToAdd: "選擇運動類型以加入…",
-        sportAdded: "（已加入）"
+        sportAdded: "（已加入）",
+        court: "個場",
+        courts: "個場",
+        share: "分享",
+        linkCopied: "連結已複製！"
     }
 };
 

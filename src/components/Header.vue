@@ -18,6 +18,8 @@ const props = defineProps<{
   setTab: (t: AppTab) => void;
   viewMode?: 'map' | 'list';
   setViewMode?: (mode: 'map' | 'list') => void;
+  /** When true (e.g. on venue detail page), hide Explore and Saved nav tabs */
+  hideNavTabs?: boolean;
 }>();
 
 const openFindEvents = () => {
@@ -48,17 +50,19 @@ const openFindEvents = () => {
           </h1>
         </div>
 
-        <nav class="flex items-center gap-3 md:gap-6">
+        <nav v-if="!hideNavTabs" class="hidden sm:flex items-center gap-3 md:gap-6">
           <button
-            class="hidden md:block text-[14px] font-[700] transition-all"
-            :class="currentTab === 'explore' ? 'text-[#007a67]' : 'text-gray-400 hover:text-gray-600'"
+            type="button"
+            class="btn btn-nav hidden sm:block"
+            :class="currentTab === 'explore' ? 'btn-nav-active' : ''"
             @click="setTab('explore')"
           >
             {{t('explore')}}
           </button>
           <button
-            class="hidden md:block text-[14px] font-[700] transition-all"
-            :class="currentTab === 'saved' ? 'text-red-500' : 'text-gray-400 hover:text-gray-600'"
+            type="button"
+            class="btn btn-nav hidden sm:block"
+            :class="currentTab === 'saved' ? 'text-red-500' : ''"
             @click="setTab('saved')"
           >
             {{t('saved')}}
@@ -76,15 +80,16 @@ const openFindEvents = () => {
 
       <div class="flex items-center gap-2 md:gap-4">
         <button
-          class="p-2 rounded-[8px] transition-all"
-          :class="darkMode ? 'bg-gray-800 text-yellow-400' : 'bg-gray-100 text-gray-700'"
+          type="button"
+          class="btn btn-nav-icon"
           @click="setDarkMode(!darkMode)"
         >
           {{ darkMode ? '☀️' : '🌙' }}
         </button>
 
         <button
-          class="hidden md:inline-flex px-4 py-2 rounded-[8px] font-[900] text-[14px] bg-[#007a67] text-white shadow-md hover:brightness-110 active:scale-95 transition-all"
+          type="button"
+          class="btn btn-cta btn-cta-md hidden md:inline-flex px-4 py-2"
           @click="openFindEvents"
         >
           {{t('findEvents')}}
@@ -95,23 +100,25 @@ const openFindEvents = () => {
           :class="darkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-100 border-gray-200'"
         >
           <button
-            class="px-2 md:px-3 py-1 text-[10px] md:text-[11px] font-[900] rounded-[6px]"
-            :class="language === 'en' ? 'bg-[#007a67] text-white shadow' : 'text-gray-400'"
+            type="button"
+            class="btn btn-sm rounded-[6px] px-2 md:px-3 py-1 text-[10px] md:text-[11px]"
+            :class="language === 'en' ? 'btn-cta' : 'btn-nav'"
             @click="setLanguage('en')"
           >
             EN
           </button>
           <button
-            class="px-2 md:px-3 py-1 text-[10px] md:text-[11px] font-[900] rounded-[6px]"
-            :class="language === 'zh' ? 'bg-[#007a67] text-white shadow' : 'text-gray-400'"
+            type="button"
+            class="btn btn-sm rounded-[6px] px-2 md:px-3 py-1 text-[10px] md:text-[11px]"
+            :class="language === 'zh' ? 'btn-cta' : 'btn-nav'"
             @click="setLanguage('zh')"
           >
             中文
           </button>
         </div>
         <button
-          class="p-2 rounded-[8px] text-[14px] md:text-[16px] transition-all"
-          :class="darkMode ? 'text-gray-300 hover:text-white' : 'text-gray-500 hover:text-gray-800'"
+          type="button"
+          class="btn btn-nav-icon"
           @click="onAdminClick"
           aria-label="Admin"
         >

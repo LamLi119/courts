@@ -101,6 +101,7 @@ function rowToVenue(row: any): Venue {
     membership_enabled: Boolean(row.membership_enabled),
     membership_description: row.membership_description ?? null,
     membership_join_link: row.membership_join_link ?? null,
+    court_count: row.court_count != null ? Number(row.court_count) : null,
   } as Venue;
 }
 
@@ -109,13 +110,20 @@ const VENUE_COLUMNS = new Set([
   'ceilingHeight', 'startingPrice', 'pricing', 'images', 'amenities', 'whatsapp',
   'socialLink', 'orgIcon', 'coordinates', 'sort_order', 'admin_password',
   'membership_enabled', 'membership_description', 'membership_join_link',
+  'court_count',
 ]);
 
 function venueToRow(venue: Record<string, any>): Record<string, any> {
   const { org_icon, ...rest } = venue;
   const result: Record<string, any> = {};
   Object.entries(rest).forEach(([key, value]) => {
-    if (!VENUE_COLUMNS.has(key) || value === undefined) return;
+    if (!VENUE_COLUMNS.has(key)) return;
+    if (key === 'court_count') {
+      const n = value === null || value === '' || value === undefined ? null : Number(value);
+      result[key] = (n != null && !Number.isNaN(n) && n >= 0) ? n : null;
+      return;
+    }
+    if (value === undefined) return;
     if (key === 'membership_enabled' && typeof value === 'boolean') {
       result[key] = value ? 1 : 0;
     } else {

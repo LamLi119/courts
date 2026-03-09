@@ -51,6 +51,8 @@ export interface Venue {
   membership_enabled?: boolean;
   membership_description?: string | null;
   membership_join_link?: string | null;
+  /** Number of courts at this venue (shown as a tag on detail). */
+  court_count?: number | null;
 }
 
 export type Language = 'en' | 'zh';

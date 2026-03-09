@@ -610,6 +610,7 @@ const deleteSportApiCall = async (sportId: number) => {
       }"
       :viewMode="mobileViewMode"
       :setViewMode="(mode: 'map' | 'list') => { mobileViewMode = mode; }"
+      :hideNavTabs="!!selectedVenue && (route.name === 'venue' || showDesktopDetail)"
     />
 
     <main class="h-full">
