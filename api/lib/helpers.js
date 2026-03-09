@@ -12,12 +12,16 @@ export function sanitizeRow(body) {
     'ceilingHeight', 'startingPrice', 'pricing', 'images', 'amenities', 'whatsapp',
     'socialLink', 'orgIcon', 'coordinates', 'sort_order', 'admin_password',
     'membership_enabled', 'membership_description', 'membership_join_link',
+    'court_count',
   ]);
   const row = {};
   for (const [k, v] of Object.entries(body || {})) {
     if (!allowed.has(k)) continue;
     if (k === 'membership_enabled' && typeof v === 'boolean') {
       row[k] = v ? 1 : 0;
+    } else if (k === 'court_count') {
+      const n = v === undefined || v === null || v === '' ? null : parseInt(v, 10);
+      row[k] = (Number.isNaN(n) || n < 0) ? null : n;
     } else if (v !== undefined) {
       row[k] = v;
     }

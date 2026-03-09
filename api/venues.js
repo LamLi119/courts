@@ -33,12 +33,16 @@ function sanitizeRow(body) {
     'ceilingHeight', 'startingPrice', 'pricing', 'images', 'amenities', 'whatsapp',
     'socialLink', 'orgIcon', 'coordinates', 'sort_order', 'admin_password',
     'membership_enabled', 'membership_description', 'membership_join_link',
+    'court_count',
   ]);
   const row = {};
   for (const [k, v] of Object.entries(body || {})) {
-    if (allowed.has(k)) {
-        // Map undefined to null for SQL compatibility
-        row[k] = (v === undefined) ? null : v;
+    if (!allowed.has(k)) continue;
+    if (k === 'court_count') {
+      const n = v === undefined || v === null || v === '' ? null : parseInt(v, 10);
+      row[k] = (Number.isNaN(n) || n < 0) ? null : n;
+    } else {
+      row[k] = (v === undefined) ? null : v;
     }
   }
   return row;
