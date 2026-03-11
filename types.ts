@@ -46,6 +46,13 @@ export interface Venue {
     lat: number;
     lng: number;
   };
+  admin_password?: string | null;
+  /** Per-court membership: show description and join link on this venue's detail. */
+  membership_enabled?: boolean;
+  membership_description?: string | null;
+  membership_join_link?: string | null;
+  /** Number of courts at this venue (shown as a tag on detail). */
+  court_count?: number | null;
 }
 
 export type Language = 'en' | 'zh';

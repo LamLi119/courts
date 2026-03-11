@@ -66,7 +66,19 @@ export default async function handler(req, res) {
       }
       const [rows] = await pool.execute('SELECT * FROM venues WHERE id = ?', [id]);
       const out = rows[0];
-      if (Array.isArray(sportData)) out.sport_data = sportData;
+      // Return full sport_data from DB (name, name_zh, slug) so UI can display tags after save
+      try {
+        let vsRows;
+        try {
+          [vsRows] = await pool.execute('SELECT vs.sport_id, vs.sort_order, s.name, s.name_zh, s.slug FROM venue_sports vs JOIN sports s ON s.id = vs.sport_id WHERE vs.venue_id = ? ORDER BY vs.sort_order', [id]);
+        } catch (_) {
+          const [r] = await pool.execute('SELECT vs.sport_id, vs.sort_order, s.name, s.slug FROM venue_sports vs JOIN sports s ON s.id = vs.sport_id WHERE vs.venue_id = ? ORDER BY vs.sort_order', [id]).catch(() => [[]]);
+          vsRows = (r || []).map((row) => ({ ...row, name_zh: null }));
+        }
+        out.sport_data = (vsRows || []).map((r) => ({ sport_id: r.sport_id, name: r.name, name_zh: r.name_zh ?? null, slug: r.slug, sort_order: r.sort_order }));
+      } catch (_) {
+        out.sport_data = [];
+      }
       return res.json(out);
     }
 

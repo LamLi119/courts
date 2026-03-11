@@ -1,0 +1,404 @@
+/**
+ * Button design system
+ * 1. Primary CTA — single main action (Get Started, Book Now)
+ * 2. Secondary/Ghost — outline, less prominent (Learn More, Cancel)
+ * 3. Navigation — flat, for nav/menu (About, Previous/Next)
+ * 4. Form/Action — Submit, Save, Search, Apply Filter
+ * 5. Utility & State — dropdown, toggle, loading, error
+ */
+
+:root {
+  --btn-primary: #007a67;
+  --btn-primary-hover: #006b5a;
+  --btn-primary-active: #005c4d;
+  --btn-radius: 8px;
+  --btn-radius-sm: 6px;
+  --btn-radius-lg: 12px;
+}
+
+.dark {
+  --btn-ghost-border: rgba(255, 255, 255, 0.2);
+  --btn-ghost-text: #e5e7eb;
+  --btn-nav-text: #9ca3af;
+  --btn-nav-text-active: #007a67;
+  --btn-form-bg: #374151;
+  --btn-form-bg-hover: #4b5563;
+  --btn-utility-bg: #374151;
+  --btn-utility-bg-hover: #4b5563;
+  --btn-toolbar-bg: #374151;
+  --btn-toolbar-border: #4b5563;
+  --btn-toolbar-text: #e5e7eb;
+  --btn-toolbar-hover: #4b5563;
+}
+
+:root:not(.dark) {
+  --btn-ghost-border: #007a67;
+  --btn-ghost-text: #007a67;
+  --btn-nav-text: #6b7280;
+  --btn-nav-text-active: #007a67;
+  --btn-form-bg: #e5e7eb;
+  --btn-form-bg-hover: #d1d5db;
+  --btn-utility-bg: #f3f4f6;
+  --btn-utility-bg-hover: #e5e7eb;
+  --btn-toolbar-bg: #f9fafb;
+  --btn-toolbar-border: #e5e7eb;
+  --btn-toolbar-text: #374151;
+  --btn-toolbar-hover: #e5e7eb;
+}
+
+/* Base reset for all buttons */
+.btn,
+[class^="btn-"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s, border-color 0.15s, opacity 0.15s, transform 0.1s;
+  white-space: nowrap;
+  text-decoration: none;
+  box-sizing: border-box;
+}
+
+.btn:disabled,
+[class^="btn-"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* ─── 1. Primary CTA ───────────────────────────────────────────────────── */
+.btn-cta {
+  background: var(--btn-primary);
+  color: #fff;
+  padding: 0.75rem 1.5rem;
+  border-radius: var(--btn-radius);
+  font-size: 0.875rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 122, 103, 0.2);
+}
+
+.btn-cta:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+.btn-cta:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.btn-cta-md {
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+}
+
+.btn-cta-lg {
+  padding: 1rem 1.5rem;
+  font-size: 1rem;
+  border-radius: var(--btn-radius);
+}
+
+.btn-cta-block {
+  width: 100%;
+}
+
+.dark .btn-cta:hover:not(:disabled) {
+  filter: brightness(1.15);
+}
+
+/* ─── 2. Secondary / Ghost ─────────────────────────────────────────────── */
+.btn-ghost {
+  background: transparent;
+  color: var(--btn-ghost-text);
+  border: 2px solid var(--btn-ghost-border);
+  padding: 0.5rem 1rem;
+  border-radius: var(--btn-radius);
+  font-size: 0.875rem;
+}
+
+.btn-ghost:hover:not(:disabled) {
+  opacity: 0.9;
+  background: rgba(0, 122, 103, 0.06);
+}
+
+.dark .btn-ghost:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* Ghost text only (no border) — e.g. "View Details", "Open in Google Maps" */
+.btn-text {
+  background: transparent;
+  color: var(--btn-ghost-text);
+  border: none;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--btn-radius);
+  font-size: 0.875rem;
+}
+
+.btn-text:hover:not(:disabled) {
+  opacity: 0.85;
+  background: rgba(0, 122, 103, 0.06);
+}
+
+.dark .btn-text:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* ─── 3. Navigation ────────────────────────────────────────────────────── */
+.btn-nav {
+  background: transparent;
+  color: var(--btn-nav-text);
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--btn-radius-sm);
+  font-size: 0.875rem;
+}
+
+.btn-nav:hover:not(:disabled) {
+  color: var(--btn-nav-text-active);
+}
+
+.btn-nav-active {
+  color: var(--btn-nav-text-active);
+}
+
+/* Nav icon-only (e.g. back, theme toggle, admin) */
+.btn-nav-icon {
+  padding: 0.5rem;
+  border-radius: var(--btn-radius);
+  background: var(--btn-utility-bg);
+  color: var(--btn-toolbar-text);
+}
+
+.btn-nav-icon:hover:not(:disabled) {
+  background: var(--btn-utility-bg-hover);
+}
+
+/* ─── 4. Form / Action ─────────────────────────────────────────────────── */
+.btn-form-submit {
+  background: var(--btn-primary);
+  color: #fff;
+  padding: 0.75rem 1.5rem;
+  border-radius: var(--btn-radius);
+  font-size: 0.875rem;
+}
+
+.btn-form-submit:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+.btn-form-secondary {
+  background: var(--btn-form-bg);
+  color: var(--btn-toolbar-text);
+  padding: 0.5rem 1rem;
+  border-radius: var(--btn-radius);
+  font-size: 0.875rem;
+}
+
+.btn-form-secondary:hover:not(:disabled) {
+  background: var(--btn-form-bg-hover);
+}
+
+/* Apply filter / chip selected state */
+.btn-form-chip {
+  padding: 0.5rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  background: var(--btn-form-bg);
+  color: var(--btn-toolbar-text);
+}
+
+.btn-form-chip:hover:not(:disabled) {
+  background: var(--btn-form-bg-hover);
+}
+
+.btn-form-chip-active {
+  background: var(--btn-primary);
+  color: #fff;
+}
+
+/* ─── 5. Utility & State ───────────────────────────────────────────────── */
+/* Icon-only utility (edit, delete, close, heart, etc.) */
+.btn-utility {
+  padding: 0.5rem;
+  border-radius: var(--btn-radius);
+  background: transparent;
+  color: var(--btn-toolbar-text);
+}
+
+.btn-utility:hover:not(:disabled) {
+  background: var(--btn-utility-bg-hover);
+}
+
+.btn-utility-round {
+  border-radius: 9999px;
+}
+
+/* Toolbar (rich text B, I, U, etc.) */
+.btn-toolbar {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--btn-radius-sm);
+  border: 1px solid var(--btn-toolbar-border);
+  background: var(--btn-toolbar-bg);
+  color: var(--btn-toolbar-text);
+  font-size: 0.875rem;
+  flex-shrink: 0;
+}
+
+.btn-toolbar:hover:not(:disabled) {
+  background: var(--btn-toolbar-hover);
+}
+
+/* Dropdown / accordion trigger (with arrow) */
+.btn-dropdown {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--btn-radius);
+  border: 1px solid var(--btn-toolbar-border);
+  background: var(--btn-toolbar-bg);
+  color: var(--btn-toolbar-text);
+  font-size: 0.75rem;
+}
+
+.btn-dropdown:hover:not(:disabled) {
+  background: var(--btn-toolbar-hover);
+}
+
+/* Loading state: show spinner, reduce opacity */
+.btn-loading {
+  position: relative;
+  pointer-events: none;
+  opacity: 0.85;
+}
+
+.btn-loading .btn-spinner {
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-left-color: #fff;
+  border-radius: 50%;
+  animation: btn-spin 0.8s linear infinite;
+  margin-right: 0.5rem;
+}
+
+@keyframes btn-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Error / destructive (Delete, Invalid) */
+.btn-error {
+  background: #ef4444;
+  color: #fff;
+  padding: 0.75rem 1.5rem;
+  border-radius: var(--btn-radius);
+  font-size: 0.875rem;
+}
+
+.btn-error:hover:not(:disabled) {
+  background: #dc2626;
+  filter: brightness(1.05);
+}
+
+.btn-error-ghost {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  border: none;
+}
+
+.btn-error-ghost:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.25);
+}
+
+/* Carousel / overlay controls (prev/next, close) */
+.btn-overlay {
+  padding: 0.5rem;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+.btn-overlay:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.btn-overlay-solid {
+  background: #fff;
+  color: #1f2937;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+/* Dashed add (e.g. + Add sport, + Add image) */
+.btn-dashed {
+  border: 2px dashed var(--btn-toolbar-border);
+  background: transparent;
+  color: var(--btn-nav-text);
+  padding: 0.5rem 1rem;
+  border-radius: var(--btn-radius);
+  font-size: 0.875rem;
+}
+
+.btn-dashed:hover:not(:disabled) {
+  border-color: var(--btn-primary);
+  color: var(--btn-primary);
+}
+
+.dark .btn-dashed:hover:not(:disabled) {
+  background: rgba(0, 122, 103, 0.1);
+}
+
+/* Toggle switch (use with role="switch") — keep component-specific or use .btn-toggle-wrap */
+.btn-toggle {
+  position: relative;
+  inline-size: 3rem;
+  block-size: 1.75rem;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  border: 2px solid;
+  cursor: pointer;
+  transition: background-color 0.2s, border-color 0.2s;
+}
+
+.btn-toggle[aria-checked="true"] {
+  background: var(--btn-primary);
+  border-color: var(--btn-primary);
+}
+
+.btn-toggle[aria-checked="false"] {
+  background: var(--btn-form-bg);
+  border-color: var(--btn-toolbar-border);
+}
+
+.btn-toggle::after {
+  content: "";
+  position: absolute;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  top: 1px;
+  left: 1px;
+  transition: transform 0.2s;
+}
+
+.btn-toggle[aria-checked="true"]::after {
+  transform: translateX(1.25rem);
+}
+
+/* Size variants */
+.btn-sm {
+  padding: 0.375rem 0.75rem;
+  font-size: 0.75rem;
+}
+
+.btn-lg {
+  padding: 1rem 1.5rem;
+  font-size: 1rem;
+}
+
+.btn-xl {
+  padding: 1.25rem 1.5rem;
+  font-size: 1.25rem;
+}

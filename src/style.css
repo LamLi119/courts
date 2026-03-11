@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./css/buttons.css";
 
 /* Class-based dark mode (app toggles .dark on document.documentElement) */
 @custom-variant dark (&:where(.dark, .dark *));

@@ -7,8 +7,11 @@ import CourtCard from './CourtCard.vue';
 const MapView = defineAsyncComponent(() => import('./MapView.vue'));
 
 const showFilterPanel = ref(false);
+const showMtrDropdown = ref(false);
+const showSportDropdown = ref(false);
 const mtrSearchQuery = ref('');
 const draftMtrFilter = ref<string[]>([]);
+const draftSportFilter = ref<string[]>([]);
 const mapViewRef = ref<{ clearPins?: () => void; syncPins?: () => void; resetView?: () => void } | null>(null);
 
 watch(
@@ -16,7 +19,10 @@ watch(
   (open) => {
     if (open) {
       draftMtrFilter.value = [...props.mtrFilter];
+      draftSportFilter.value = [...props.sportFilter];
       mtrSearchQuery.value = '';
+      showMtrDropdown.value = false;
+      showSportDropdown.value = false;
     }
   }
 );
@@ -26,6 +32,14 @@ const toggleMtrStation = (station: string) => {
     draftMtrFilter.value = draftMtrFilter.value.filter(s => s !== station);
   } else {
     draftMtrFilter.value = [...draftMtrFilter.value, station];
+  }
+};
+
+const toggleSport = (slug: string) => {
+  if (draftSportFilter.value.includes(slug)) {
+    draftSportFilter.value = draftSportFilter.value.filter(s => s !== slug);
+  } else {
+    draftSportFilter.value = [...draftSportFilter.value, slug];
   }
 };
 
@@ -55,17 +69,26 @@ const props = defineProps<{
   savedVenues: number[];
   toggleSave: (id: number) => void;
   isAdmin: boolean;
+  canEditVenue: (venueId: number) => boolean;
   onAddVenue: () => void;
   onEditVenue: (id: number, v: any) => void;
   onDeleteVenue: (id: number) => void;
   availableStations: string[];
   onClearFilters?: () => void;
+  sportFilter: string[];
+  setSportFilter: (arr: string[]) => void;
+  sports: { id: number; name: string; name_zh?: string | null; slug: string }[];
   currentTab: AppTab;
   setTab: (t: AppTab) => void;
+  setFilterSpecialOffer?: (v: boolean) => void;
+  filterSpecialOffer?: boolean;
+  /** When set (e.g. after clicking a pin), list shows only these venues. */
+  listVenues?: Venue[] | null;
+  onShowVenuesAtLocation?: (venues: Venue[]) => void;
 }>();
 
 const leftListVenues = computed(() =>
-  props.selectedVenue ? [props.selectedVenue] : props.venues
+  props.selectedVenue ? [props.selectedVenue] : (props.listVenues ?? props.venues)
 );
 </script>
 
@@ -85,15 +108,15 @@ const leftListVenues = computed(() =>
             :class="darkMode ? 'text-gray-400' : 'text-gray-500'"
           >
           </span>
-          <button
-            v-if="onClearFilters && (mtrFilter.length > 0 || distanceFilter)"
+          <!--<button
+            v-if="onClearFilters && (mtrFilter.length > 0 || distanceFilter || sportFilter.length > 0)"
             type="button"
             class="text-[11px] font-bold opacity-70 hover:opacity-100 transition-opacity rounded-[999px] px-3 py-1.5"
             :class="darkMode ? 'text-gray-400 hover:bg-gray-700' : 'text-gray-500 hover:bg-gray-200'"
             @click="onClearFilters()"
           >
             {{ t('clearFilters') }}
-          </button>
+          </button>-->
         </div>
         <div class="relative flex items-center gap-2">
           <span class="absolute left-3 top-1/2 -translate-y-1/2 opacity-50 text-[#007a67] z-10">🔍</span>
@@ -134,6 +157,16 @@ const leftListVenues = computed(() =>
           >
             {{ t('mtrUnder10Min') }}
           </button>
+          <button
+          v-if="setFilterSpecialOffer"
+          type="button"
+           class="inline-flex items-center gap-1.5 rounded-[999px] px-3 py-2 text-[12px] font-bold transition-all"
+          :class="filterSpecialOffer ? 'bg-[#007a67] text-white shadow-sm' : (darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200')"
+          :title="t('specialOffer')"
+          @click="setFilterSpecialOffer(!filterSpecialOffer)"
+        >
+          {{ t('specialOffer') }}
+        </button>
           <template v-for="station in mtrFilter" :key="station">
             <span
               class="inline-flex items-center gap-1.5 rounded-[999px] pl-3 pr-1.5 py-2 text-[12px] font-bold bg-[#007a67] text-white shadow-sm"
@@ -156,68 +189,142 @@ const leftListVenues = computed(() =>
           :class="darkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'"
         >
           <div class="flex items-center justify-between">
-            <h3 class="text-[13px] font-bold" :class="darkMode ? 'text-gray-300' : 'text-gray-700'">
-              {{ t('mtrStation') }}
-            </h3>
-            <button
+            <span class="text-[13px] font-bold" :class="darkMode ? 'text-gray-300' : 'text-gray-700'">{{ t('filter') }}</span>
+            <!--<button
               type="button"
               class="text-[11px] font-bold px-3 py-1 rounded-[999px] border border-transparent hover:border-gray-400 transition-colors"
               :class="darkMode ? 'text-gray-200 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-100'"
-              @click="async () => { await mapViewRef?.clearPins?.(); setMtrFilter([...draftMtrFilter]); showFilterPanel = false; mtrSearchQuery = ''; await nextTick(); mapViewRef?.syncPins?.(); }"
+              @click="async () => { await mapViewRef?.clearPins?.(); setMtrFilter([...draftMtrFilter]); setSportFilter([...draftSportFilter]); showFilterPanel = false; showMtrDropdown = false; showSportDropdown = false; mtrSearchQuery = ''; await nextTick(); mapViewRef?.syncPins?.(); }"
             >
               {{ language === 'en' ? 'Go search' : '開始搜尋' }}
-            </button>
+            </button>-->
           </div>
+          <!-- MTR Station dropdown: trigger shows label only, items drop down -->
           <div class="relative">
-            <span class="absolute left-2 top-1/2 -translate-y-1/2 opacity-50 text-xs">🔍</span>
-            <input
-              type="text"
-              v-model="mtrSearchQuery"
-              :placeholder="language === 'en' ? 'Search stations...' : '搜尋車站...'"
-              class="w-full pl-7 pr-3 py-2 text-[12px] border rounded-[8px] focus:ring-2 focus:ring-[#007a67] focus:outline-none"
-              :class="darkMode ? 'bg-gray-800 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-700'"
-            />
-          </div>
-          <div class="max-h-[200px] overflow-y-auto space-y-1.5 custom-scrollbar pr-1">
             <button
-              v-for="station in filteredStations"
-              :key="station"
               type="button"
-              class="w-full flex items-center gap-2 px-3 py-2 rounded-[8px] text-left text-[12px] font-bold transition-all"
-              :class="draftMtrFilter.includes(station) 
-                ? (darkMode ? 'bg-[#007a67] text-white' : 'bg-[#007a67] text-white')
-                : (darkMode ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-white text-gray-700 hover:bg-gray-100')"
-              @click="toggleMtrStation(station)"
+              class="w-full flex items-center justify-between px-3 py-2.5 text-[12px] font-bold rounded-[8px] border transition-colors"
+              :class="darkMode ? 'bg-gray-800 border-gray-600 text-gray-200 hover:bg-gray-700' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-100'"
+              @click="showMtrDropdown = !showMtrDropdown"
             >
-              <div class="w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0"
-                :class="draftMtrFilter.includes(station) 
-                  ? 'bg-[#007a67] border-[#007a67]' 
-                  : (darkMode ? 'border-gray-500' : 'border-gray-300')"
-              >
-                <svg v-if="draftMtrFilter.includes(station)" xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
-                </svg>
-              </div>
-              <span class="flex-1">{{ getStationDisplayName(station, language) }}</span>
+              <span>{{ t('mtrStation') }}</span>
+              <span v-if="draftMtrFilter.length > 0" class="text-[11px] opacity-80">({{ draftMtrFilter.length }})</span>
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 opacity-70 transition-transform" :class="showMtrDropdown ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
             </button>
+            <div
+              v-if="showMtrDropdown"
+              class="absolute top-full left-0 right-0 mt-1 p-2 rounded-[8px] border shadow-lg z-20 max-h-[220px] flex flex-col"
+              :class="darkMode ? 'bg-gray-800 border-gray-600' : 'bg-white border-gray-200'"
+            >
+              <div class="relative flex-shrink-0 mb-2">
+                <span class="absolute left-2 top-1/2 -translate-y-1/2 opacity-50 text-xs">🔍</span>
+                <input
+                  type="text"
+                  v-model="mtrSearchQuery"
+                  :placeholder="language === 'en' ? 'Search stations...' : '搜尋車站...'"
+                  class="w-full pl-7 pr-3 py-2 text-[12px] border rounded-[8px] focus:ring-2 focus:ring-[#007a67] focus:outline-none"
+                  :class="darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-700'"
+                  @click.stop
+                />
+              </div>
+              <div class="max-h-[160px] overflow-y-auto space-y-1 custom-scrollbar pr-1 flex-1 min-h-0">
+                <button
+                  v-for="station in filteredStations"
+                  :key="station"
+                  type="button"
+                  class="w-full flex items-center gap-2 px-3 py-2 rounded-[8px] text-left text-[12px] font-bold transition-all"
+                  :class="draftMtrFilter.includes(station) 
+                    ? 'bg-[#007a67] text-white'
+                    : (darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200')"
+                  @click.stop="toggleMtrStation(station)"
+                >
+                  <div class="w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0"
+                    :class="draftMtrFilter.includes(station) ? 'bg-white border-white' : (darkMode ? 'border-gray-500' : 'border-gray-300')"
+                  >
+                    <svg v-if="draftMtrFilter.includes(station)" xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-[#007a67]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <span class="flex-1">{{ getStationDisplayName(station, language) }}</span>
+                </button>
+              </div>
+              <button
+                type="button"
+                class="flex-shrink-0 mt-2 w-full px-3 py-2 text-[12px] font-bold rounded-[8px]"
+                :class="darkMode ? 'text-gray-300 bg-gray-700 hover:bg-gray-600' : 'text-gray-600 bg-gray-200 hover:bg-gray-300'"
+                @click.stop="draftMtrFilter = []; setMtrFilter([]); mtrSearchQuery = ''"
+              >
+                {{ t('clearAll') }}
+              </button>
+            </div>
+          </div>
+          <!-- Sport type dropdown: multi-select (hidden) -->
+          <div class="hidden pt-2 border-t relative" :class="darkMode ? 'border-gray-600' : 'border-gray-200'">
+            <button
+              type="button"
+              class="w-full flex items-center justify-between px-3 py-2.5 text-[12px] font-bold rounded-[8px] border transition-colors"
+              :class="darkMode ? 'bg-gray-800 border-gray-600 text-gray-200 hover:bg-gray-700' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-100'"
+              @click="showSportDropdown = !showSportDropdown"
+            >
+              <span>{{ t('sportType') }}</span>
+              <span v-if="draftSportFilter.length > 0" class="text-[11px] opacity-80">({{ draftSportFilter.length }})</span>
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 opacity-70 transition-transform" :class="showSportDropdown ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            <div
+              v-if="showSportDropdown"
+              class="absolute top-full left-0 right-0 mt-1 p-2 rounded-[8px] border shadow-lg z-20 max-h-[200px] flex flex-col"
+              :class="darkMode ? 'bg-gray-800 border-gray-600' : 'bg-white border-gray-200'"
+            >
+              <div class="max-h-[140px] overflow-y-auto space-y-1 custom-scrollbar pr-1">
+                <button
+                  v-for="s in sports"
+                  :key="s.id"
+                  type="button"
+                  class="w-full flex items-center gap-2 px-3 py-2 rounded-[8px] text-left text-[12px] font-bold transition-all"
+                  :class="draftSportFilter.includes(s.slug) ? 'bg-[#007a67] text-white' : (darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200')"
+                  @click.stop="toggleSport(s.slug)"
+                >
+                  <div class="w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0"
+                    :class="draftSportFilter.includes(s.slug) ? 'bg-white border-white' : (darkMode ? 'border-gray-500' : 'border-gray-300')"
+                  >
+                    <svg v-if="draftSportFilter.includes(s.slug)" xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-[#007a67]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <span class="flex-1">{{ language === 'zh' && s.name_zh ? s.name_zh : s.name }}</span>
+                </button>
+              </div>
+              <button
+                type="button"
+                class="flex-shrink-0 mt-2 w-full px-3 py-2 text-[12px] font-bold rounded-[8px]"
+                :class="darkMode ? 'text-gray-300 bg-gray-700 hover:bg-gray-600' : 'text-gray-600 bg-gray-200 hover:bg-gray-300'"
+                @click.stop="draftSportFilter = []"
+              >
+                {{ t('clearAll') }}
+              </button>
+            </div>
           </div>
           <div class="flex gap-2 pt-2 border-t" :class="darkMode ? 'border-gray-600' : 'border-gray-200'">
-            <button
-              type="button"
-              class="flex-1 px-3 py-2 text-[12px] font-bold rounded-[8px] transition-opacity"
-              :class="darkMode ? 'text-gray-300 bg-gray-800 hover:bg-gray-700' : 'text-gray-600 bg-gray-200 hover:bg-gray-300'"
-              @click="draftMtrFilter = []; setMtrFilter([]); mtrSearchQuery = ''"
-            >
-              {{ t('allStations') }}
-            </button>
             <button
               v-if="onClearFilters"
               type="button"
               class="flex-1 px-3 py-2 text-[12px] font-bold rounded-[8px] transition-opacity"
               :class="darkMode ? 'text-gray-300 bg-gray-800 hover:bg-gray-700' : 'text-gray-600 bg-gray-200 hover:bg-gray-300'"
-              @click="onClearFilters(); showFilterPanel = false; mtrSearchQuery = ''"
+              @click="onClearFilters(); draftMtrFilter = []; draftSportFilter = []; showFilterPanel = false; showMtrDropdown = false; showSportDropdown = false; mtrSearchQuery = ''"
             >
               {{ t('clearFilters') }}
+            </button>
+            <button
+              type="button"
+              class="flex-1 px-3 py-2 text-[12px] font-bold rounded-[8px] transition-opacity"
+              :class="darkMode ? 'text-gray-300 bg-gray-800 hover:bg-gray-700' : 'text-gray-600 bg-gray-200 hover:bg-gray-300'"
+              @click="async () => { await mapViewRef?.clearPins?.(); setMtrFilter([...draftMtrFilter]); setSportFilter([...draftSportFilter]); showFilterPanel = false; showMtrDropdown = false; showSportDropdown = false; mtrSearchQuery = ''; await nextTick(); mapViewRef?.syncPins?.(); }"
+            >
+              {{ language === 'en' ? 'Go search' : '開始搜尋' }}
             </button>
           </div>
         </div>
@@ -292,6 +399,7 @@ const leftListVenues = computed(() =>
         :venues="props.venues"
         :selectedVenue="selectedVenue"
         :onSelectVenue="(v: Venue) => onSelectVenue(v)"
+        :onShowVenuesAtLocation="onShowVenuesAtLocation"
         :language="language"
         :darkMode="darkMode"
         :isMobile="false"

@@ -31,13 +31,18 @@ function sanitizeRow(body) {
   const allowed = new Set([
     'name', 'description', 'mtrStation', 'mtrExit', 'walkingDistance', 'address',
     'ceilingHeight', 'startingPrice', 'pricing', 'images', 'amenities', 'whatsapp',
-    'socialLink', 'orgIcon', 'coordinates', 'sort_order',
+    'socialLink', 'orgIcon', 'coordinates', 'sort_order', 'admin_password',
+    'membership_enabled', 'membership_description', 'membership_join_link',
+    'court_count',
   ]);
   const row = {};
   for (const [k, v] of Object.entries(body || {})) {
-    if (allowed.has(k)) {
-        // Map undefined to null for SQL compatibility
-        row[k] = (v === undefined) ? null : v;
+    if (!allowed.has(k)) continue;
+    if (k === 'court_count') {
+      const n = v === undefined || v === null || v === '' ? null : parseInt(v, 10);
+      row[k] = (Number.isNaN(n) || n < 0) ? null : n;
+    } else {
+      row[k] = (v === undefined) ? null : v;
     }
   }
   return row;
@@ -81,6 +86,13 @@ app.get('/api/venues', async (req, res) => {
       });
     } catch (_) {
       /* sports/venue_sports tables may not exist yet */
+    }
+    // Include admin_password only when super admin requests with correct password (for editing form)
+    const includePasswords = req.query.superAdminPassword === (process.env.SUPER_ADMIN_PASSWORD || 'abc321A!');
+    if (!includePasswords) {
+      rows.forEach((r) => {
+        if (Object.prototype.hasOwnProperty.call(r, 'admin_password')) delete r.admin_password;
+      });
     }
     res.json(rows);
   } catch (err) {
@@ -131,7 +143,19 @@ app.post('/api/venues', async (req, res) => {
         }
       } catch (_) {}
     }
-    row.sport_data = sportData || [];
+    // Return full sport_data from DB (name, name_zh, slug) so UI can display tags after save
+    let outSportData = [];
+    try {
+      let vsRows;
+      try {
+        [vsRows] = await db.execute('SELECT vs.sport_id, vs.sort_order, s.name, s.name_zh, s.slug FROM venue_sports vs JOIN sports s ON s.id = vs.sport_id WHERE vs.venue_id = ? ORDER BY vs.sort_order', [venueId]);
+      } catch (_) {
+        const [r] = await db.execute('SELECT vs.sport_id, vs.sort_order, s.name, s.slug FROM venue_sports vs JOIN sports s ON s.id = vs.sport_id WHERE vs.venue_id = ? ORDER BY vs.sort_order', [venueId]).catch(() => [[]]);
+        vsRows = (r || []).map((row) => ({ ...row, name_zh: null }));
+      }
+      outSportData = (vsRows || []).map((r) => ({ sport_id: r.sport_id, name: r.name, name_zh: r.name_zh ?? null, slug: r.slug, sort_order: r.sort_order }));
+    } catch (_) {}
+    row.sport_data = outSportData;
     res.status(201).json({ id: venueId, ...row });
   } catch (err) {
     console.error('POST Error:', err.message);
@@ -173,7 +197,19 @@ app.put('/api/venues/:id', async (req, res) => {
           }
         } catch (_) {}
       }
-      res.json({ id, ...row });
+      // Return full sport_data from DB so UI can display tags after save
+      let outSportData = [];
+      try {
+        let vsRows;
+        try {
+          [vsRows] = await db.execute('SELECT vs.sport_id, vs.sort_order, s.name, s.name_zh, s.slug FROM venue_sports vs JOIN sports s ON s.id = vs.sport_id WHERE vs.venue_id = ? ORDER BY vs.sort_order', [id]);
+        } catch (_) {
+          const [r] = await db.execute('SELECT vs.sport_id, vs.sort_order, s.name, s.slug FROM venue_sports vs JOIN sports s ON s.id = vs.sport_id WHERE vs.venue_id = ? ORDER BY vs.sort_order', [id]).catch(() => [[]]);
+          vsRows = (r || []).map((srow) => ({ ...srow, name_zh: null }));
+        }
+        outSportData = (vsRows || []).map((r) => ({ sport_id: r.sport_id, name: r.name, name_zh: r.name_zh ?? null, slug: r.slug, sort_order: r.sort_order }));
+      } catch (_) {}
+      res.json({ id, ...row, sport_data: outSportData });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }

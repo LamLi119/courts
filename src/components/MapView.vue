@@ -9,6 +9,8 @@ const props = defineProps<{
   venues: Venue[];
   selectedVenue: Venue | null;
   onSelectVenue: (v: Venue) => void;
+  /** When pin is clicked, call with all venues at that location so the list can show only them. */
+  onShowVenuesAtLocation?: (venues: Venue[]) => void;
   language: Language;
   darkMode: boolean;
   isMobile?: boolean;
@@ -16,8 +18,17 @@ const props = defineProps<{
 
 const mapRef = ref<HTMLDivElement | null>(null);
 const googleMap = ref<any>(null);
-const markers = ref<Record<number, any>>({});
+ /** Markers keyed by location key (lat,lng rounded) so one pin per same building. */
+const markers = ref<Record<string, any>>({});
+const infoWindow = ref<any>(null);
 const mapError = ref<string | null>(null);
+
+/** Same lat,lng (e.g. same building) => one pin. Round to 5 decimals to group. */
+function getLocationKey(coords: { lat: number; lng: number }): string {
+  const lat = Math.round(coords.lat * 1e5) / 1e5;
+  const lng = Math.round(coords.lng * 1e5) / 1e5;
+  return `${lat},${lng}`;
+}
 
 const MAP_STYLES = [
   { featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] },
@@ -277,9 +288,12 @@ const normalizeLatLng = (coords: any): { lat: number; lng: number } | null => {
 };
 
 const clearAllMarkers = () => {
+  if (infoWindow.value) {
+    try { infoWindow.value.close(); } catch { /* ignore */ }
+    infoWindow.value = null;
+  }
   Object.values(markers.value).forEach((m) => {
     try {
-      // Hide immediately (repaint-friendly), then detach from map.
       if (typeof m?.setVisible === 'function') m.setVisible(false);
       m.setMap(null);
     } catch {
@@ -291,18 +305,32 @@ const clearAllMarkers = () => {
 
 const syncMarkers = () => {
   if (!googleMap.value || typeof google === 'undefined') return;
-  // Force-rebuild markers every time venues change.
-  // This guarantees no stale pins remain after filtering (especially on mobile).
   clearAllMarkers();
 
+  // Group venues by same lat,lng (same building) so we show one pin per location.
+  const groups = new Map<string, typeof props.venues>();
   props.venues.forEach((venue) => {
     const coords = normalizeLatLng((venue as any).coordinates);
     if (!coords) return;
+    const key = getLocationKey(coords);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(venue);
+  });
+
+  groups.forEach((venueList, locationKey) => {
+    const venue = venueList[0];
+    const coords = normalizeLatLng((venue as any).coordinates);
+    if (!coords) return;
+
+    const title =
+      venueList.length > 1
+        ? venueList.map((v) => v.name).join(', ')
+        : venue.name;
 
     const marker = new google.maps.Marker({
       position: coords,
       map: googleMap.value,
-      title: venue.name,
+      title,
       icon: {
         url: markerIconUrl,
         scaledSize: new google.maps.Size(48, 48),
@@ -311,8 +339,40 @@ const syncMarkers = () => {
       animation: google.maps.Animation.DROP
     });
 
-    marker.addListener('click', () => props.onSelectVenue(venue));
-    markers.value[venue.id] = marker;
+    marker.addListener('click', () => {
+      // Always tell parent to show these venues on the list (filter side).
+      props.onShowVenuesAtLocation?.(venueList);
+      if (venueList.length > 1) {
+        // Same building: show InfoWindow with all venues on one line (X venues here) and list to pick one.
+        if (infoWindow.value) infoWindow.value.close();
+        infoWindow.value = new google.maps.InfoWindow();
+        const div = document.createElement('div');
+        div.className = 'map-info-window';
+        div.style.cssText = 'padding:4px 0;min-width:140px;max-width:260px;';
+        const title = document.createElement('div');
+        title.style.cssText = 'font-weight:700;font-size:12px;color:#4b5563;margin-bottom:8px;white-space:nowrap;';
+        title.textContent = props.language === 'zh' ? `此位置 ${venueList.length} 個場地` : `${venueList.length} venues here`;
+        div.appendChild(title);
+        venueList.forEach((v: Venue) => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.textContent = v.name;
+          btn.style.cssText = 'display:block;width:100%;text-align:left;padding:8px 12px;font-size:14px;font-weight:700;border:none;background:transparent;cursor:pointer;border-radius:8px;';
+          btn.addEventListener('click', () => {
+            props.onSelectVenue(v);
+            if (infoWindow.value) infoWindow.value.close();
+          });
+          btn.addEventListener('mouseenter', () => { btn.style.background = '#007a67'; btn.style.color = '#fff'; });
+          btn.addEventListener('mouseleave', () => { btn.style.background = 'transparent'; btn.style.color = ''; });
+          div.appendChild(btn);
+        });
+        infoWindow.value.setContent(div);
+        infoWindow.value.open(googleMap.value, marker);
+      } else {
+        props.onSelectVenue(venueList[0]);
+      }
+    });
+    markers.value[locationKey] = marker;
   });
 };
 
@@ -407,7 +467,8 @@ watch(
       }
       googleMap.value.setZoom(15);
       Object.values(markers.value).forEach((m) => m.setAnimation(null));
-      const selectedMarker = markers.value[selected.id];
+      const locationKey = pos ? getLocationKey(pos) : null;
+      const selectedMarker = locationKey ? markers.value[locationKey] : null;
       if (selectedMarker) {
         selectedMarker.setAnimation(google.maps.Animation.BOUNCE);
         setTimeout(() => selectedMarker.setAnimation(null), 1500);
