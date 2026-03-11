@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import type { Venue, Language, AppTab } from '../types';
+import type { Venue, Language, AppTab, Sport } from '../types';
 import { translate } from './utils/translations';
 import { getStationCanonicalEn } from './utils/mtrStations';
 import { slugify } from './utils/slugify';
-import { resetSeoToDefault } from './utils/seo';
+import { resetSeoToDefault, applySearchPageSeo } from './utils/seo';
 import { useVenueSlug } from './router';
 import { db } from '../db';
 import Header from './components/Header.vue';
@@ -19,19 +19,18 @@ import VenueForm from './components/VenueForm.vue';
 const route = useRoute();
 const router = useRouter();
 
-const language = ref<Language>('en');
+const language = ref<Language>('zh');
 const currentTab = ref<AppTab>('explore');
-const isAdmin = ref(false);
 const adminPassword = ref('');
 const showAdminLogin = ref(false);
 const showVenueForm = ref(false);
 const editingVenue = ref<Venue | null>(null);
 const venueToDelete = ref<Venue | null>(null);
 const isLoading = ref(true);
-const mobileViewMode = ref<'map' | 'list'>('map');
+const mobileViewMode = ref<'map' | 'list'>('list');
 
 const venues = ref<Venue[]>([]);
-const sports = ref<{ id: number; name: string; slug: string }[]>([]);
+const sports = ref<{ id: number; name: string; name_zh?: string | null; slug: string }[]>([]);
 const savedVenues = ref<number[]>([]);
 const adminSportFilter = ref<string>('all'); // 'all' | sport slug
 const showAddSportInput = ref(false);
@@ -48,12 +47,28 @@ const showDesktopDetail = ref(false);
 const searchQuery = ref('');
 const mtrFilter = ref<string[]>([]);
 const distanceFilter = ref('');
-const sportFilter = ref(''); // SEO: /search/:sport category page
+const sportFilter = ref<string[]>([]); // sport slugs (multi-select)
+const filterSpecialOffer = ref(false); // when true, only show venues with membership_enabled
+/** When set (after clicking a pin), list shows only venues at that location. */
+const locationVenueIds = ref<number[] | null>(null);
 const darkMode = ref(localStorage.getItem('pickleball_darkmode') === 'true');
 const isMobile = ref(typeof window !== 'undefined' ? window.innerWidth < 1024 : false);
 
 const VENUES_CACHE_KEY = 'pickleball_venues_cache';
 const VENUES_CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutes
+
+const adminStatus = ref<{ type: 'none' | 'super' | 'court'; allowedIds: number[] }>({ type: 'none', allowedIds: [] });
+const isSuperAdmin = computed(() => adminStatus.value.type === 'super');
+const isAnyAdmin = computed(() => adminStatus.value.type !== 'none');
+const SUPER_ADMIN_PASSWORD = 'abc321A!';
+
+function canEditVenue(venueId: number): boolean {
+  if (adminStatus.value.type === 'super') return true;
+  if (adminStatus.value.type === 'court') return adminStatus.value.allowedIds.includes(venueId);
+  return false;
+}
+const isEditingSports = ref(false);
+const adminSportsList = computed<Sport[]>(() => sports.value);
 
 function setVenuesCache(data: Venue[], ts: number): void {
   try {
@@ -83,7 +98,10 @@ const loadData = async () => {
           saveAdminOrder();
           isLoading.value = false;
           // Revalidate in background
-          const [fresh, sportsList] = await Promise.all([db.getVenues(), db.getSports()]);
+          const [fresh, sportsList] = await Promise.all([
+            db.getVenues(isSuperAdmin ? SUPER_ADMIN_PASSWORD : undefined),
+            db.getSports()
+          ]);
           if (fresh?.length !== undefined) {
             venues.value = fresh;
             adminOrder.value = fresh.map(v => v.id);
@@ -99,7 +117,8 @@ const loadData = async () => {
     }
 
     isLoading.value = true;
-    const [data, sportsList] = await Promise.all([db.getVenues(), db.getSports()]);
+    const pwd = isSuperAdmin.value ? SUPER_ADMIN_PASSWORD : undefined;
+    const [data, sportsList] = await Promise.all([db.getVenues(pwd), db.getSports()]);
     venues.value = data || [];
     sports.value = sportsList || [];
     adminOrder.value = venues.value.map(v => v.id);
@@ -146,13 +165,13 @@ watch(
       showDesktopDetail.value = !!venue;
       if (!venue && venues.value.length > 0) router.replace('/');
     } else if (route.name === 'search' && typeof route.params.sport === 'string') {
-      sportFilter.value = route.params.sport;
+      sportFilter.value = [route.params.sport];
       selectedVenue.value = null;
       showDesktopDetail.value = false;
       applySearchPageSeo(route.params.sport);
     } else if (route.name === 'home' || route.name === 'admin') {
       if (route.name === 'home') {
-        sportFilter.value = '';
+        sportFilter.value = [];
         if (prev?.name === 'venue') resetSeoToDefault();
         selectedVenue.value = null;
         showDesktopDetail.value = false;
@@ -235,16 +254,41 @@ const clearFilters = () => {
   searchQuery.value = '';
   mtrFilter.value = [];
   distanceFilter.value = '';
+  sportFilter.value = [];
+  filterSpecialOffer.value = false;
+  locationVenueIds.value = null;
 };
 
-const handleAdminLogin = () => {
-  if (adminPassword.value === 'abc321A!') {
-    isAdmin.value = true;
+const handleAdminLogin = async () => {
+  if (adminPassword.value === SUPER_ADMIN_PASSWORD) {
+    adminStatus.value = { type: 'super', allowedIds: [] };
     showAdminLogin.value = false;
     adminPassword.value = '';
     currentTab.value = 'admin';
-  } else {
-    alert('Incorrect password');
+    invalidateVenuesCache();
+    await loadData();
+    return;
+  }
+  try {
+    const API_BASE = import.meta.env.VITE_API_URL ?? '';
+    const base = API_BASE.replace(/\/$/, '');
+    const url = `${base}/api/auth/login`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: adminPassword.value })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      adminStatus.value = { type: 'court', allowedIds: data.allowedVenueIds };
+      showAdminLogin.value = false;
+      adminPassword.value = '';
+      currentTab.value = 'admin';
+    } else {
+      alert('Incorrect password');
+    }
+  } catch (e) {
+    alert('Login failed');
   }
 };
 
@@ -259,7 +303,7 @@ const filteredVenues = computed(() => {
       ? new Set(mtrFilter.value.map((s) => getStationCanonicalEn(s)).filter(Boolean))
       : null;
 
-  const sport = (sportFilter.value || '').toLowerCase().trim();
+  const selectedSlugs = sportFilter.value.map((s) => (s || '').toLowerCase().trim()).filter(Boolean);
 
   return source.filter(venue => {
     const query = (searchQuery.value || '').toLowerCase();
@@ -275,15 +319,31 @@ const filteredVenues = computed(() => {
     const distanceLimit = distanceFilter.value ? parseInt(distanceFilter.value) : NaN;
     const distanceMatch = !distanceFilter.value || (Number.isFinite(wd) && wd <= distanceLimit);
     let sportMatch = true;
-    if (sport) {
+    if (selectedSlugs.length > 0) {
       const types = (venue as Venue).sport_types;
-      const hasSportType = Array.isArray(types) && types.some((t: string) => String(t).toLowerCase() === sport);
+      const data = (venue as Venue).sport_data;
       const desc = ((venue as any).description ?? '').toString().toLowerCase();
-      sportMatch = hasSportType || name.includes(sport) || desc.includes(sport);
+      sportMatch = selectedSlugs.some((sport) => {
+        const hasSportBySlug = Array.isArray(data) && data.some((d: any) => String(d.slug || '').toLowerCase().trim() === sport);
+        const hasSportByName = Array.isArray(types) && types.some((t: string) => String(t).toLowerCase().trim() === sport);
+        return hasSportBySlug || hasSportByName || name.includes(sport) || desc.includes(sport);
+      });
     }
-    return nameMatch && mtrMatch && distanceMatch && sportMatch;
+    const specialOfferMatch = !filterSpecialOffer.value || Boolean((venue as Venue).membership_enabled);
+    return nameMatch && mtrMatch && distanceMatch && sportMatch && specialOfferMatch;
   });
 });
+
+/** List for left/filter side: when a pin is clicked, only venues at that location; otherwise all filtered. */
+const listVenues = computed(() => {
+  if (!locationVenueIds.value || locationVenueIds.value.length === 0) return filteredVenues.value;
+  const idSet = new Set(locationVenueIds.value);
+  return filteredVenues.value.filter((v) => idSet.has(v.id));
+});
+
+const showVenuesAtLocation = (venueList: Venue[]) => {
+  locationVenueIds.value = venueList.map((v) => v.id);
+};
 
 const toggleSaveVenue = (venueId: number) => {
   savedVenues.value = savedVenues.value.includes(venueId)
@@ -308,17 +368,35 @@ const confirmDeleteAction = async () => {
   }
 };
 
+const adminNotification = ref<{ type: 'success' | 'error'; message: string } | null>(null);
+let adminNotificationTimer: ReturnType<typeof setTimeout> | null = null;
+
+const showAdminNotification = (type: 'success' | 'error', message: string) => {
+  if (adminNotificationTimer) clearTimeout(adminNotificationTimer);
+  adminNotification.value = { type, message };
+  adminNotificationTimer = setTimeout(() => {
+    adminNotification.value = null;
+    adminNotificationTimer = null;
+  }, 3500);
+};
+
 const handleSaveVenue = async (venueData: any) => {
-  const saved = await db.upsertVenue(venueData);
-  if (editingVenue.value) {
-    venues.value = venues.value.map(old => old.id === saved.id ? saved : old);
-  } else {
-    venues.value = [...venues.value, saved];
+  try {
+    const saved = await db.upsertVenue(venueData, { isSuperAdmin: isSuperAdmin.value });
+    if (editingVenue.value) {
+      venues.value = venues.value.map(old => old.id === saved.id ? saved : old);
+    } else {
+      venues.value = [...venues.value, saved];
+    }
+    invalidateVenuesCache();
+    showVenueForm.value = false;
+    editingVenue.value = null;
+    selectedVenue.value = null;
+    showAdminNotification('success', t('saveSuccess'));
+  } catch (err: any) {
+    showAdminNotification('error', err?.message || t('saveFailed'));
+    throw err;
   }
-  invalidateVenuesCache();
-  showVenueForm.value = false;
-  editingVenue.value = null;
-  selectedVenue.value = null;
 };
 
 const draggedVenueId = ref<number | null>(null);
@@ -327,6 +405,11 @@ const isSortEditing = ref(false);
 const draftAdminOrder = ref<number[]>([]);
 
 const adminVenues = computed(() => {
+  let list = venues.value;
+  // If Court Admin, ONLY show their specific venues
+  if (adminStatus.value.type === 'court') {
+    return list.filter(v => adminStatus.value.allowedIds.includes(v.id));
+  }
   if (adminSportFilter.value === 'all') return venues.value;
   const slug = adminSportFilter.value;
   return venues.value
@@ -500,6 +583,29 @@ const cancelAddSport = () => {
   newSportNameZh.value = '';
   addSportError.value = null;
 };
+
+const updateSportApiCall = async (s: Sport) => {
+  try {
+    const updated = await db.updateSport(s.id, { name: s.name, name_zh: s.name_zh ?? undefined });
+    const idx = sports.value.findIndex((x) => x.id === s.id);
+    if (idx !== -1) sports.value = sports.value.map((x, i) => (i === idx ? { ...x, ...updated } : x));
+  } catch (err: any) {
+    alert(err?.message || 'Failed to update sport');
+  }
+};
+
+const deleteSportApiCall = async (sportId: number) => {
+  if (!confirm(language.value === 'en' ? 'Delete this sport? Venues will lose this tag.' : '刪除此運動？場地將移除此標籤。')) return;
+  const slug = sports.value.find((x) => x.id === sportId)?.slug;
+  try {
+    await db.deleteSport(sportId);
+    sports.value = sports.value.filter((x) => x.id !== sportId);
+    if (adminSportFilter.value === slug) adminSportFilter.value = 'all';
+    isEditingSports.value = false;
+  } catch (err: any) {
+    alert(err?.message || 'Failed to delete sport');
+  }
+};
 </script>
 
 <template>
@@ -507,31 +613,34 @@ const cancelAddSport = () => {
     <Header
       :language="language"
       :setLanguage="(l: Language) => { language = l; }"
-      :isAdmin="isAdmin"
-      :onAdminClick="() => { if (isAdmin) currentTab = 'admin'; else { showAdminLogin = true; syncAdminUrl(true); } }"
+      :isAdmin="isAnyAdmin"
+      :onAdminClick="() => { if (isAnyAdmin) currentTab = 'admin'; else { showAdminLogin = true; syncAdminUrl(true); } }"
       :darkMode="darkMode"
       :setDarkMode="(d: boolean) => { darkMode = d; }"
       :t="t"
       :currentTab="currentTab"
       :setTab="(tab: AppTab) => {
-        if (tab === 'admin' && !isAdmin) showAdminLogin = true;
+        if (tab === 'admin' && !isAnyAdmin) showAdminLogin = true;
         else currentTab = tab;
         if (tab === 'explore') { router.push('/'); resetSeoToDefault(); selectedVenue = null; showDesktopDetail = false; }
         else { selectedVenue = null; showDesktopDetail = false; }
       }"
       :viewMode="mobileViewMode"
       :setViewMode="(mode: 'map' | 'list') => { mobileViewMode = mode; }"
+      :filterSpecialOffer="filterSpecialOffer"
+      :setFilterSpecialOffer="(v: boolean) => { filterSpecialOffer = v; }"
+      :hideNavTabs="!!selectedVenue && (route.name === 'venue' || showDesktopDetail)"
     />
 
     <main class="h-full">
       <div
-        v-if="currentTab === 'admin' && isAdmin && !selectedVenue"
+        v-if="currentTab === 'admin' && isAnyAdmin && !selectedVenue"
         class="container mx-auto p-4 md:p-8 pb-32 md:pb-8 space-y-8 animate-in fade-in duration-500"
       >
         <div class="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
           <div class="flex flex-col gap-2">
             <h2 class="text-3xl md:text-4xl font-black tracking-tight">Manage Courts</h2>
-            <div class="flex flex-wrap gap-2 items-center">
+            <div v-if="isSuperAdmin" class="flex flex-wrap gap-2 items-center">
               <span class="text-xs font-bold uppercase tracking-wider opacity-60">Sport:</span>
               <button
                 type="button"
@@ -551,7 +660,7 @@ const cancelAddSport = () => {
               >
                 {{ sportDisplayName(s) }}
               </button>
-              <template v-if="showAddSportInput">
+              <template v-if="isSuperAdmin && showAddSportInput">
                 <input
                   v-model="newSportName"
                   type="text"
@@ -588,7 +697,7 @@ const cancelAddSport = () => {
                 </button>
               </template>
               <button
-                v-else
+                v-else-if="isSuperAdmin"
                 type="button"
                 class="px-3 py-2 rounded-lg text-sm font-bold border-2 border-dashed"
                 :class="darkMode ? 'border-gray-500 text-gray-400 hover:border-[#007a67] hover:text-[#007a67]' : 'border-gray-400 text-gray-500 hover:border-[#007a67] hover:text-[#007a67]'"
@@ -596,12 +705,30 @@ const cancelAddSport = () => {
               >
                 + Add sport
               </button>
+              <button
+                v-if="isSuperAdmin"
+                type="button"
+                class="px-3 py-2 rounded-lg text-sm font-bold"
+                :class="darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'"
+                @click="isEditingSports = !isEditingSports"
+              >
+                {{ isEditingSports ? 'Hide' : 'Manage Sports' }}
+              </button>
+            </div>
+            <div v-if="isSuperAdmin && isEditingSports" class="grid gap-2 mt-4 p-4 rounded-xl border" :class="darkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-100 border-gray-200'">
+              <p class="text-xs font-bold uppercase tracking-wider opacity-70">Edit sport names</p>
+              <div v-for="s in adminSportsList" :key="s.id" class="flex flex-wrap gap-2 items-center">
+                <input v-model="s.name" type="text" class="px-3 py-2 rounded-lg text-sm border max-w-[140px]" :class="darkMode ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-300'" placeholder="Name" />
+                <input v-model="s.name_zh" type="text" class="px-3 py-2 rounded-lg text-sm border max-w-[120px]" :class="darkMode ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-300'" placeholder="中文" />
+                <button type="button" class="px-3 py-2 rounded-lg text-sm font-bold bg-[#007a67] text-white" @click="updateSportApiCall(s)">Save</button>
+                <button type="button" class="px-3 py-2 rounded-lg text-sm font-bold bg-red-500/20 text-red-500" @click="deleteSportApiCall(s.id)">Delete</button>
+              </div>
             </div>
             <p v-if="addSportError" class="text-red-500 text-xs font-bold mt-1">{{ addSportError }}</p>
           </div>
           <div class="flex flex-wrap gap-2">
             <button
-              v-if="!isSortEditing"
+              v-if="isSuperAdmin && !isSortEditing"
               class="px-4 py-3 md:px-6 md:py-3 bg-gray-500/10 text-gray-700 rounded-lg font-black shadow-xl hover:scale-105 active:scale-95 transition-all text-xs md:text-base"
               :class="darkMode ? 'text-gray-200 bg-gray-700/40' : ''"
               @click="startSortEdit"
@@ -609,7 +736,7 @@ const cancelAddSport = () => {
               EDIT SORT
             </button>
             <button
-              v-else
+              v-else-if="isSuperAdmin"
               class="px-4 py-3 md:px-6 md:py-3 rounded-lg font-black shadow-xl active:scale-95 transition-all text-xs md:text-base"
               :class="isDraftDirty ? 'bg-[#007a67] text-white hover:scale-105' : (darkMode ? 'bg-gray-700 text-gray-400 opacity-60 cursor-not-allowed' : 'bg-gray-200 text-gray-400 opacity-60 cursor-not-allowed')"
               :disabled="!isDraftDirty"
@@ -618,7 +745,7 @@ const cancelAddSport = () => {
               SAVE SORT
             </button>
             <button
-              v-if="isSortEditing"
+              v-if="isSuperAdmin && isSortEditing"
               class="px-4 py-3 md:px-6 md:py-3 bg-gray-500/10 text-gray-700 rounded-lg font-black shadow-xl hover:scale-105 active:scale-95 transition-all text-xs md:text-base"
               :class="darkMode ? 'text-gray-200 bg-gray-700/40' : ''"
               @click="cancelSortEdit"
@@ -626,7 +753,7 @@ const cancelAddSport = () => {
               CANCEL
             </button>
             <button
-              v-if="!isSortEditing"
+              v-if="isSuperAdmin && !isSortEditing"
               class="px-4 py-3 md:px-6 md:py-3 bg-[#007a67] text-white rounded-lg font-black shadow-xl hover:scale-105 active:scale-95 transition-all text-xs md:text-base"
               @click="() => { editingVenue = null; showVenueForm = true; }"
             >
@@ -635,7 +762,7 @@ const cancelAddSport = () => {
             <button
               v-if="!isSortEditing"
               class="px-4 py-3 md:px-6 md:py-3 bg-red-500 text-white rounded-lg font-black shadow-xl hover:scale-105 active:scale-95 transition-all text-xs md:text-base"
-              @click="() => { isAdmin = false; currentTab = 'explore'; }"
+              @click="() => { adminStatus = { type: 'none', allowedIds: [] }; currentTab = 'explore'; }"
             >
               LOGOUT
             </button>
@@ -647,12 +774,12 @@ const cancelAddSport = () => {
             :key="v.id"
             class="p-4 border rounded-3xl shadow-md flex items-center justify-between group transition-all hover:shadow-xl gap-2"
             :class="darkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-200'"
-            :draggable="isSortEditing"
+            :draggable="isSuperAdmin && isSortEditing"
             @dragstart="handleDragStart(v.id)"
             @dragover.prevent
             @drop="handleDrop(v.id)"
           >
-            <div class="flex items-center gap-2 flex-shrink-0">
+            <div v-if="isSuperAdmin" class="flex items-center gap-2 flex-shrink-0">
               <div class="flex flex-col items-center gap-0.5">
                 <button
                   type="button"
@@ -701,6 +828,7 @@ const cancelAddSport = () => {
                 ✏️
               </button>
               <button
+                v-if="isSuperAdmin"
                 class="p-3 bg-red-500/10 text-red-500 rounded-xl"
                 @click.stop="() => { venueToDelete = v; }"
               >
@@ -711,7 +839,7 @@ const cancelAddSport = () => {
         </div>
       </div>
 
-      <div v-else>
+      <div v-else class="flex flex-col flex-1 min-h-0">
         <div
           v-if="isLoading"
           class="flex-1 p-4 md:p-6 animate-in fade-in duration-300"
@@ -768,10 +896,16 @@ const cancelAddSport = () => {
           :darkMode="darkMode"
           :savedVenues="savedVenues"
           :toggleSave="toggleSaveVenue"
-          :isAdmin="isAdmin"
+          :isAdmin="isAnyAdmin"
+          :canEditVenue="canEditVenue"
           :onEditVenue="(id: number, v: any) => { editingVenue = v; showVenueForm = true; }"
           :availableStations="availableStations"
           :onClearFilters="clearFilters"
+          :sportFilter="sportFilter"
+          :setSportFilter="(arr: string[]) => { sportFilter = arr; }"
+          :sports="sports"
+          :filterSpecialOffer="filterSpecialOffer"
+          :setFilterSpecialOffer="(v: boolean) => { filterSpecialOffer = v; }"
           :onOpenDetail="() => { if (selectedVenue) router.push('/venues/' + useVenueSlug(selectedVenue)); }"
           :onBackFromDetail="() => { resetSeoToDefault(); router.push('/'); }"
           :force-show-detail="route.name === 'venue' && !!selectedVenue"
@@ -786,13 +920,15 @@ const cancelAddSport = () => {
           :darkMode="darkMode"
           :savedVenues="savedVenues"
           :toggleSave="toggleSaveVenue"
-          :isAdmin="isAdmin"
+          :isAdmin="isAnyAdmin"
           :onEdit="() => { editingVenue = selectedVenue; showVenueForm = true; }"
         />
 
         <DesktopView
           v-else
           :venues="filteredVenues"
+          :listVenues="listVenues"
+          :onShowVenuesAtLocation="showVenuesAtLocation"
           :selectedVenue="selectedVenue"
           :onSelectVenue="(v: Venue | null) => { selectedVenue = v; }"
           :onViewDetail="(v: Venue) => { selectedVenue = v; showDesktopDetail = true; router.push('/venues/' + useVenueSlug(v)); }"
@@ -807,7 +943,8 @@ const cancelAddSport = () => {
           :darkMode="darkMode"
           :savedVenues="savedVenues"
           :toggleSave="toggleSaveVenue"
-          :isAdmin="isAdmin"
+          :isAdmin="isAnyAdmin"
+          :canEditVenue="canEditVenue"
           :onAddVenue="() => { editingVenue = null; showVenueForm = true; }"
           :onEditVenue="(id: number, v: any) => { editingVenue = v; showVenueForm = true; }"
           :onDeleteVenue="(id: number) => {
@@ -816,6 +953,11 @@ const cancelAddSport = () => {
           }"
           :availableStations="availableStations"
           :onClearFilters="clearFilters"
+          :sportFilter="sportFilter"
+          :setSportFilter="(arr: string[]) => { sportFilter = arr; }"
+          :sports="sports"
+          :filterSpecialOffer="filterSpecialOffer"
+          :setFilterSpecialOffer="(v: boolean) => { filterSpecialOffer = v; }"
           :currentTab="currentTab"
           :setTab="(t: AppTab) => { currentTab = t; }"
         />
@@ -837,6 +979,7 @@ const cancelAddSport = () => {
       v-if="showVenueForm"
       :venue="editingVenue"
       :sports="sports"
+      :isSuperAdmin="isSuperAdmin"
       :onSave="handleSaveVenue"
       :onCancel="() => { showVenueForm = false; editingVenue = null; }"
       :onDelete="(id: number) => {
@@ -896,15 +1039,43 @@ const cancelAddSport = () => {
       </div>
     </div>
 
+    <!-- Admin save notification toast -->
+    <Transition name="notification">
+      <div
+        v-if="adminNotification"
+        role="alert"
+        class="fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-3 px-5 py-4 rounded-[14px] shadow-xl max-w-[90vw] animate-in slide-in-from-bottom-4 duration-300"
+        :class="adminNotification.type === 'success'
+          ? 'bg-[#007a67] text-white'
+          : 'bg-red-500 text-white'"
+      >
+        <span class="text-2xl">{{ adminNotification.type === 'success' ? '✓' : '⚠️' }}</span>
+        <p class="text-[14px] font-bold">
+          {{ adminNotification.message }}
+        </p>
+      </div>
+    </Transition>
+
     <!-- <MobileNav
       v-if="isMobile"
       :currentTab="currentTab"
       :setTab="(t: AppTab) => { currentTab = t; }"
       :t="t"
       :darkMode="darkMode"
-      :isAdmin="isAdmin"
-      :onAdminClick="() => { if (isAdmin) currentTab = 'admin'; else { showAdminLogin = true; syncAdminUrl(true); } }"
+      :isAdmin="isAnyAdmin"
+      :onAdminClick="() => { if (isAnyAdmin) currentTab = 'admin'; else { showAdminLogin = true; syncAdminUrl(true); } }"
     /> -->
   </div>
 </template>
 
+<style scoped>
+.notification-enter-active,
+.notification-leave-active {
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.notification-enter-from,
+.notification-leave-to {
+  opacity: 0;
+  transform: translate(-50%, 12px);
+}
+</style>

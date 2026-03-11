@@ -61,6 +61,8 @@ function setCanonical(url: string): void {
 
 const DEFAULT_TITLE = `Courts Finder | Find Sports Courts in Hong Kong`;
 const DEFAULT_DESCRIPTION = `Find and book sports courts near MTR stations. Compare prices, amenities, and walking distance.`;
+/** Default share preview image (home page). Use absolute URL so crawlers see it when sharing site URL. */
+const DEFAULT_OG_IMAGE_PATH = '/green_G.png';
 
 /** Apply dynamic meta and OG tags for a venue (detail page). Call when venue is shown. */
 export function applyVenueSeo(venue: Venue, baseUrl: string, lang: 'en' | 'zh' = 'en'): void {
@@ -68,6 +70,7 @@ export function applyVenueSeo(venue: Venue, baseUrl: string, lang: 'en' | 'zh' =
   const description = getVenueDescription(venue, lang);
   const image = (venue.images && venue.images[0]) || '';
   const pageUrl = typeof window !== 'undefined' ? window.location.href : `${baseUrl}/venues/${venue.id}`;
+  const origin = typeof window !== 'undefined' ? window.location.origin : baseUrl.replace(/\/$/, '');
 
   document.title = title;
   setMeta('description', description);
@@ -85,8 +88,9 @@ export function applyVenueSeo(venue: Venue, baseUrl: string, lang: 'en' | 'zh' =
   setMeta('twitter:description', description);
 
   if (image) {
-    const imageUrl = image.startsWith('http') ? image : new URL(image, baseUrl).href;
+    const imageUrl = image.startsWith('http') ? image : new URL(image, origin).href;
     setOgTag('og:image', imageUrl);
+    setOgTag('og:image:secure_url', imageUrl);
     setMeta('twitter:image', imageUrl);
   }
 
@@ -95,8 +99,10 @@ export function applyVenueSeo(venue: Venue, baseUrl: string, lang: 'en' | 'zh' =
 
 /** Reset to default meta when leaving venue detail. */
 export function resetSeoToDefault(baseUrl?: string): void {
-  const homeUrl = typeof window !== 'undefined' ? window.location.origin + '/' : (baseUrl || '');
-  
+  const origin = typeof window !== 'undefined' ? window.location.origin : (baseUrl || '').replace(/\/$/, '');
+  const homeUrl = origin ? origin + '/' : (baseUrl || '');
+  const defaultImageUrl = origin ? new URL(DEFAULT_OG_IMAGE_PATH, origin).href : '';
+
   document.title = DEFAULT_TITLE;
   setMeta('description', DEFAULT_DESCRIPTION);
   if (homeUrl) setCanonical(homeUrl);
@@ -105,10 +111,16 @@ export function resetSeoToDefault(baseUrl?: string): void {
   setOgTag('og:description', DEFAULT_DESCRIPTION);
   setOgTag('og:type', 'website');
   if (homeUrl) setOgTag('og:url', homeUrl);
+  if (defaultImageUrl) {
+    setOgTag('og:image', defaultImageUrl);
+    setOgTag('og:image:secure_url', defaultImageUrl);
+  }
 
+  setMeta('twitter:card', 'summary_large_image');
   setMeta('twitter:title', DEFAULT_TITLE);
   setMeta('twitter:description', DEFAULT_DESCRIPTION);
   if (homeUrl) setMeta('twitter:url', homeUrl);
+  if (defaultImageUrl) setMeta('twitter:image', defaultImageUrl);
 
   removeJsonLd();
 }

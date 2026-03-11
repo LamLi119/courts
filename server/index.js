@@ -86,17 +86,58 @@ function dbErrorMessage(err) {
   return err && err.message ? err.message : 'Database error';
 }
 
+/** Fetch a single venue by id with sport_data populated (name, name_zh, slug, sort_order). Strips admin_password. */
+async function getVenueWithSports(db, venueId) {
+  const [rows] = await db.execute('SELECT * FROM venues WHERE id = ?', [venueId]);
+  if (!rows.length) return null;
+  const r = { ...rows[0] };
+  if (Object.prototype.hasOwnProperty.call(r, 'admin_password')) delete r.admin_password;
+  try {
+    let vsRows;
+    try {
+      [vsRows] = await db.execute(
+        'SELECT vs.sport_id, vs.sort_order, s.name, s.name_zh, s.slug FROM venue_sports vs JOIN sports s ON s.id = vs.sport_id WHERE vs.venue_id = ? ORDER BY vs.sort_order',
+        [venueId]
+      );
+    } catch (_) {
+      [vsRows] = await db.execute(
+        'SELECT vs.sport_id, vs.sort_order, s.name, s.slug FROM venue_sports vs JOIN sports s ON s.id = vs.sport_id WHERE vs.venue_id = ? ORDER BY vs.sort_order',
+        [venueId]
+      ).catch(() => [[]]);
+      vsRows = (vsRows || []).map((row) => ({ ...row, name_zh: null }));
+    }
+    r.sport_data = (vsRows || []).map((row) => ({
+      sport_id: row.sport_id,
+      name: row.name,
+      name_zh: row.name_zh ?? null,
+      slug: row.slug,
+      sort_order: row.sort_order
+    }));
+  } catch (_) {
+    r.sport_data = [];
+  }
+  return r;
+}
+
 function sanitizeRow(body) {
   const allowed = new Set([
     'name', 'description', 'mtrStation', 'mtrExit', 'walkingDistance', 'address',
     'ceilingHeight', 'startingPrice', 'pricing', 'images', 'amenities', 'whatsapp',
-    'socialLink', 'orgIcon', 'coordinates', 'sort_order',
+    'socialLink', 'orgIcon', 'coordinates', 'sort_order', 'admin_password',
+    'membership_enabled', 'membership_description', 'membership_join_link',
+    'court_count',
   ]);
   const row = {};
   for (const [k, v] of Object.entries(body || {})) {
     if (allowed.has(k)) {
-        // Map undefined to null for SQL compatibility
+      if (k === 'membership_enabled' && typeof v === 'boolean') {
+        row[k] = v ? 1 : 0;
+      } else if (k === 'court_count') {
+        const n = v === undefined || v === null || v === '' ? null : parseInt(v, 10);
+        row[k] = (Number.isNaN(n) || n < 0) ? null : n;
+      } else {
         row[k] = (v === undefined) ? null : v;
+      }
     }
   }
   return row;
@@ -112,6 +153,23 @@ app.use((req, res, next) => {
 });
 
 // --- ROUTES ---
+
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { password } = req.body || {};
+    if (!password) return res.status(400).json({ error: 'Password required' });
+    const db = getPool();
+    const [rows] = await db.execute(
+      'SELECT id FROM venues WHERE admin_password = ?',
+      [password]
+    );
+    if (rows.length === 0) return res.status(401).json({ error: 'Invalid password' });
+    const allowedVenueIds = rows.map((r) => r.id);
+    return res.json({ allowedVenueIds });
+  } catch (err) {
+    res.status(500).json({ error: dbErrorMessage(err) });
+  }
+});
 
 app.get('/api/sports', async (req, res) => {
   try {
@@ -161,6 +219,7 @@ app.post('/api/sports', async (req, res) => {
 app.get('/api/venues', async (req, res) => {
   try {
     const db = getPool();
+    const includePasswords = req.query.superAdminPassword === (process.env.SUPER_ADMIN_PASSWORD || 'abc321A!');
     const [rows] = await db.execute(
       `SELECT * FROM venues ORDER BY sort_order IS NULL, sort_order ASC, name ASC`
     );
@@ -182,6 +241,11 @@ app.get('/api/venues', async (req, res) => {
       });
       rows.forEach((r) => { r.sport_data = byVenue[r.id] || []; });
     } catch (_) {}
+    if (!includePasswords) {
+      rows.forEach((r) => {
+        if (Object.prototype.hasOwnProperty.call(r, 'admin_password')) delete r.admin_password;
+      });
+    }
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: dbErrorMessage(err) });
@@ -222,17 +286,19 @@ app.post('/api/venues', async (req, res) => {
     );
     const venueId = result.insertId;
     const sportData = req.body?.sport_data;
-    if (Array.isArray(sportData) && sportData.length > 0) {
+    if (Array.isArray(sportData)) {
       try {
         await db.execute('DELETE FROM venue_sports WHERE venue_id = ?', [venueId]);
         for (let i = 0; i < sportData.length; i++) {
-          const sid = sportData[i]?.sport_id;
-          if (sid != null) await db.execute('INSERT INTO venue_sports (venue_id, sport_id, sort_order) VALUES (?, ?, ?)', [venueId, sid, sportData[i].sort_order ?? i]);
+          const sid = Number(sportData[i]?.sport_id);
+          if (!Number.isNaN(sid) && sid > 0) {
+            await db.execute('INSERT INTO venue_sports (venue_id, sport_id, sort_order) VALUES (?, ?, ?)', [venueId, sid, sportData[i].sort_order ?? i]);
+          }
         }
       } catch (_) {}
     }
-    if (sportData) row.sport_data = sportData;
-    res.status(201).json({ id: venueId, ...row });
+    const out = await getVenueWithSports(db, venueId);
+    res.status(201).json(out || { id: venueId, ...row });
   } catch (err) {
     console.error('POST Error:', err.message);
     res.status(500).json({ error: err.message });
@@ -244,6 +310,10 @@ app.put('/api/venues/:id', async (req, res) => {
       const db = getPool();
       const id = parseInt(req.params.id, 10);
       const row = sanitizeRow(req.body);
+      // Do not overwrite admin_password when not provided (list API strips it; keep existing when re-editing)
+      if (req.body.admin_password === undefined) {
+        delete row.admin_password;
+      }
 
       if (row.images && Array.isArray(row.images)) {
         const imageUrls = await Promise.all(row.images.map(img => uploadToImgBB(img)));
@@ -259,6 +329,10 @@ app.put('/api/venues/:id', async (req, res) => {
       if (row.coordinates) row.coordinates = JSON.stringify(row.coordinates);
 
       const keys = Object.keys(row);
+      if (keys.length === 0) {
+        const out = await getVenueWithSports(db, id);
+        return res.json(out || { id, ...row });
+      }
       const setClause = keys.map((k) => `\`${k}\` = ?`).join(', ');
       const values = [...Object.values(row), id];
 
@@ -268,12 +342,15 @@ app.put('/api/venues/:id', async (req, res) => {
         try {
           await db.execute('DELETE FROM venue_sports WHERE venue_id = ?', [id]);
           for (let i = 0; i < sportData.length; i++) {
-            const sid = sportData[i]?.sport_id;
-            if (sid != null) await db.execute('INSERT INTO venue_sports (venue_id, sport_id, sort_order) VALUES (?, ?, ?)', [id, sid, sportData[i].sort_order ?? i]);
+            const sid = Number(sportData[i]?.sport_id);
+            if (!Number.isNaN(sid) && sid > 0) {
+              await db.execute('INSERT INTO venue_sports (venue_id, sport_id, sort_order) VALUES (?, ?, ?)', [id, sid, sportData[i].sort_order ?? i]);
+            }
           }
         } catch (_) {}
       }
-      res.json({ id, ...row });
+      const out = await getVenueWithSports(db, id);
+      res.json(out || { id, ...row });
   } catch (err) {
     res.status(500).json({ error: dbErrorMessage(err) });
   }

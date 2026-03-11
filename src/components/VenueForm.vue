@@ -1,21 +1,22 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted, onBeforeUnmount, nextTick } from 'vue';
-import type { Venue, Language } from '../../types';
+import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue';
+import type { Venue, Language, Sport } from '../../types';
 
 declare const google: any;
 
 const props = withDefaults(
   defineProps<{
     venue: Venue | null;
-    sports?: { id: number; name: string; slug: string }[];
+    sports?: { id: number; name: string; name_zh?: string | null; slug: string }[];
     onSave: (v: any) => Promise<void>;
     onCancel: () => void;
     onDelete?: (id: number) => void;
     language: Language;
     t: (key: string) => string;
     darkMode: boolean;
+    isSuperAdmin?: boolean;
   }>(),
-  { sports: () => [] }
+  { sports: (): Sport[] => [], isSuperAdmin: false }
 );
 
 function parseSocialLinks(s: string | undefined): Record<string, string> {
@@ -69,15 +70,25 @@ const defaultForm = {
   org_icon: '',
   coordinates: { lat: 22.3193, lng: 114.1694 },
   socialLinks: { instagram: '', facebook: '', x: '', threads: '', youtube: '', website: '' },
-  sport_data: [] as { sport_id: number; name?: string; slug?: string; sort_order: number }[]
+  sport_data: [] as { sport_id: number; name?: string; slug?: string; sort_order: number }[],
+  admin_password: '' as string | null,
+  membership_enabled: false,
+  membership_description: '' as string | null,
+  membership_join_link: '' as string | null,
+  court_count: null as number | null
 };
 
 const formData = reactive<any>(
   props.venue
-    ? { ...props.venue, socialLinks: parseSocialLinks(props.venue.socialLink), sport_data: Array.isArray(props.venue.sport_data) ? props.venue.sport_data.map((d) => ({ ...d, sort_order: d.sort_order ?? 0 })) : [] }
+    ? { ...defaultForm, ...props.venue, socialLinks: parseSocialLinks(props.venue.socialLink), sport_data: Array.isArray(props.venue.sport_data) ? props.venue.sport_data.map((d: any) => ({ sport_id: Number(d.sport_id), name: d.name, name_zh: d.name_zh ?? null, slug: d.slug, sort_order: Number(d.sort_order) || 0 })) : [], admin_password: (props.venue as any).admin_password ?? '' }
     : { ...defaultForm }
 );
 if (!formData.sport_data) formData.sport_data = [];
+if (formData.admin_password === undefined) formData.admin_password = '';
+if (formData.membership_enabled === undefined) formData.membership_enabled = false;
+if (formData.membership_description === undefined) formData.membership_description = null;
+if (formData.membership_join_link === undefined) formData.membership_join_link = null;
+if (formData.court_count === undefined) formData.court_count = null;
 
 const placesApiError = ref(false);
 const isUploading = ref(false);
@@ -91,8 +102,11 @@ const addressInputRef = ref<HTMLInputElement | null>(null);
 const autocompleteRef = ref<any>(null);
 const descriptionEditorRef = ref<HTMLDivElement | null>(null);
 const pricingEditorRef = ref<HTMLDivElement | null>(null);
+const membershipDescriptionEditorRef = ref<HTMLDivElement | null>(null);
 let savedEditorRange: Range | null = null;
 let savedPricingRange: Range | null = null;
+let savedMembershipDescriptionRange: Range | null = null;
+let membershipDescriptionSelectionHandler: (() => void) | null = null;
 
 onMounted(() => {
   nextTick(() => {
@@ -133,6 +147,10 @@ onMounted(() => {
       document.addEventListener('selectionchange', onSelectionChangePricing);
       (pel as any).__selectionChangeHandler = onSelectionChangePricing;
     }
+
+    if (formData.membership_enabled) {
+      nextTick(() => initMembershipDescriptionEditor());
+    }
   });
 });
 
@@ -145,7 +163,46 @@ onBeforeUnmount(() => {
   if (pel && (pel as any).__selectionChangeHandler) {
     document.removeEventListener('selectionchange', (pel as any).__selectionChangeHandler);
   }
+  if (membershipDescriptionSelectionHandler) {
+    document.removeEventListener('selectionchange', membershipDescriptionSelectionHandler);
+    membershipDescriptionSelectionHandler = null;
+  }
 });
+
+function initMembershipDescriptionEditor() {
+  const el = membershipDescriptionEditorRef.value;
+  if (!el) return;
+  el.innerHTML = formData.membership_description || '';
+  const saveRange = () => {
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0 && el.contains(sel.anchorNode)) {
+      savedMembershipDescriptionRange = sel.getRangeAt(0).cloneRange();
+    }
+  };
+  el.addEventListener('mouseup', saveRange);
+  el.addEventListener('keyup', saveRange);
+  el.addEventListener('blur', saveRange);
+  const onSelectionChange = () => {
+    if (document.activeElement === el) saveRange();
+  };
+  document.addEventListener('selectionchange', onSelectionChange);
+  membershipDescriptionSelectionHandler = onSelectionChange;
+}
+
+watch(
+  () => formData.membership_enabled,
+  (enabled) => {
+    if (enabled) {
+      nextTick(() => initMembershipDescriptionEditor());
+    } else {
+      if (membershipDescriptionSelectionHandler) {
+        document.removeEventListener('selectionchange', membershipDescriptionSelectionHandler);
+        membershipDescriptionSelectionHandler = null;
+      }
+    }
+  },
+  { immediate: false }
+);
 
 function focusEditorAndRestoreSelection() {
   const el = descriptionEditorRef.value;
@@ -257,6 +314,62 @@ function insertPricingLink(e: MouseEvent) {
 
 function getPricingHtml(): string {
   const html = pricingEditorRef.value?.innerHTML ?? '';
+  return html.trim() || '';
+}
+
+function focusMembershipDescriptionEditorAndRestoreSelection() {
+  const el = membershipDescriptionEditorRef.value;
+  if (!el) return;
+  el.focus();
+  const sel = window.getSelection();
+  if (!sel) return;
+  if (savedMembershipDescriptionRange) {
+    try {
+      sel.removeAllRanges();
+      sel.addRange(savedMembershipDescriptionRange);
+      return;
+    } catch {
+      savedMembershipDescriptionRange = null;
+    }
+  }
+  try {
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    range.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  } catch {
+    // ignore
+  }
+}
+
+function applyMembershipFormat(command: 'bold' | 'italic' | 'underline' | 'strikeThrough', e: MouseEvent) {
+  e.preventDefault();
+  focusMembershipDescriptionEditorAndRestoreSelection();
+  document.execCommand(command, false);
+}
+
+function applyMembershipBlockFormat(blockTag: 'p' | 'h1' | 'h2' | 'blockquote' | 'pre', e: MouseEvent) {
+  e.preventDefault();
+  focusMembershipDescriptionEditorAndRestoreSelection();
+  document.execCommand('formatBlock', false, blockTag);
+}
+
+function insertMembershipList(ordered: boolean, e: MouseEvent) {
+  e.preventDefault();
+  focusMembershipDescriptionEditorAndRestoreSelection();
+  document.execCommand(ordered ? 'insertOrderedList' : 'insertUnorderedList', false);
+}
+
+function insertMembershipLink(e: MouseEvent) {
+  e.preventDefault();
+  focusMembershipDescriptionEditorAndRestoreSelection();
+  const url = prompt('Enter URL:', 'https://');
+  if (url != null && url.trim()) document.execCommand('createLink', false, url.trim());
+}
+
+function getMembershipDescriptionHtml(): string {
+  const html = membershipDescriptionEditorRef.value?.innerHTML ?? '';
   return html.trim() || '';
 }
 
@@ -385,9 +498,10 @@ const clearOrgIcon = () => {
   formData.org_icon = null;
 };
 
-const addSport = (sport: { id: number; name: string; slug: string }) => {
-  if (formData.sport_data.some((d: any) => d.sport_id === sport.id)) return;
-  formData.sport_data.push({ sport_id: sport.id, name: sport.name, slug: sport.slug, sort_order: formData.sport_data.length });
+const addSport = (sport: { id: number; name: string; name_zh?: string | null; slug: string }) => {
+  const sid = Number(sport.id);
+  if (Number.isNaN(sid) || formData.sport_data.some((d: any) => Number(d.sport_id) === sid)) return;
+  formData.sport_data.push({ sport_id: sid, name: sport.name, name_zh: sport.name_zh ?? null, slug: sport.slug, sort_order: formData.sport_data.length });
 };
 const removeSportBySortedIndex = (sortedIndex: number) => {
   const sorted = sortedSportData();
@@ -410,8 +524,27 @@ const moveSportPriority = (sortedIndex: number, delta: number) => {
   formData.sport_data[ai].sort_order = formData.sport_data[bi].sort_order;
   formData.sport_data[bi].sort_order = so;
 };
-const selectedSportIds = () => new Set((formData.sport_data || []).map((d: any) => d.sport_id));
+const selectedSportIds = () =>
+  new Set(
+    (formData.sport_data || [])
+      .map((d: any) => Number(d.sport_id))
+      .filter((n: number) => !Number.isNaN(n))
+  );
 const sortedSportData = () => (formData.sport_data || []).slice().sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+
+const sportsOptions = computed(() => (props.sports ?? []) as { id: number; name: string; name_zh?: string | null; slug: string }[]);
+const selectedSportIdForDropdown = ref<string | number>('');
+function onSelectSportToAdd() {
+  const raw = selectedSportIdForDropdown.value;
+  if (raw === '') return;
+  const id = typeof raw === 'number' ? raw : parseInt(String(raw), 10);
+  if (Number.isNaN(id)) return;
+  const s = sportsOptions.value.find((x) => x.id === id);
+  if (s) {
+    addSport({ id: s.id, name: s.name, slug: s.slug });
+    selectedSportIdForDropdown.value = '';
+  }
+}
 
 // Geocode address to get correct lat/lng before save (so map pins are right)
 function geocodeAddress(address: string): Promise<{ lat: number; lng: number } | null> {
@@ -449,6 +582,9 @@ const handleSubmit = async (e?: Event) => {
       ...formData.pricing,
       content: getPricingHtml()
     };
+  }
+  if (formData.membership_enabled && membershipDescriptionEditorRef.value) {
+    formData.membership_description = getMembershipDescriptionHtml() || null;
   }
   isSaving.value = true;
   saveError.value = null;
@@ -524,7 +660,7 @@ const inputClass =
           <span class="text-2xl">⚠️</span>
           <div class="flex-1">
             <h4 class="text-white font-[900] text-[12px] uppercase tracking-widest mb-1">
-              Save Failed
+              {{ t('saveFailed') }}
             </h4>
             <p class="text-white text-[12px] font-[700] leading-relaxed">
               {{ saveError }}
@@ -537,11 +673,86 @@ const inputClass =
             ×
           </button>
         </div>
-
+        <div v-if="isSuperAdmin" class="rounded-xl p-4 border" :class="darkMode ? 'bg-amber-900/20 border-amber-700/50' : 'bg-amber-50 border-amber-200'">
+              <label :class="[labelClass, darkMode ? 'text-amber-300' : 'text-amber-800']">Court Admin Password</label>
+              <p class="text-[11px] opacity-80 mb-2" :class="darkMode ? 'text-amber-200/80' : 'text-amber-700'">
+                {{ language === 'en' ? 'Set a password so court owners can log in to edit this court. Use the same password on multiple courts to let one admin manage them all.' : '設定密碼讓場地管理員可登入編輯此場地。多個場地設相同密碼即由同一管理員管理。' }}
+              </p>
+              <input
+                v-model="formData.admin_password"
+                type="text"
+                :class="inputClass"
+                :placeholder="venue && formData.admin_password === '' ? (language === 'en' ? 'Input password' : '輸入密碼') : (language === 'en' ? 'Leave blank for no court admin' : '留空表示無專屬管理員')"
+              />
+            </div>
+            <div v-if="isSuperAdmin" class="rounded-xl p-4 border" :class="darkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-200'">
+              <label :class="labelClass">{{ language === 'en' ? 'Membership (this court)' : '會員（此場地）' }}</label>
+              <p class="text-[11px] opacity-60 mb-2">{{ language === 'en' ? 'Show a membership section on this court\'s page with description and join link.' : '在此場地頁面顯示會員區塊、說明與加入連結。' }}</p>
+              <div class="flex items-center gap-3 mb-3">
+                <span class="text-sm font-bold">{{ language === 'en' ? 'Enable membership' : '啟用會員' }}</span>
+                <button
+                  type="button"
+                  role="switch"
+                  :aria-checked="formData.membership_enabled"
+                  class="relative inline-flex h-7 w-12 shrink-0 rounded-full border-2 transition-colors focus:outline-none"
+                  :class="formData.membership_enabled ? 'bg-[#007a67] border-[#007a67]' : (darkMode ? 'bg-gray-600 border-gray-500' : 'bg-gray-200 border-gray-300')"
+                  @click="formData.membership_enabled = !formData.membership_enabled"
+                >
+                  <span
+                    class="pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition-transform"
+                    :class="formData.membership_enabled ? 'translate-x-5' : 'translate-x-0.5'"
+                  />
+                </button>
+              </div>
+              <template v-if="formData.membership_enabled">
+                <div class="mb-3">
+                  <label class="block text-sm font-bold mb-1">{{ language === 'en' ? 'Membership description' : '會員說明' }}</label>
+                  <div
+                    class="flex flex-wrap gap-1 mb-2 p-2 rounded-t-[12px] border border-b-0"
+                    :class="darkMode ? 'bg-gray-700/50 border-gray-600' : 'bg-gray-50 border-gray-200'"
+                    role="toolbar"
+                    aria-label="Format membership description"
+                  >
+                    <button type="button" :class="toolbarBtnClass + toolbarClass(darkMode)" title="Bold" @mousedown="applyMembershipFormat('bold', $event)">B</button>
+                    <button type="button" :class="toolbarBtnClass + toolbarClass(darkMode)" title="Italic" class="italic" @mousedown="applyMembershipFormat('italic', $event)">I</button>
+                    <button type="button" :class="toolbarBtnClass + toolbarClass(darkMode)" title="Underline" class="underline" @mousedown="applyMembershipFormat('underline', $event)">U</button>
+                    <button type="button" :class="toolbarBtnClass + toolbarClass(darkMode)" title="Strikethrough" class="line-through" @mousedown="applyMembershipFormat('strikeThrough', $event)">S</button>
+                    <span class="w-px h-6 self-center bg-gray-300 dark:bg-gray-600 mx-0.5" aria-hidden="true" />
+                    <button type="button" :class="toolbarBtnClass + toolbarClass(darkMode)" title="Blockquote" @mousedown="applyMembershipBlockFormat('blockquote', $event)">"</button>
+                    <button type="button" :class="toolbarBtnClass + toolbarClass(darkMode)" title="Code block" @mousedown="applyMembershipBlockFormat('pre', $event)">&lt;/&gt;</button>
+                    <button type="button" :class="toolbarBtnClass + toolbarClass(darkMode)" title="Insert link" @mousedown="insertMembershipLink($event)">🔗</button>
+                    <span class="w-px h-6 self-center bg-gray-300 dark:bg-gray-600 mx-0.5" aria-hidden="true" />
+                    <button type="button" :class="toolbarBtnClass + toolbarClass(darkMode)" title="Numbered list" @mousedown="insertMembershipList(true, $event)">1.</button>
+                    <button type="button" :class="toolbarBtnClass + toolbarClass(darkMode)" title="Bullet list" @mousedown="insertMembershipList(false, $event)">•</button>
+                    <span class="w-px h-6 self-center bg-gray-300 dark:bg-gray-600 mx-0.5" aria-hidden="true" />
+                    <button type="button" :class="toolbarBtnClass + toolbarClass(darkMode)" title="Heading 1" @mousedown="applyMembershipBlockFormat('h1', $event)">H1</button>
+                    <button type="button" :class="toolbarBtnClass + toolbarClass(darkMode)" title="Heading 2" @mousedown="applyMembershipBlockFormat('h2', $event)">H2</button>
+                    <button type="button" :class="toolbarBtnClass + toolbarClass(darkMode)" title="Paragraph" @mousedown="applyMembershipBlockFormat('p', $event)">P</button>
+                  </div>
+                  <div
+                    ref="membershipDescriptionEditorRef"
+                    contenteditable="true"
+                    class="description-editor min-h-[8rem] px-4 py-3 border rounded-b-[12px] focus:outline-none transition text-left"
+                    :class="darkMode ? 'bg-gray-700 border-gray-600 text-white border-t-0' : 'bg-white border-gray-200 text-gray-900 border-t-0'"
+                    :data-placeholder="language === 'en' ? 'Describe membership benefits for this court...' : '描述此場地的會員福利...'"
+                  />
+                </div>
+                <div>
+                  <label class="block text-sm font-bold mb-1">{{ language === 'en' ? 'Link to join member' : '加入會員連結' }}</label>
+                  <input
+                    v-model="formData.membership_join_link"
+                    type="url"
+                    class="w-full rounded-xl border-2 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#007a67]"
+                    :class="darkMode ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-300'"
+                    placeholder="https://..."
+                  />
+                </div>
+              </template>
+            </div>
         <div class="flex flex-col sm:flex-row gap-6 items-start">
           <div class="flex-shrink-0">
-            <label :class="labelClass" class="block mb-2">Org Icon (one only)</label>
-            <p class="text-[11px] opacity-60 mb-2">Square (1:1) recommended for consistent display.</p>
+            <label :class="labelClass" class="block mb-2">{{ t('orgIcon') }} ({{ t('oneOnly') }})</label>
+            <p class="text-[11px] opacity-60 mb-2">{{ t('squareRecommended') }}</p>
             <div class="flex flex-wrap items-center gap-3">
               <div
                 v-if="formData.org_icon"
@@ -572,29 +783,39 @@ const inputClass =
                   @change="handleOrgIconUpload"
                 />
                 <span v-if="isUploading" class="text-sm font-bold text-[#007a67]">Uploading…</span>
-                <span v-else class="text-sm font-bold text-[#007a67]">{{ formData.org_icon ? 'Change' : 'Upload' }} icon</span>
+                <span v-else class="text-sm font-bold text-[#007a67]">{{ formData.org_icon ? t('changeIcon') : t('uploadIcon') }} </span>
               </label>
             </div>
+
           </div>
           <div class="flex-1 min-w-0 flex flex-col gap-4 w-full">
             <div>
-              <label :class="labelClass">Sport types (priority order)</label>
-              <p class="text-[11px] opacity-60 mb-2">Add sports and set order for this court. Drag order is used per-sport on the admin list.</p>
+              <label :class="labelClass">{{ t('sportTypesPriority') }}</label>
+              <p class="text-[11px] opacity-60 mb-2">{{ t('sportTypesHint') }}</p>
               <p v-if="!(sports && sports.length)" class="text-amber-600 dark:text-amber-400 text-sm font-bold mb-2">
-                {{ language === 'en' ? 'No sport types yet. Add them in Admin (Manage Courts → + Add sport) first.' : '尚未有運動類型。請先在管理後台（管理場地 → + Add sport）新增。' }}
+                {{ t('noSportTypesHint') }}
               </p>
-              <div class="flex flex-wrap gap-2 mb-2">
-                <button
-                  v-for="s in (sports || [])"
-                  :key="s.id"
-                  type="button"
-                  class="px-3 py-1.5 rounded-lg text-sm font-bold border-2 border-dashed transition-all"
-                  :class="selectedSportIds().has(s.id) ? 'border-[#007a67] bg-[#007a67]/10 text-[#007a67] cursor-default' : (darkMode ? 'border-gray-600 text-gray-400 hover:border-[#007a67] hover:text-[#007a67]' : 'border-gray-300 text-gray-600 hover:border-[#007a67] hover:text-[#007a67]')"
-                  :disabled="selectedSportIds().has(s.id)"
-                  @click="addSport(s)"
+              <div class="flex flex-wrap items-center gap-2 mb-2">
+                <select
+                  v-model="selectedSportIdForDropdown"
+                  class="rounded-lg border-2 px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#007a67] max-w-[220px]"
+                  :class="darkMode ? 'bg-gray-700 border-gray-600 text-gray-100' : 'bg-white border-gray-300 text-gray-900'"
+                  :disabled="!(sports && sports.length)"
+                  @change="onSelectSportToAdd"
                 >
-                  + {{ language === 'zh' && s.name_zh ? s.name_zh : s.name }}
-                </button>
+                  <option value="">
+                    {{ t('chooseSportToAdd') }}
+                  </option>
+                  <option
+                    v-for="s in sportsOptions"
+                    :key="s.id"
+                    :value="s.id"
+                    :disabled="selectedSportIds().has(s.id)"
+                  >
+                    {{ language === 'zh' && s.name_zh ? s.name_zh : s.name }}
+                    {{ selectedSportIds().has(s.id) ? ' ' + t('sportAdded') : '' }}
+                  </option>
+                </select>
               </div>
               <div class="flex flex-wrap items-center gap-2">
                 <div
@@ -603,22 +824,16 @@ const inputClass =
                   class="flex items-center gap-1 px-3 py-2 rounded-xl border"
                   :class="darkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-100 border-gray-200'"
                 >
-                  <span class="text-xs font-black text-[#007a67] w-5">{{ index + 1 }}</span>
-                  <button type="button" class="p-1 rounded hover:bg-black/10" aria-label="Move up" @click="moveSportPriority(index, -1)">
-                    ▲
-                  </button>
-                  <button type="button" class="p-1 rounded hover:bg-black/10" aria-label="Move down" @click="moveSportPriority(index, 1)">
-                    ▼
-                  </button>
+                  <span class="text-xs font-black text-[#007a67] w-5">{{ Number(index) + 1 }}</span>
                   <span class="font-bold text-sm">{{ (language === 'zh' && d.name_zh) ? d.name_zh : (d.name || d.slug) }}</span>
-                  <button type="button" class="p-1 rounded hover:bg-red-500/20 text-red-500" aria-label="Remove" @click="removeSportBySortedIndex(index)">
+                  <button type="button" class="p-1 rounded hover:bg-red-500/20 text-red-500" aria-label="Remove" @click.stop="removeSportBySortedIndex(Number(index))">
                     ×
                   </button>
                 </div>
               </div>
             </div>
             <div>
-              <label :class="labelClass">Court Name *</label>
+              <label :class="labelClass">{{ t('courtName') }} *</label>
               <input
                 v-model="formData.name"
                 type="text"
@@ -627,7 +842,7 @@ const inputClass =
               />
             </div>
             <div>
-              <label :class="labelClass">Starting Price *</label>
+              <label :class="labelClass">{{ t('startingPriceForm') }} *</label>
               <input
                 v-model.number="formData.startingPrice"
                 type="number"
@@ -635,6 +850,8 @@ const inputClass =
                 required
               />
             </div>
+            
+            
           </div>
         </div>
 
@@ -652,7 +869,7 @@ const inputClass =
           />
         </div>
         <div>
-          <label :class="labelClass">WhatsApp Number *</label>
+          <label :class="labelClass">{{ t('whatsappNumber') }} *</label>
           <input
             v-model="formData.whatsapp"
             type="text"
@@ -662,7 +879,7 @@ const inputClass =
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label :class="labelClass">MTR Station</label>
+            <label :class="labelClass">{{ t('mtrStation') }}</label>
             <input
               v-model="formData.mtrStation"
               type="text"
@@ -670,7 +887,7 @@ const inputClass =
             />
           </div>
           <div>
-            <label :class="labelClass">MTR Exit</label>
+            <label :class="labelClass">{{ t('mtrExit') }}</label>
             <input
               v-model="formData.mtrExit"
               type="text"
@@ -681,7 +898,7 @@ const inputClass =
 
         <div class="grid grid-cols-2 gap-4">
           <div>
-            <label :class="labelClass">Walking (min)</label>
+            <label :class="labelClass">{{ t('walking') }} ({{ t('min') }})</label>
             <input
               v-model.number="formData.walkingDistance"
               type="number"
@@ -689,7 +906,7 @@ const inputClass =
             />
           </div>
           <div>
-            <label :class="labelClass">Ceiling (m)</label>
+            <label :class="labelClass">{{ t('ceiling') }} ({{ t('m') }})</label>
             <input
               v-model.number="formData.ceilingHeight"
               type="number"
@@ -697,10 +914,20 @@ const inputClass =
               :class="inputClass"
             />
           </div>
+          <div>
+            <label :class="labelClass">{{ t('numberOfCourts') }}</label>
+            <input
+              v-model.number="formData.court_count"
+              type="number"
+              min="0"
+              :class="inputClass"
+              :placeholder="t('optional')"
+            />
+          </div>
         </div>
 
         <div>
-          <label :class="labelClass">Description</label>
+          <label :class="labelClass">{{ t('description') }}</label>
           <div
             class="flex flex-wrap gap-1 mb-2 p-2 rounded-t-[12px] border border-b-0"
             :class="darkMode ? 'bg-gray-700/50 border-gray-600' : 'bg-gray-50 border-gray-200'"
@@ -728,12 +955,12 @@ const inputClass =
             contenteditable="true"
             class="description-editor min-h-[8rem] px-4 py-3 border rounded-b-[12px] focus:outline-none transition text-left"
             :class="darkMode ? 'bg-gray-700 border-gray-600 text-white border-t-0' : 'bg-white border-gray-200 text-gray-900 border-t-0'"
-            data-placeholder="Type something..."
+            :data-placeholder="t('typeSomething')"
           />
         </div>
 
         <div>
-          <label :class="labelClass" class="block mb-3">Social Links</label>
+          <label :class="labelClass" class="block mb-3">{{ t('socialLinks') }}</label>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div class="flex items-center gap-3">
               <span class="flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center overflow-hidden" :class="darkMode ? 'bg-gray-700' : 'bg-gray-100'" aria-hidden="true">
@@ -792,7 +1019,7 @@ const inputClass =
         </div>
 
         <div class="space-y-4">
-          <label :class="labelClass">Photos (Max 12)</label>
+          <label :class="labelClass">{{ t('photos') }} (Max 12)</label>
           <div class="grid grid-cols-3 md:grid-cols-6 gap-3">
             <div
               v-for="(img, i) in formData.images"
@@ -840,7 +1067,7 @@ const inputClass =
         </div>
 
         <div class="space-y-4">
-          <label :class="labelClass">Pricing Info (HTML supported)</label>
+          <label :class="labelClass">{{ t('pricingInfo') }} ({{ t('htmlSupported') }})</label>
           <div class="flex p-1 rounded-[8px] text-[10px] font-[900]"
             :class="darkMode ? 'bg-gray-700' : 'bg-gray-100'"
             >
@@ -850,7 +1077,7 @@ const inputClass =
               :class="formData.pricing.type === 'text' ? (darkMode ? 'bg-gray-600' : 'bg-white') + ' shadow-sm' : 'opacity-40'"
               @click="formData.pricing.type = 'text'"
             >
-              TEXT
+              {{ t('text') }}
             </button>
             <button
               type="button"
@@ -858,7 +1085,7 @@ const inputClass =
               :class="formData.pricing.type === 'image' ? (darkMode ? 'bg-gray-600' : 'bg-white') + ' shadow-sm' : 'opacity-40'"
               @click="formData.pricing.type = 'image'"
             >
-              IMAGE
+              {{ t('image') }}
             </button>
           </div>
           <div
@@ -892,7 +1119,7 @@ const inputClass =
               contenteditable="true"
               class="description-editor min-h-[6rem] px-4 py-3 border rounded-b-[12px] focus:outline-none transition text-left"
               :class="darkMode ? 'bg-gray-700 border-gray-600 text-white border-t-0' : 'bg-white border-gray-200 text-gray-900 border-t-0'"
-              data-placeholder="Type pricing details..."
+              :data-placeholder="t('typePricingDetails')"
             />
           </div>
           <div
@@ -916,10 +1143,11 @@ const inputClass =
             <template v-else>
               <button
                 type="button"
-                class="text-xs font-bold text-white"
+                class="text-[12px] font-bold"
+                :class="darkMode ? 'text-white' : 'text-gray-900'"
                 @click="pricingImageRef?.click()"
               >
-                Upload Pricing Image
+                {{ t('uploadPricingImage') }}
               </button>
             </template>
             <input
@@ -947,15 +1175,15 @@ const inputClass =
             v-if="isUploading || isSaving"
             class="w-5 h-5 border-3 border-white/20 border-l-white rounded-full animate-spin"
           ></div>
-          {{ isSaving ? 'Saving...' : 'Save Court' }}
+          {{ isSaving ? t('saving') : t('saveCourt') }}
         </button>
         <button
-          v-if="venue && !isSaving"
+          v-if="venue && !isSaving && isSuperAdmin"
           type="button"
           class="px-6 py-4 bg-red-500 text-white rounded-[8px] font-[900] active:scale-95 transition-all"
           @click="handleDelete"
         >
-          DELETE
+          {{ t('delete') }}
         </button>
       </div>
     </div>
