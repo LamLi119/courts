@@ -80,10 +80,15 @@ const props = defineProps<{
   sports: { id: number; name: string; name_zh?: string | null; slug: string }[];
   currentTab: AppTab;
   setTab: (t: AppTab) => void;
+  setFilterSpecialOffer?: (v: boolean) => void;
+  filterSpecialOffer?: boolean;
+  /** When set (e.g. after clicking a pin), list shows only these venues. */
+  listVenues?: Venue[] | null;
+  onShowVenuesAtLocation?: (venues: Venue[]) => void;
 }>();
 
 const leftListVenues = computed(() =>
-  props.selectedVenue ? [props.selectedVenue] : props.venues
+  props.selectedVenue ? [props.selectedVenue] : (props.listVenues ?? props.venues)
 );
 </script>
 
@@ -152,6 +157,16 @@ const leftListVenues = computed(() =>
           >
             {{ t('mtrUnder10Min') }}
           </button>
+          <button
+          v-if="setFilterSpecialOffer"
+          type="button"
+           class="inline-flex items-center gap-1.5 rounded-[999px] px-3 py-2 text-[12px] font-bold transition-all"
+          :class="filterSpecialOffer ? 'bg-[#007a67] text-white shadow-sm' : (darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200')"
+          :title="t('specialOffer')"
+          @click="setFilterSpecialOffer(!filterSpecialOffer)"
+        >
+          {{ t('specialOffer') }}
+        </button>
           <template v-for="station in mtrFilter" :key="station">
             <span
               class="inline-flex items-center gap-1.5 rounded-[999px] pl-3 pr-1.5 py-2 text-[12px] font-bold bg-[#007a67] text-white shadow-sm"
@@ -245,8 +260,8 @@ const leftListVenues = computed(() =>
               </button>
             </div>
           </div>
-          <!-- Sport type dropdown: multi-select -->
-          <div class="pt-2 border-t relative" :class="darkMode ? 'border-gray-600' : 'border-gray-200'">
+          <!-- Sport type dropdown: multi-select (hidden) -->
+          <div class="hidden pt-2 border-t relative" :class="darkMode ? 'border-gray-600' : 'border-gray-200'">
             <button
               type="button"
               class="w-full flex items-center justify-between px-3 py-2.5 text-[12px] font-bold rounded-[8px] border transition-colors"
@@ -384,6 +399,7 @@ const leftListVenues = computed(() =>
         :venues="props.venues"
         :selectedVenue="selectedVenue"
         :onSelectVenue="(v: Venue) => onSelectVenue(v)"
+        :onShowVenuesAtLocation="onShowVenuesAtLocation"
         :language="language"
         :darkMode="darkMode"
         :isMobile="false"

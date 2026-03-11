@@ -251,7 +251,7 @@ const venueImageAlt = computed(() => getVenueImageAlt(props.venue, props.languag
         </button>
         <span v-if="shareFeedback" class="text-xs font-bold text-[#007a67] animate-in fade-in duration-200">{{
           shareFeedback
-          }}</span>
+        }}</span>
         <button v-if="(canEdit !== undefined ? canEdit : isAdmin)" type="button"
           class="btn btn-utility btn-utility-round bg-blue-500 text-white hover:bg-blue-600" @click="onEdit">
           ✏️
@@ -280,14 +280,14 @@ const venueImageAlt = computed(() => getVenueImageAlt(props.venue, props.languag
             </template>
             <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-[14px] font-[400]"
               :class="darkMode ? 'text-gray-400' : 'text-gray-600'">
-              <span class="rounded-md px-2.5 py-0.5 text-xs font-medium shrink-0"
+              <span v-if="venue.mtrStation" class="rounded-md px-2.5 py-0.5 text-xs font-medium shrink-0"
                 :class="darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'">🚇 {{
                   getStationDisplayName(venue.mtrStation, language) }} ({{ venue.mtrExit }})</span>
-              <span class="rounded-md px-2.5 py-0.5 text-xs font-medium shrink-0"
+              <span v-if="venue.walkingDistance > 0" class="rounded-md px-2.5 py-0.5 text-xs font-medium shrink-0"
                 :class="darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'">
                 {{ venue.walkingDistance }} {{ t('min') }} {{ t('walk') }}
               </span>
-              <span class="rounded-md px-2.5 py-0.5 text-xs font-medium shrink-0"
+              <span v-if="venue.ceilingHeight > 0" class="rounded-md px-2.5 py-0.5 text-xs font-medium shrink-0"
                 :class="darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'">
                 {{ venue.ceilingHeight }}m {{ t('ceilingHeight') }}
               </span>
@@ -298,8 +298,7 @@ const venueImageAlt = computed(() => getVenueImageAlt(props.venue, props.languag
               </span>
             </div>
             <div v-if="venue.description">
-              <h3 class="text-[14px] uppercase tracking-widest font-bold mb-2"
-                >{{ t('description') }}</h3>
+              <h3 class="text-[14px] uppercase tracking-widest font-bold mb-2">{{ t('description') }}</h3>
               <div class="text-[14px] font-[400] leading-relaxed description-html pr-2 pl-2"
                 :class="darkMode ? 'text-gray-300' : 'text-gray-600'" v-html="sanitizeDescription(venue.description)">
               </div>
@@ -329,9 +328,10 @@ const venueImageAlt = computed(() => getVenueImageAlt(props.venue, props.languag
                 </button>
               </div>
               <!-- Mobile: Location -->
-              <div class="lg:hidden pt-4 mt-2 mb-4 border-t border-gray-300">
+              <div v-if="venue.address && venue.address.trim() !== ''" class="lg:hidden pt-4 mt-2 mb-4 border-t border-gray-300">
                 <div class="flex justify-between w-full">
-                  <h3 class="text-[14px] uppercase tracking-widest font-bold opacity-90">
+                  <h3 class="uppercase tracking-widest font-bold opacity-90"
+                  :class="language === 'en' ? 'text-[12px]' : 'text-[14px]'">
                     {{ t('location') }}
                   </h3>
 
@@ -348,13 +348,14 @@ const venueImageAlt = computed(() => getVenueImageAlt(props.venue, props.languag
 
                 </div>
               </div>
-              <div class="flex justify-between w-full pt-4 mt-2 mb-4 border-t border-gray-300">
-                <h3 class="text-[14px] uppercase tracking-widest font-bold opacity-90">
+              <div v-if="venue.membership_enabled && (venue.membership_description || venue.membership_join_link)" class="flex justify-between w-full pt-4 mt-2 mb-4 border-t border-gray-300">
+                <h3 class="uppercase tracking-widest font-bold opacity-90"
+                :class="language === 'en' ? 'text-[12px]' : 'text-[14px]'">
                   {{ language === 'en' ? 'Special offer' : '特別優惠' }}
                 </h3>
-                <button v-if="venue.membership_join_link" type="button"
-                  class="btn btn-text btn-sm justify-end w-[150px]" @click="openJoinMembership">
-                  {{ language === 'en' ? 'Join member' : '加入會員' }} →
+                <button v-if="venue.membership_join_link" type="button" class="text-[12px] font-[700] text-[#007a67] uppercase w-1/2 text-right hover:underline"
+                  @click="openJoinMembership">
+                  {{ language === 'en' ? 'Get the offer' : '獲取優惠' }} →
                 </button>
               </div>
               <div v-if="venue.membership_enabled && (venue.membership_description || venue.membership_join_link)"
@@ -369,7 +370,8 @@ const venueImageAlt = computed(() => getVenueImageAlt(props.venue, props.languag
             <template v-if="socialLinksList().length > 0">
               <div class="hidden lg:block space-y-3 pt-6 border-t"
                 :class="darkMode ? 'border-gray-700' : 'border-gray-200'">
-                <h3 class="text-[14px] uppercase tracking-widest font-bold opacity-90">
+                <h3 class="uppercase tracking-widest font-bold opacity-90"
+                :class="language === 'en' ? 'text-[14px]' : 'text-[16px]'">
                   {{ language === 'en' ? 'Social links' : '社群連結' }}
                 </h3>
                 <div class="space-y-2">
@@ -377,8 +379,10 @@ const venueImageAlt = computed(() => getVenueImageAlt(props.venue, props.languag
                     rel="noopener noreferrer"
                     class="flex items-start gap-3 p-3 rounded-[8px] border text-left break-all text-[13px] hover:opacity-80 transition-opacity"
                     :class="darkMode ? 'border-gray-600 text-gray-200 hover:bg-gray-700/50' : 'border-gray-300 text-gray-700 hover:bg-gray-50'">
-                    <span class="flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center overflow-hidden" :class="darkMode ? 'bg-gray-700' : 'bg-gray-100'" aria-hidden="true">
-                      <img :src="`${SOCIAL_ICON_CDN}/${link.icon}`" :alt="link.name" class="w-5 h-5 object-contain" loading="lazy" />
+                    <span class="flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center overflow-hidden"
+                      :class="darkMode ? 'bg-gray-700' : 'bg-gray-100'" aria-hidden="true">
+                      <img :src="`${SOCIAL_ICON_CDN}/${link.icon}`" :alt="link.name" class="w-5 h-5 object-contain"
+                        loading="lazy" />
                     </span>
                     <div class="min-w-0 flex-1">
                       <span class="font-bold block mb-1">{{ link.name }}</span>
@@ -392,7 +396,8 @@ const venueImageAlt = computed(() => getVenueImageAlt(props.venue, props.languag
             <div class="lg:hidden space-y-6 pt-4 pb-24 border-t border-gray-300">
               <template v-if="socialLinksList().length > 0">
                 <div class="space-y-2">
-                  <h3 class="text-[11px] uppercase tracking-widest font-bold opacity-90">
+                  <h3 class="uppercase tracking-widest font-bold opacity-90"
+                  :class="language === 'en' ? 'text-[12px]' : 'text-[14px]'">
                     {{ language === 'en' ? 'Social links' : '社群連結' }}
                   </h3>
                   <div class="space-y-2">
@@ -400,8 +405,10 @@ const venueImageAlt = computed(() => getVenueImageAlt(props.venue, props.languag
                       rel="noopener noreferrer"
                       class="flex items-start gap-3 p-3 rounded-[8px] border text-left break-all text-[13px] hover:opacity-80 transition-opacity"
                       :class="darkMode ? 'border-gray-600 text-gray-200 hover:bg-gray-700/50' : 'border-gray-300 text-gray-700 hover:bg-gray-50'">
-                      <span class="flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center overflow-hidden" :class="darkMode ? 'bg-gray-700' : 'bg-gray-100'" aria-hidden="true">
-                        <img :src="`${SOCIAL_ICON_CDN}/${link.icon}`" :alt="link.name" class="w-5 h-5 object-contain" loading="lazy" />
+                      <span class="flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center overflow-hidden"
+                        :class="darkMode ? 'bg-gray-700' : 'bg-gray-100'" aria-hidden="true">
+                        <img :src="`${SOCIAL_ICON_CDN}/${link.icon}`" :alt="link.name" class="w-5 h-5 object-contain"
+                          loading="lazy" />
                       </span>
                       <div class="min-w-0 flex-1">
                         <span class="font-bold block mb-1">{{ link.name }}</span>
@@ -417,14 +424,24 @@ const venueImageAlt = computed(() => getVenueImageAlt(props.venue, props.languag
 
         <!-- Desktop: right sidebar -->
         <div class="hidden lg:block lg:col-span-1">
-          <div class="sticky top-24 space-y-6 p-8 rounded-[16px] shadow-2xl border"
+          <div v-if="venue.address && venue.address.trim() !== ''" class="sticky top-24 space-y-6 p-8 rounded-[16px] shadow-2xl border"
             :class="darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'">
             <div class="flex items-center justify-between gap-4 max-w-lg mx-auto mb-4">
-              <span class="text-[14px] uppercase tracking-widest font-bold opacity-90 whitespace-nowrap">Start
-                From</span>
+              <span class="uppercase tracking-widest font-bold opacity-90 whitespace-nowrap"
+              :class="language === 'en' ? 'text-[14px]' : 'text-[16px]'">
+                {{ language === 'en' ? 'Price' : '價格' }}
+              </span>
               <div class="flex items-baseline gap-1 min-w-0">
+                <span class="text-[11px] font-[700] opacity-60 uppercase"
+                  :class="language === 'en' ? 'block' : 'hidden'">
+                  {{ language === 'en' ? 'Up to' : '' }}
+                </span>
                 <span class="text-[22px] font-[900] text-[#007a67]">${{ venue.startingPrice }}</span>
-                <span class="text-[14px] opacity-60">/{{ t('hour') }}</span>
+                <span class="text-[11px] font-[700] opacity-60 uppercase"
+                  :class="language === 'en' ? 'hidden' : 'block'">
+                  {{ language === 'en' ? '' : '起' }}
+                </span>
+                <span class="text-[14px] opacity-60">/{{ language === 'en' ? 'hr' : '小時' }}</span>
               </div>
             </div>
             <button class="btn btn-ghost btn-cta-block btn-cta-md w-full" @click="handleWhatsApp">
@@ -436,12 +453,13 @@ const venueImageAlt = computed(() => getVenueImageAlt(props.venue, props.languag
             </button>
             <!-- Desktop: location -->
             <div class="space-y-4">
-              <div class="flex justify-between w-full">
-                <h3 class="text-[12px] uppercase tracking-widest font-bold opacity-90">
+              <div v-if="venue.address && venue.address.trim() !== ''" class="flex justify-between w-full">
+                <h3 class="uppercase tracking-widest font-bold opacity-90"
+                :class="language === 'en' ? 'text-[14px]' : 'text-[16px]'">
                   {{ t('location') }}
                 </h3>
 
-                <button type="button" class="btn btn-text btn-sm w-[175px]" @click="openGoogleMaps">
+                <button type="button" class="text-[12px] font-[700] text-[#007a67] uppercase w-1/2 text-right hover:font-bold hover:underline" @click="openGoogleMaps">
                   📍 {{ t('openInGoogleMaps') }}
                 </button>
 
@@ -457,8 +475,9 @@ const venueImageAlt = computed(() => getVenueImageAlt(props.venue, props.languag
             <!-- Desktop: membership -->
             <div v-if="venue.membership_enabled && (venue.membership_description || venue.membership_join_link)"
               class="space-y-4">
-              <h3 class="text-[12px] uppercase tracking-widest font-bold opacity-90">
-                {{ language === 'en' ? 'Speical offer' : '特別優惠' }}
+              <h3 class="uppercase tracking-widest font-bold opacity-90"
+                :class="language === 'en' ? 'text-[14px]' : 'text-[16px]'">
+                {{ language === 'en' ? 'Special offer' : '特別優惠' }}
               </h3>
               <div class="p-4 rounded-[16px] border w-full"
                 :class="darkMode ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-gray-50 border-gray-100 text-gray-700'">
@@ -480,12 +499,17 @@ const venueImageAlt = computed(() => getVenueImageAlt(props.venue, props.languag
     </div>
 
     <!-- Mobile: fixed bar – price + Join membership -->
-    <div class="fixed bottom-0 left-0 right-0 z-50 p-4 border-t lg:hidden"
+    <div v-if="venue.startingPrice > 0" class="fixed bottom-0 left-0 right-0 z-50 p-4 border-t lg:hidden"
       :class="darkMode ? 'bg-gray-800/95 border-gray-700' : 'bg-white/95 border-gray-200'">
       <div class="flex items-center justify-between gap-4 max-w-lg mx-auto">
         <div class="flex items-baseline gap-1 min-w-0">
-          <span class="text-[12px] uppercase tracking-widest font-bold opacity-50 whitespace-nowrap">From</span>
+          <span class="text-[12px] font-[700] opacity-60 uppercase" :class="language === 'en' ? 'block' : 'hidden'">
+            {{ language === 'en' ? 'Up to' : '' }}
+          </span>
           <span class="text-[22px] font-[900] text-[#007a67]">${{ venue.startingPrice }}</span>
+          <span class="text-[12px] font-[700] opacity-60 uppercase" :class="language === 'en' ? 'hidden' : 'block'">
+            {{ language === 'en' ? '' : '起' }}
+          </span>
           <span class="text-[14px] opacity-60">/{{ t('hour') }}</span>
         </div>
         <button v-if="venue.membership_enabled && venue.membership_join_link" type="button"

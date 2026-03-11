@@ -751,8 +751,8 @@ const inputClass =
             </div>
         <div class="flex flex-col sm:flex-row gap-6 items-start">
           <div class="flex-shrink-0">
-            <label :class="labelClass" class="block mb-2">Org Icon (one only)</label>
-            <p class="text-[11px] opacity-60 mb-2">Square (1:1) recommended for consistent display.</p>
+            <label :class="labelClass" class="block mb-2">{{ t('orgIcon') }} ({{ t('oneOnly') }})</label>
+            <p class="text-[11px] opacity-60 mb-2">{{ t('squareRecommended') }}</p>
             <div class="flex flex-wrap items-center gap-3">
               <div
                 v-if="formData.org_icon"
@@ -783,7 +783,7 @@ const inputClass =
                   @change="handleOrgIconUpload"
                 />
                 <span v-if="isUploading" class="text-sm font-bold text-[#007a67]">Uploading…</span>
-                <span v-else class="text-sm font-bold text-[#007a67]">{{ formData.org_icon ? 'Change' : 'Upload' }} icon</span>
+                <span v-else class="text-sm font-bold text-[#007a67]">{{ formData.org_icon ? t('changeIcon') : t('uploadIcon') }} </span>
               </label>
             </div>
 
@@ -833,7 +833,7 @@ const inputClass =
               </div>
             </div>
             <div>
-              <label :class="labelClass">Court Name *</label>
+              <label :class="labelClass">{{ t('courtName') }} *</label>
               <input
                 v-model="formData.name"
                 type="text"
@@ -842,7 +842,7 @@ const inputClass =
               />
             </div>
             <div>
-              <label :class="labelClass">Starting Price *</label>
+              <label :class="labelClass">{{ t('startingPriceForm') }} *</label>
               <input
                 v-model.number="formData.startingPrice"
                 type="number"
@@ -869,7 +869,7 @@ const inputClass =
           />
         </div>
         <div>
-          <label :class="labelClass">WhatsApp Number *</label>
+          <label :class="labelClass">{{ t('whatsappNumber') }} *</label>
           <input
             v-model="formData.whatsapp"
             type="text"
@@ -879,7 +879,7 @@ const inputClass =
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label :class="labelClass">MTR Station</label>
+            <label :class="labelClass">{{ t('mtrStation') }}</label>
             <input
               v-model="formData.mtrStation"
               type="text"
@@ -887,7 +887,7 @@ const inputClass =
             />
           </div>
           <div>
-            <label :class="labelClass">MTR Exit</label>
+            <label :class="labelClass">{{ t('mtrExit') }}</label>
             <input
               v-model="formData.mtrExit"
               type="text"
@@ -898,7 +898,7 @@ const inputClass =
 
         <div class="grid grid-cols-2 gap-4">
           <div>
-            <label :class="labelClass">Walking (min)</label>
+            <label :class="labelClass">{{ t('walking') }} ({{ t('min') }})</label>
             <input
               v-model.number="formData.walkingDistance"
               type="number"
@@ -906,7 +906,7 @@ const inputClass =
             />
           </div>
           <div>
-            <label :class="labelClass">Ceiling (m)</label>
+            <label :class="labelClass">{{ t('ceiling') }} ({{ t('m') }})</label>
             <input
               v-model.number="formData.ceilingHeight"
               type="number"
@@ -915,19 +915,19 @@ const inputClass =
             />
           </div>
           <div>
-            <label :class="labelClass">{{ language === 'en' ? 'Number of courts' : '場地數量' }}</label>
+            <label :class="labelClass">{{ t('numberOfCourts') }}</label>
             <input
               v-model.number="formData.court_count"
               type="number"
               min="0"
               :class="inputClass"
-              :placeholder="language === 'en' ? 'Optional' : '選填'"
+              :placeholder="t('optional')"
             />
           </div>
         </div>
 
         <div>
-          <label :class="labelClass">Description</label>
+          <label :class="labelClass">{{ t('description') }}</label>
           <div
             class="flex flex-wrap gap-1 mb-2 p-2 rounded-t-[12px] border border-b-0"
             :class="darkMode ? 'bg-gray-700/50 border-gray-600' : 'bg-gray-50 border-gray-200'"
@@ -955,12 +955,12 @@ const inputClass =
             contenteditable="true"
             class="description-editor min-h-[8rem] px-4 py-3 border rounded-b-[12px] focus:outline-none transition text-left"
             :class="darkMode ? 'bg-gray-700 border-gray-600 text-white border-t-0' : 'bg-white border-gray-200 text-gray-900 border-t-0'"
-            data-placeholder="Type something..."
+            :data-placeholder="t('typeSomething')"
           />
         </div>
 
         <div>
-          <label :class="labelClass" class="block mb-3">Social Links</label>
+          <label :class="labelClass" class="block mb-3">{{ t('socialLinks') }}</label>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div class="flex items-center gap-3">
               <span class="flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center overflow-hidden" :class="darkMode ? 'bg-gray-700' : 'bg-gray-100'" aria-hidden="true">
@@ -1019,7 +1019,7 @@ const inputClass =
         </div>
 
         <div class="space-y-4">
-          <label :class="labelClass">Photos (Max 12)</label>
+          <label :class="labelClass">{{ t('photos') }} (Max 12)</label>
           <div class="grid grid-cols-3 md:grid-cols-6 gap-3">
             <div
               v-for="(img, i) in formData.images"
@@ -1067,7 +1067,7 @@ const inputClass =
         </div>
 
         <div class="space-y-4">
-          <label :class="labelClass">Pricing Info (HTML supported)</label>
+          <label :class="labelClass">{{ t('pricingInfo') }} ({{ t('htmlSupported') }})</label>
           <div class="flex p-1 rounded-[8px] text-[10px] font-[900]"
             :class="darkMode ? 'bg-gray-700' : 'bg-gray-100'"
             >
@@ -1077,7 +1077,7 @@ const inputClass =
               :class="formData.pricing.type === 'text' ? (darkMode ? 'bg-gray-600' : 'bg-white') + ' shadow-sm' : 'opacity-40'"
               @click="formData.pricing.type = 'text'"
             >
-              TEXT
+              {{ t('text') }}
             </button>
             <button
               type="button"
@@ -1085,7 +1085,7 @@ const inputClass =
               :class="formData.pricing.type === 'image' ? (darkMode ? 'bg-gray-600' : 'bg-white') + ' shadow-sm' : 'opacity-40'"
               @click="formData.pricing.type = 'image'"
             >
-              IMAGE
+              {{ t('image') }}
             </button>
           </div>
           <div
@@ -1119,7 +1119,7 @@ const inputClass =
               contenteditable="true"
               class="description-editor min-h-[6rem] px-4 py-3 border rounded-b-[12px] focus:outline-none transition text-left"
               :class="darkMode ? 'bg-gray-700 border-gray-600 text-white border-t-0' : 'bg-white border-gray-200 text-gray-900 border-t-0'"
-              data-placeholder="Type pricing details..."
+              :data-placeholder="t('typePricingDetails')"
             />
           </div>
           <div
@@ -1143,10 +1143,11 @@ const inputClass =
             <template v-else>
               <button
                 type="button"
-                class="text-xs font-bold text-white"
+                class="text-[12px] font-bold"
+                :class="darkMode ? 'text-white' : 'text-gray-900'"
                 @click="pricingImageRef?.click()"
               >
-                Upload Pricing Image
+                {{ t('uploadPricingImage') }}
               </button>
             </template>
             <input
@@ -1174,7 +1175,7 @@ const inputClass =
             v-if="isUploading || isSaving"
             class="w-5 h-5 border-3 border-white/20 border-l-white rounded-full animate-spin"
           ></div>
-          {{ isSaving ? 'Saving...' : 'Save Court' }}
+          {{ isSaving ? t('saving') : t('saveCourt') }}
         </button>
         <button
           v-if="venue && !isSaving && isSuperAdmin"
@@ -1182,7 +1183,7 @@ const inputClass =
           class="px-6 py-4 bg-red-500 text-white rounded-[8px] font-[900] active:scale-95 transition-all"
           @click="handleDelete"
         >
-          DELETE
+          {{ t('delete') }}
         </button>
       </div>
     </div>

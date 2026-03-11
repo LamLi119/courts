@@ -19,7 +19,7 @@ import VenueForm from './components/VenueForm.vue';
 const route = useRoute();
 const router = useRouter();
 
-const language = ref<Language>('en');
+const language = ref<Language>('zh');
 const currentTab = ref<AppTab>('explore');
 const adminPassword = ref('');
 const showAdminLogin = ref(false);
@@ -48,6 +48,9 @@ const searchQuery = ref('');
 const mtrFilter = ref<string[]>([]);
 const distanceFilter = ref('');
 const sportFilter = ref<string[]>([]); // sport slugs (multi-select)
+const filterSpecialOffer = ref(false); // when true, only show venues with membership_enabled
+/** When set (after clicking a pin), list shows only venues at that location. */
+const locationVenueIds = ref<number[] | null>(null);
 const darkMode = ref(localStorage.getItem('pickleball_darkmode') === 'true');
 const isMobile = ref(typeof window !== 'undefined' ? window.innerWidth < 1024 : false);
 
@@ -252,6 +255,8 @@ const clearFilters = () => {
   mtrFilter.value = [];
   distanceFilter.value = '';
   sportFilter.value = [];
+  filterSpecialOffer.value = false;
+  locationVenueIds.value = null;
 };
 
 const handleAdminLogin = async () => {
@@ -324,9 +329,21 @@ const filteredVenues = computed(() => {
         return hasSportBySlug || hasSportByName || name.includes(sport) || desc.includes(sport);
       });
     }
-    return nameMatch && mtrMatch && distanceMatch && sportMatch;
+    const specialOfferMatch = !filterSpecialOffer.value || Boolean((venue as Venue).membership_enabled);
+    return nameMatch && mtrMatch && distanceMatch && sportMatch && specialOfferMatch;
   });
 });
+
+/** List for left/filter side: when a pin is clicked, only venues at that location; otherwise all filtered. */
+const listVenues = computed(() => {
+  if (!locationVenueIds.value || locationVenueIds.value.length === 0) return filteredVenues.value;
+  const idSet = new Set(locationVenueIds.value);
+  return filteredVenues.value.filter((v) => idSet.has(v.id));
+});
+
+const showVenuesAtLocation = (venueList: Venue[]) => {
+  locationVenueIds.value = venueList.map((v) => v.id);
+};
 
 const toggleSaveVenue = (venueId: number) => {
   savedVenues.value = savedVenues.value.includes(venueId)
@@ -610,6 +627,8 @@ const deleteSportApiCall = async (sportId: number) => {
       }"
       :viewMode="mobileViewMode"
       :setViewMode="(mode: 'map' | 'list') => { mobileViewMode = mode; }"
+      :filterSpecialOffer="filterSpecialOffer"
+      :setFilterSpecialOffer="(v: boolean) => { filterSpecialOffer = v; }"
       :hideNavTabs="!!selectedVenue && (route.name === 'venue' || showDesktopDetail)"
     />
 
@@ -885,6 +904,8 @@ const deleteSportApiCall = async (sportId: number) => {
           :sportFilter="sportFilter"
           :setSportFilter="(arr: string[]) => { sportFilter = arr; }"
           :sports="sports"
+          :filterSpecialOffer="filterSpecialOffer"
+          :setFilterSpecialOffer="(v: boolean) => { filterSpecialOffer = v; }"
           :onOpenDetail="() => { if (selectedVenue) router.push('/venues/' + useVenueSlug(selectedVenue)); }"
           :onBackFromDetail="() => { resetSeoToDefault(); router.push('/'); }"
           :force-show-detail="route.name === 'venue' && !!selectedVenue"
@@ -906,6 +927,8 @@ const deleteSportApiCall = async (sportId: number) => {
         <DesktopView
           v-else
           :venues="filteredVenues"
+          :listVenues="listVenues"
+          :onShowVenuesAtLocation="showVenuesAtLocation"
           :selectedVenue="selectedVenue"
           :onSelectVenue="(v: Venue | null) => { selectedVenue = v; }"
           :onViewDetail="(v: Venue) => { selectedVenue = v; showDesktopDetail = true; router.push('/venues/' + useVenueSlug(v)); }"
@@ -933,6 +956,8 @@ const deleteSportApiCall = async (sportId: number) => {
           :sportFilter="sportFilter"
           :setSportFilter="(arr: string[]) => { sportFilter = arr; }"
           :sports="sports"
+          :filterSpecialOffer="filterSpecialOffer"
+          :setFilterSpecialOffer="(v: boolean) => { filterSpecialOffer = v; }"
           :currentTab="currentTab"
           :setTab="(t: AppTab) => { currentTab = t; }"
         />

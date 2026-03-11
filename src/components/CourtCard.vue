@@ -61,13 +61,16 @@ const toggleExpand = (e: MouseEvent) => {
         class="flex items-center p-4 cursor-pointer gap-4"
         @click="onClick"
       >
-        <div class="w-16 h-16 rounded-[16px] overflow-hidden flex-shrink-0">
+        <div class="relative w-16 h-16 rounded-[16px] overflow-hidden flex-shrink-0">
           <img
             :src="venue.images[0] || '/placeholder.svg'"
             class="w-full h-full object-cover"
             :alt="venue.name"
             loading="lazy"
           />
+          <span v-if="venue.membership_enabled" class="absolute top-0 left-0 rounded-br-md px-1.5 py-0.5 text-[12px] font-bold text-white bg-[#007a67] shadow-sm" :title="t('specialOffer')">
+            {{ t('specialOffer') }}
+          </span>
         </div>
         <div class="flex-1 min-w-0">
           <h3
@@ -139,6 +142,9 @@ const toggleExpand = (e: MouseEvent) => {
         class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
         loading="lazy"
       />
+      <span v-if="venue.membership_enabled" class="absolute top-2 left-2 rounded-md px-2 py-1 text-[11px] font-bold text-white bg-[#007a67] shadow-md z-10" :title="t('specialOffer')">
+        {{ t('specialOffer') }}
+      </span>
       <div class="absolute top-2 right-12">
       <button type="button" aria-label="Share"
         class="p-3 mr-2 rounded-full shadow-lg transition-all active:scale-90 rounded-[999px]"
@@ -173,15 +179,30 @@ const toggleExpand = (e: MouseEvent) => {
       >
         <span v-if="venue.mtrStation" class="rounded-md px-2.5 py-0.5 text-xs font-medium shrink-0"
         :class="darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'">🚇 {{ getStationDisplayName(venue.mtrStation, language) }}</span>
-        <span v-if="venue.walkingDistance" class="rounded-md px-2.5 py-0.5 text-xs font-medium shrink-0"
+        <span v-if="venue.walkingDistance > 0" class="rounded-md px-2.5 py-0.5 text-xs font-medium shrink-0"
         :class="darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'">🚶 {{ venue.walkingDistance }} {{ t('min') }}</span>
         <span v-if="venue.court_count" class="rounded-md px-2.5 py-0.5 text-xs font-medium shrink-0"
         :class="darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'">🥅 {{ venue.court_count }} {{ venue.court_count === 1 ? t('court') : t('courts') }}</span>
       </div>
       <div class="flex items-center justify-between">
-        <span class="text-[24px] font-[900] text-[#007a67]">
-          ${{ venue.startingPrice }}
-        </span>
+        <div class="flex items-baseline gap-1">
+          <div v-if="venue.startingPrice > 0" class="flex items-baseline gap-1">
+            <span class="text-[12px] font-[700] opacity-60 uppercase"
+            :class="language === 'en' ? 'block' : 'hidden'">
+              {{ language === 'en' ? 'Up to' : '' }}
+            </span>
+            <span class="text-[24px] font-[900] text-[#007a67]">
+              ${{ venue.startingPrice }}
+            </span>
+            <span class="text-[12px] font-[700] opacity-60 uppercase"
+            :class="language === 'en' ? 'hidden' : 'block'">
+              {{ language === 'en' ? '' : '起' }}
+            </span>
+            <span class="text-[12px] font-[700] opacity-60 uppercase">
+              /{{ language === 'en' ? 'hr' : '小時' }}
+            </span>
+          </div>
+        </div>
         <button
           class="px-4 py-2 bg-[#007a67] text-white rounded-[8px] font-bold text-sm shadow-md group-hover:brightness-110 rounded-[8px]"
           @click.stop="onViewDetail ? onViewDetail() : onClick()"

@@ -48,9 +48,12 @@ const handleShare = async () => {
     <div class="flex flex-col shadow-sm transition-all active:scale-[0.98]"
       :class="darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'">
       <div class="flex items-center gap-4 px-4 pt-3 pb-2">
-        <div class="w-20 h-20 rounded-[16px] overflow-hidden flex-shrink-0 bg-gray-200 dark:bg-gray-700">
+        <div class="relative w-20 h-20 rounded-[16px] overflow-hidden flex-shrink-0 bg-gray-200 dark:bg-gray-700">
           <img :src="venue.images[0] || '/placeholder.svg'" :alt="imageAlt" class="w-full h-full object-cover"
             loading="lazy" />
+          <span v-if="venue.membership_enabled" class="absolute top-0 left-0 rounded-br-md px-1.5 py-0.5 text-[9px] font-bold text-white bg-[#007a67] shadow-sm" :title="t('specialOffer')">
+            {{ t('specialOffer') }}
+          </span>
         </div>
 
         <div class="flex-1 min-w-0">
@@ -90,8 +93,16 @@ const handleShare = async () => {
         </button></div>
         <div class="flex items-end justify-end pt-8">
           <div class="flex items-baseline gap-1">
+            <span class="text-[11px] font-[700] opacity-60 uppercase"
+            :class="language === 'en' ? 'block' : 'hidden'">
+              {{ language === 'en' ? 'Up to' : '' }}
+            </span>
             <span class="text-[18px] font-[900] text-[#007a67]">
               ${{ venue.startingPrice }}
+            </span>
+            <span class="text-[11px] font-[700] opacity-60 uppercase"
+            :class="language === 'en' ? 'hidden' : 'block'">
+              {{ language === 'en' ? '' : '起' }}
             </span>
             <span class="text-[11px] font-[700] opacity-60 uppercase">
               /{{ language === 'en' ? 'hr' : '小時' }}

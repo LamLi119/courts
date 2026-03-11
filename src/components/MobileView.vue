@@ -82,7 +82,15 @@ const props = defineProps<{
   onBackFromDetail?: () => void;
   /** When true (e.g. landed on /venues/slug), show full detail page. */
   forceShowDetail?: boolean;
+  filterSpecialOffer?: boolean;
+  setFilterSpecialOffer?: (v: boolean) => void;
+  /** When set (e.g. after clicking a pin), list shows only these venues. */
+  listVenues?: Venue[] | null;
+  onShowVenuesAtLocation?: (venues: Venue[]) => void;
 }>();
+
+/** List to show on filter side: when pin clicked, only venues at that location; else all. */
+const displayListVenues = computed(() => (props.listVenues != null ? props.listVenues : props.venues));
 
 const showDetailPage = ref(false);
 
@@ -102,8 +110,8 @@ const currentIndex = computed(() => {
 const showStickyCard = computed(() => props.mode === 'map' && !!props.selectedVenue);
 
 const selectInitialVenue = () => {
-  if (!props.selectedVenue && props.venues.length > 0) {
-    props.onSelectVenue(props.venues[0]);
+  if (!props.selectedVenue && displayListVenues.value.length > 0) {
+    props.onSelectVenue(displayListVenues.value[0]);
   }
 };
 
@@ -129,10 +137,10 @@ const goPrevVenue = () => {
 };
 
 const goNextVenue = () => {
-  if (props.venues.length === 0) return;
+  if (displayListVenues.value.length === 0) return;
   const idx = currentIndex.value;
-  const nextIndex = idx >= 0 && idx < props.venues.length - 1 ? idx + 1 : 0;
-  const target = props.venues[nextIndex];
+  const nextIndex = idx >= 0 && idx < displayListVenues.value.length - 1 ? idx + 1 : 0;
+  const target = displayListVenues.value[nextIndex];
   if (target) props.onSelectVenue(target);
 };
 </script>
@@ -185,20 +193,21 @@ const goNextVenue = () => {
           class="pointer-events-auto flex rounded-[999px] p-0.5 border text-[10px] font-[700]"
           :class="darkMode ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-white/90 border-gray-200 text-gray-700'"
         >
+        <button
+            class="px-2 py-1 rounded-[999px]"
+            :class="props.mode === 'list' ? 'bg-[#007a67] text-white shadow-sm' : 'opacity-60'"
+            @click="props.setMode('list')"
+          >
+            {{t('list')}}
+          </button>
           <button
             class="px-2 py-1 rounded-[999px]"
             :class="props.mode === 'map' ? 'bg-[#007a67] text-white shadow-sm' : 'opacity-60'"
             @click="props.setMode('map')"
           >
-            Map
+            {{t('map')}}
           </button>
-          <button
-            class="px-2 py-1 rounded-[999px]"
-            :class="props.mode === 'list' ? 'bg-[#007a67] text-white shadow-sm' : 'opacity-60'"
-            @click="props.setMode('list')"
-          >
-            List
-          </button>
+          
         </div>
       </div>
       <div class="flex flex-wrap gap-2 pb-2 pointer-events-auto items-center">
@@ -218,6 +227,16 @@ const goNextVenue = () => {
         >
           {{ t('mtrUnder10Min') }}
         </button>
+        <button
+          v-if="setFilterSpecialOffer"
+          type="button"
+          class="inline-flex items-center rounded-[999px] px-3 py-2 text-[11px] font-bold transition-all shadow-md"
+            :class="filterSpecialOffer ? 'bg-[#007a67] text-white' : (darkMode ? 'bg-gray-800 text-gray-300' : 'bg-white/90 text-gray-700')"
+            :title="t('specialOffer')"
+            @click="setFilterSpecialOffer(!filterSpecialOffer)"
+          >
+            {{ t('specialOffer') }}
+          </button>
         <template v-for="station in mtrFilter" :key="station">
           <span
             class="inline-flex items-center gap-1 rounded-[999px] pl-2.5 pr-1 py-1.5 text-[11px] font-bold bg-[#007a67] text-white shadow-md"
@@ -311,8 +330,8 @@ const goNextVenue = () => {
             </button>
           </div>
         </div>
-        <!-- Sport type dropdown: multi-select -->
-        <div class="pt-2 border-t relative" :class="darkMode ? 'border-gray-600' : 'border-gray-200'">
+        <!-- Sport type dropdown: multi-select (hidden) -->
+        <div class="hidden pt-2 border-t relative" :class="darkMode ? 'border-gray-600' : 'border-gray-200'">
           <button
             type="button"
             class="w-full flex items-center justify-between px-3 py-2.5 text-[11px] font-bold rounded-[8px] border transition-colors"
@@ -365,7 +384,7 @@ const goNextVenue = () => {
             type="button"
             class="flex-1 px-3 py-2 text-[11px] font-bold rounded-[8px]"
             :class="darkMode ? 'text-gray-300 bg-gray-700 hover:bg-gray-600' : 'text-gray-600 bg-gray-200 hover:bg-gray-300'"
-            @click="onClearFilters(); draftMtrFilter = []; draftSportFilter = []; showFilterPanel = false; showMtrDropdown = false; showSportDropdown = false; mtrSearchQuery = ''"
+            @click="onClearFilters(); draftMtrFilter = []; draftSportFilter = []; showFilterPanel = false; showMtrDropdown = false; showSportDropdown = false; mtrSearchQuery = ''; setFilterSpecialOffer?.(false)"
           >
             {{ t('clearFilters') }}
           </button>
@@ -387,6 +406,7 @@ const goNextVenue = () => {
       :venues="props.venues"
       :selectedVenue="selectedVenue"
       :onSelectVenue="(v: Venue) => onSelectVenue(v)"
+      :onShowVenuesAtLocation="onShowVenuesAtLocation"
       :language="language"
       :darkMode="darkMode"
       :isMobile="true"
@@ -496,23 +516,25 @@ const goNextVenue = () => {
           class="pointer-events-auto flex rounded-[999px] p-0.5 border text-[10px] font-[700]"
           :class="darkMode ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-white/90 border-gray-200 text-gray-700'"
         >
+        <button
+            class="px-2 py-1 rounded-[999px]"
+            :class="props.mode === 'list' ? 'bg-[#007a67] text-white shadow-sm' : 'opacity-60'"
+            @click="props.setMode('list')"
+          >
+            {{t('list')}}
+          </button>
           <button
             class="px-2 py-1 rounded-[999px]"
             :class="props.mode === 'map' ? 'bg-[#007a67] text-white shadow-sm' : 'opacity-60'"
             @click="props.setMode('map')"
           >
-            Map
+            {{t('map')}}
           </button>
-          <button
-            class="px-2 py-1 rounded-[999px]"
-            :class="props.mode === 'list' ? 'bg-[#007a67] text-white shadow-sm' : 'opacity-60'"
-            @click="props.setMode('list')"
-          >
-            List
-          </button>
+          
         </div>
       </div>
       <div class="flex flex-wrap gap-2 items-center">
+        
         <button
           type="button"
           class="inline-flex items-center rounded-[999px] px-3 py-2 text-[12px] font-bold transition-all"
@@ -528,6 +550,14 @@ const goNextVenue = () => {
           @click="setDistanceFilter(distanceFilter === '10' ? '' : '10')"
         >
           {{ t('mtrUnder10Min') }}
+        </button>
+        <button
+          type="button"
+          class="inline-flex items-center gap-1.5 rounded-[999px] px-3 py-2 text-[12px] font-bold transition-all"
+          :class="filterSpecialOffer ? 'bg-[#007a67] text-white shadow-sm' : (darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200')"
+          @click="setFilterSpecialOffer(!filterSpecialOffer)"
+        >
+          {{ t('specialOffer') }}
         </button>
         <template v-for="station in mtrFilter" :key="station">
           <span
@@ -559,6 +589,23 @@ const goNextVenue = () => {
             @click="() => { setMtrFilter([...draftMtrFilter]); setSportFilter([...draftSportFilter]); showFilterPanel = false; showMtrDropdown = false; showSportDropdown = false; mtrSearchQuery = ''; }"
           >
             {{ language === 'en' ? 'Go search' : '開始搜尋' }}
+          </button>
+        </div>
+        <!-- Special offer toggle: first in list, left of others -->
+        <div v-if="setFilterSpecialOffer" class="flex items-center justify-between py-2 border-b" :class="darkMode ? 'border-gray-600' : 'border-gray-200'">
+          <span class="text-[12px] font-bold" :class="darkMode ? 'text-gray-300' : 'text-gray-700'">{{ t('specialOffer') }}</span>
+          <button
+            type="button"
+            role="switch"
+            :aria-checked="filterSpecialOffer"
+            class="relative inline-flex h-6 w-10 shrink-0 rounded-full border-2 transition-colors focus:outline-none"
+            :class="filterSpecialOffer ? 'bg-[#007a67] border-[#007a67]' : (darkMode ? 'bg-gray-600 border-gray-500' : 'bg-gray-200 border-gray-300')"
+            @click="setFilterSpecialOffer(!filterSpecialOffer)"
+          >
+            <span
+              class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition-transform"
+              :class="filterSpecialOffer ? 'translate-x-4' : 'translate-x-0.5'"
+            />
           </button>
         </div>
         <!-- MTR Station dropdown: trigger shows label only, items drop down -->
@@ -676,7 +723,7 @@ const goNextVenue = () => {
             type="button"
             class="flex-1 px-3 py-2 text-[11px] font-bold rounded-[8px]"
             :class="darkMode ? 'text-gray-300 bg-gray-800 hover:bg-gray-700' : 'text-gray-600 bg-gray-200 hover:bg-gray-300'"
-            @click="() => { onClearFilters(); draftMtrFilter = []; draftSportFilter = []; showFilterPanel = false; showMtrDropdown = false; showSportDropdown = false; mtrSearchQuery = ''; }"
+            @click="() => { onClearFilters(); draftMtrFilter = []; draftSportFilter = []; showFilterPanel = false; showMtrDropdown = false; showSportDropdown = false; mtrSearchQuery = ''; setFilterSpecialOffer?.(false); }"
           >
             {{ t('clearFilters') }}
           </button>
@@ -697,7 +744,7 @@ const goNextVenue = () => {
       :class="darkMode ? 'bg-gray-900' : 'bg-gray-50'"
     >
       <div
-        v-if="venues.length === 0"
+        v-if="displayListVenues.length === 0"
         class="text-center py-16 space-y-3"
       >
         <div class="text-5xl opacity-20">🏸</div>
