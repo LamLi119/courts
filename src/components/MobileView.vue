@@ -592,7 +592,7 @@ const goNextVenue = () => {
           </button>
         </div>
         <!-- Special offer toggle: first in list, left of others -->
-        <div v-if="setFilterSpecialOffer" class="flex items-center justify-between py-2 border-b" :class="darkMode ? 'border-gray-600' : 'border-gray-200'">
+        <div v-if="setFilterSpecialOffer" class="hidden flex items-center justify-between py-2 border-b" :class="darkMode ? 'border-gray-600' : 'border-gray-200'">
           <span class="text-[12px] font-bold" :class="darkMode ? 'text-gray-300' : 'text-gray-700'">{{ t('specialOffer') }}</span>
           <button
             type="button"
@@ -670,7 +670,7 @@ const goNextVenue = () => {
           </div>
         </div>
         <!-- Sport type dropdown: multi-select -->
-        <div class="pt-2 border-t relative" :class="darkMode ? 'border-gray-600' : 'border-gray-200'">
+        <div class="hidden pt-2 border-t relative" :class="darkMode ? 'border-gray-600' : 'border-gray-200'">
           <button
             type="button"
             class="w-full flex items-center justify-between px-3 py-2.5 text-[11px] font-bold rounded-[8px] border transition-colors"
