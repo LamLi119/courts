@@ -65,6 +65,8 @@ export const MTR_STATIONS: { en: string; zh: string }[] = [
   { en: 'Tsuen Wan East', zh: '荃灣東' },
   { en: 'Tsuen Wan West', zh: '荃灣西' },
   { en: 'Wong Chuk Hang', zh: '黃竹坑' },
+  { en: 'Shek Mun', zh: '石門' },
+  { en: 'Kwun Tong', zh: '觀塘' },
 ];
 
 const byEn = new Map<string, { en: string; zh: string }>();

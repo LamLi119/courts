@@ -10,6 +10,7 @@ const props = defineProps<{
   setLanguage: (l: Language) => void;
   isAdmin: boolean;
   onAdminClick: () => void;
+  onLoginClick?: () => void;
   onLogout?: () => void;
   darkMode: boolean;
   setDarkMode: (d: boolean) => void;
