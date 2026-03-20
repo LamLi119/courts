@@ -1,43 +1,65 @@
-# Deploy to Vercel (no local server needed)
+# Deploy to Vercel (方案 A：前端 + 反向代理)
 
-After deploying, the app and API run on Vercel. You don’t need to run the Node server locally.
+The static app is served from Vercel. **`/api/*` is handled by a Vercel serverless function** (`api/[...path].ts`) that **proxies** to your Express API running on a **public URL** (VPS, Railway, Render, Fly.io, etc.). The Express process is what connects to MySQL.
 
-## 1. Deploy
+## 1. Deploy the Express API first
 
-- Connect the repo to Vercel and deploy (Vercel will use `vercel.json` and build the Vite app + API routes).
-- **Do not** set `VITE_API_URL` in Vercel (or leave it empty). The frontend will call `/api/*` on the same domain.
-
-## 2. Environment variables (Vercel project → Settings → Environment Variables)
-
-Set these for **Production** (and optionally Preview):
+1. Run `server/index.js` (e.g. `node server/run-local.js` or your host’s start command) on a host with a **stable HTTPS URL**.
+2. On **that host only**, set the database and app env vars:
 
 | Variable | Description |
 |----------|-------------|
-| `MYSQL_HOST` | Cloud SQL host (e.g. `35.202.128.228`) |
-| `MYSQL_PORT` | `3306` |
+| `MYSQL_HOST` | Cloud SQL / MySQL host |
+| `MYSQL_PORT` | `3306` (if not default) |
 | `MYSQL_USER` | DB user |
 | `MYSQL_PASSWORD` | DB password |
-| `MYSQL_DATABASE` | DB name (e.g. `courts-db`) |
-| `MYSQL_CA` | Full PEM content of `server-ca.pem` (paste the whole file, including `-----BEGIN ...` and `-----END ...`) |
-| `MYSQL_CERT` | Full PEM content of `client-cert.pem` |
-| `MYSQL_KEY` | Full PEM content of `client-key.pem` |
-| `IMGBB_API_KEY` | (Optional) ImgBB API key for image uploads |
-| `CORS_ORIGIN` | (Optional) Allowed origin; default `*` |
+| `MYSQL_DATABASE` | DB name |
+| `MYSQL_CA` | (If using Cloud SQL SSL) full PEM text of server CA |
+| `MYSQL_CERT` | Full PEM text of client cert |
+| `MYSQL_KEY` | Full PEM text of client key |
+| `IMGBB_API_KEY` | (Optional) image uploads |
+| `PROXY_SECRET` | (Optional) shared secret; must match Vercel if set |
 
-To get PEM content for `MYSQL_CA` / `MYSQL_CERT` / `MYSQL_KEY`: open each file (e.g. `server/server-ca.pem`), copy everything (including the BEGIN/END lines), and paste into the corresponding Vercel env value. You can paste multi-line as-is.
+PEM values: paste the entire file including `-----BEGIN ...` / `-----END ...` lines.
 
-## 3. Redeploy
+3. Confirm from your machine: `https://your-api.example.com/api/sports` (or your real path) returns JSON.
 
-After saving env vars, trigger a new deployment (Redeploy from the Vercel dashboard) so the new values are used.
+## 2. Connect the repo to Vercel and deploy
 
-## 4. Local dev without running the Node server
+- Vercel uses `vercel.json` (SPA rewrites + Vite build).
+- **Do not** set `VITE_API_URL` in Vercel (or leave it empty). The browser must call **`/api/*` on the same Vercel domain** so the proxy runs.
 
-- Run only the frontend: `npm run dev`.
-- In `.env`, set `VITE_API_URL` to your Vercel app URL, e.g. `VITE_API_URL=https://your-app.vercel.app`.
-- The app will use the deployed API on Vercel for DB data.
+## 3. Vercel environment variables
 
-## 5. Local dev with the Node server (unchanged)
+Set for **Production** (and Preview if you use it), then **Redeploy**:
 
-- In `.env`: `VITE_API_URL=http://localhost:3001`.
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `PROXY_TARGET` | **Yes** | Base URL of your Express API **with no trailing slash**, e.g. `https://your-api.example.com`. Requests to `https://your-app.vercel.app/api/sports` are forwarded to `https://your-api.example.com/api/sports`. |
+| `PROXY_SECRET` | No | If set, must equal `PROXY_SECRET` on the Express server. The proxy sends it as `x-proxy-secret`. |
+
+**Do not** put `MYSQL_*` on Vercel for this setup unless you change the code—the proxy does not talk to MySQL.
+
+## 4. Redeploy after changes
+
+Saving env vars does not always rebuild the frontend; trigger a **Redeploy** from the Vercel dashboard so `PROXY_TARGET` is picked up.
+
+## 5. Local dev without a local API
+
+- `npm run dev`
+- In `.env`: `VITE_API_URL=https://your-app.vercel.app` (or your preview URL) so the browser hits Vercel’s proxy, which forwards to `PROXY_TARGET`.
+
+## 6. Local dev with local API
+
+- `.env`: `VITE_API_URL=http://localhost:3001`
 - Terminal 1: `npm run server`
 - Terminal 2: `npm run dev`
+
+## Troubleshooting
+
+| Symptom | Likely cause |
+|---------|----------------|
+| `Missing PROXY_TARGET env var` | `PROXY_TARGET` not set on Vercel or deploy is stale—redeploy. |
+| Browser calls `localhost` from the live site | `VITE_API_URL` was set at build time to localhost—remove it on Vercel and redeploy. |
+| `401` from API | `PROXY_SECRET` mismatch or set on server but not on Vercel. |
+| Mixed content / blocked request | Use **HTTPS** for `PROXY_TARGET`; the Vercel site is HTTPS. |

@@ -152,6 +152,17 @@ app.use((req, res, next) => {
   next();
 });
 
+// Optional: protect API when running behind a proxy (e.g. Vercel).
+// If PROXY_SECRET is set on the server, require callers to send matching x-proxy-secret.
+const PROXY_SECRET = process.env.PROXY_SECRET || '';
+app.use('/api', (req, res, next) => {
+  if (!PROXY_SECRET) return next();
+  if (req.method === 'OPTIONS') return next();
+  const incoming = req.get('x-proxy-secret') || '';
+  if (incoming !== PROXY_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  return next();
+});
+
 // --- ROUTES ---
 
 app.post('/api/auth/login', async (req, res) => {
