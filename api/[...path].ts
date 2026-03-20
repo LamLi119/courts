@@ -24,12 +24,33 @@ async function proxy(request: Request): Promise<Response> {
 
   const body = method === 'GET' || method === 'HEAD' ? undefined : request.body;
 
-  const upstream = await fetch(targetUrl, {
-    method,
-    headers,
-    body,
-    redirect: 'manual',
-  });
+  let upstream: Response;
+  try {
+    const controller = new AbortController();
+    const timeoutMs = 12000;
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    upstream = await fetch(targetUrl, {
+      method,
+      headers,
+      body,
+      redirect: 'manual',
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return new Response(
+      JSON.stringify({
+        error: 'Upstream request failed',
+        detail: msg,
+        targetUrl,
+      }),
+      {
+        status: 502,
+        headers: { 'content-type': 'application/json' },
+      }
+    );
+  }
 
   const respHeaders = new Headers(upstream.headers);
   // Avoid hop-by-hop headers that might break edge responses.
