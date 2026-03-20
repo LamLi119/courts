@@ -1019,7 +1019,7 @@ const inputClass =
         </div>
 
         <div class="space-y-4">
-          <label :class="labelClass">{{ t('photos') }} (Max 12)</label>
+          <label :class="labelClass">{{ t('photos') }} (Max 12 each image size less than 2MB)</label>
           <div class="grid grid-cols-3 md:grid-cols-6 gap-3">
             <div
               v-for="(img, i) in formData.images"

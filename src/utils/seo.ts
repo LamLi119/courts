@@ -1,6 +1,39 @@
 import type { Venue } from '../../types';
 
 const SITE_NAME = 'Courts Finder';
+const DEFAULT_KEYWORDS =
+  'pickleball courts hong kong, pickleball court hk, sports courts Hong Kong, court booking, MTR courts, 香港球場, 球場預訂, pickleball Hong Kong, 匹克球, 匹克球香港, pickleball 香港, pickleball 場地, 匹克球場地, 匹克球 租場, 匹克球場收費';
+
+function cleanText(s: unknown): string {
+  return typeof s === 'string' ? s.replace(/\s+/g, ' ').trim() : '';
+}
+
+function toKeywordFragment(s: string): string {
+  return cleanText(s).replace(/[|]/g, '').trim();
+}
+
+function uniqueCsv(items: string[]): string {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of items) {
+    const v = toKeywordFragment(raw);
+    if (!v) continue;
+    const key = v.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(v);
+  }
+  return out.join(', ');
+}
+
+function numOrNull(v: unknown): number | null {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  if (typeof v === 'string') {
+    const n = parseFloat(v);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
 
 /** Sport type label for meta/alt: join sport_types or use sport_data with language. */
 export function getSportTypeLabel(venue: Venue, lang: 'en' | 'zh' = 'en'): string {
@@ -16,16 +49,59 @@ export function getSportTypeLabel(venue: Venue, lang: 'en' | 'zh' = 'en'): strin
   return 'Court';
 }
 
-/** SEO title: {Venue Name} | {Sport Type} Court in {MTR Station} | Courts Finder */
+/** SEO title: {Venue Name} | {Sport Type} Court in {MTR} | Courts Finder */
 export function getVenueTitle(venue: Venue, lang: 'en' | 'zh' = 'en'): string {
   const sport = getSportTypeLabel(venue, lang);
-  return `${venue.name} | ${sport} Court in ${venue.mtrStation} | ${SITE_NAME}`;
+  const mtr = cleanText(venue.mtrStation);
+  const where = mtr ? ` in ${mtr}` : '';
+  return `${venue.name} | ${sport} Court${where} | ${SITE_NAME}`;
 }
 
-/** Meta description: {Venue Name}. Featuring {Sport Type} facilities located just {Walking Distance} from {MTR Station}. Check pricing and amenities here. */
+/** Meta description: booking + location + key attributes */
 export function getVenueDescription(venue: Venue, lang: 'en' | 'zh' = 'en'): string {
   const sport = getSportTypeLabel(venue, lang);
-  return `Book ${venue.name} today. Featuring ${sport} facilities located just ${venue.walkingDistance} min from ${venue.mtrStation}. Check pricing and amenities here.`;
+  const mtr = cleanText(venue.mtrStation);
+  const exit = cleanText(venue.mtrExit);
+  const addr = cleanText(venue.address);
+  const walkingDistance = numOrNull((venue as any).walkingDistance);
+  const wd = walkingDistance != null && walkingDistance > 0 ? `${walkingDistance} min walk` : '';
+  const mtrPart = mtr ? `near ${mtr}${exit ? ` (${exit})` : ''}` : '';
+  const where =  mtrPart ? ` in ${mtrPart}` : '';
+  const courtCount = numOrNull((venue as any).court_count);
+  const courts = courtCount != null && courtCount > 0 ? `${courtCount} courts` : '';
+  const ceilingHeight = numOrNull((venue as any).ceilingHeight);
+  const height = ceilingHeight != null && ceilingHeight > 0 ? `${ceilingHeight}m ceiling.` : '';
+  const startingPrice = numOrNull((venue as any).startingPrice);
+  const price = startingPrice != null && startingPrice > 0 ? `Starting from $${startingPrice}/hr` : '';
+  const contact = cleanText(venue.whatsapp) ? 'WhatsApp to book' : '';
+
+
+  const parts = [
+    `Book ${venue.name}${where}.`,
+    `${sport} venue${mtrPart ? ` ${mtrPart}` : ''}${wd ? ` — ${wd}.` : '.'}`,
+    [courts, height].filter(Boolean).join(' · '),
+    [price, contact].filter(Boolean).join(' · '),
+    addr ? `Address: ${addr}.` : '',
+  ].filter(Boolean);
+
+  return parts.join(' ').replace(/\s+/g, ' ').trim();
+}
+
+export function getVenueKeywords(venue: Venue, lang: 'en' | 'zh' = 'en'): string {
+  const sport = getSportTypeLabel(venue, lang);
+  const mtr = cleanText(venue.mtrStation);
+  const priceMessage = '收費';
+  const base = [
+    `${sport} court`,
+    `${sport} courts hong kong`,
+    `${sport} court hk`,
+    mtr ? `${sport} courts near ${mtr}` : '',
+    mtr ? `${mtr} ${sport} court` : '',
+    venue.name,
+    DEFAULT_KEYWORDS,
+    `${venue.name}${priceMessage}`
+  ];
+  return uniqueCsv(base);
 }
 
 /** Image alt: {Venue Name} {Sport Type} area */
@@ -68,12 +144,14 @@ const DEFAULT_OG_IMAGE_PATH = '/green_G.png';
 export function applyVenueSeo(venue: Venue, baseUrl: string, lang: 'en' | 'zh' = 'en'): void {
   const title = getVenueTitle(venue, lang);
   const description = getVenueDescription(venue, lang);
+  const keywords = getVenueKeywords(venue, lang);
   const image = (venue.images && venue.images[0]) || '';
   const pageUrl = typeof window !== 'undefined' ? window.location.href : `${baseUrl}/venues/${venue.id}`;
   const origin = typeof window !== 'undefined' ? window.location.origin : baseUrl.replace(/\/$/, '');
 
   document.title = title;
   setMeta('description', description);
+  setMeta('keywords', keywords);
   setCanonical(pageUrl);
 
   setOgTag('og:title', title);
@@ -105,6 +183,7 @@ export function resetSeoToDefault(baseUrl?: string): void {
 
   document.title = DEFAULT_TITLE;
   setMeta('description', DEFAULT_DESCRIPTION);
+  setMeta('keywords', DEFAULT_KEYWORDS);
   if (homeUrl) setCanonical(homeUrl);
 
   setOgTag('og:title', DEFAULT_TITLE);
@@ -130,10 +209,12 @@ export function applySearchPageSeo(sportSlug: string, baseUrl?: string): void {
   const sport = sportSlug.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
   const title = `${sport} Courts Hong Kong | ${SITE_NAME}`;
   const description = `Find ${sport.toLowerCase()} courts near MTR stations. Compare prices, amenities, and book today.`;
+  const keywords = uniqueCsv([`${sport} courts hong kong`, `${sport} court hk`, `${sport} courts near mtr`, DEFAULT_KEYWORDS]);
   const searchUrl = typeof window !== 'undefined' ? window.location.href : `${baseUrl || ''}/search/${sportSlug}`;
 
   document.title = title;
   setMeta('description', description);
+  setMeta('keywords', keywords);
   if (searchUrl) setCanonical(searchUrl);
 
   setOgTag('og:title', title);
@@ -164,7 +245,7 @@ function injectVenueJsonLd(venue: Venue, baseUrl: string): void {
     address: {
       '@type': 'PostalAddress',
       streetAddress: venue.address,
-      addressLocality: venue.mtrStation || undefined,
+      addressLocality: cleanText(venue.mtrStation) || undefined,
       addressRegion: 'Hong Kong'
     },
     image: imageUrl ? [imageUrl] : undefined,
@@ -172,6 +253,14 @@ function injectVenueJsonLd(venue: Venue, baseUrl: string): void {
   };
   if (venue.whatsapp) {
     jsonLd.telephone = venue.whatsapp.replace(/[^0-9+]/g, '');
+  }
+  const extra: string[] = [];
+  if (cleanText(venue.mtrStation)) extra.push(`MTR: ${cleanText(venue.mtrStation)}${cleanText(venue.mtrExit) ? ` (${cleanText(venue.mtrExit)})` : ''}`);
+  if (typeof venue.walkingDistance === 'number' && venue.walkingDistance > 0) extra.push(`Walking distance: ${venue.walkingDistance} min`);
+  if (typeof venue.ceilingHeight === 'number' && venue.ceilingHeight > 0) extra.push(`Ceiling height: ${venue.ceilingHeight} m`);
+  if (venue.court_count != null && venue.court_count > 0) extra.push(`Court count: ${venue.court_count}`);
+  if (extra.length) {
+    (jsonLd as Record<string, unknown>).description = `${sport} venue. ` + extra.join(' · ');
   }
   if (venue.coordinates?.lat != null && venue.coordinates?.lng != null) {
     (jsonLd as Record<string, unknown>).geo = {
