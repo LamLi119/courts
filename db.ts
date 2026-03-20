@@ -3,7 +3,7 @@
 import type { Venue, Sport } from './types';
 
 // Empty = same-origin (e.g. Vercel: frontend and /api/* on same domain). Set for local dev or external API.
-const API_BASE = import.meta.env.VITE_API_URL ?? '';
+const API_BASE = (import.meta.env.VITE_API_URL ?? '').trim();
 
 if (import.meta.env.DEV && !API_BASE) {
   console.warn(
@@ -137,9 +137,14 @@ function venueToRow(venue: Record<string, any>): Record<string, any> {
 }
 
 async function apiFetch(path: string, options?: RequestInit): Promise<Response> {
-  let base = API_BASE.replace(/\/$/, '');
-  // Prevent double "/api" when VITE_API_URL is mistakenly set to something like ".../api".
-  if (base.endsWith('/api') && path.startsWith('/api/')) base = base.replace(/\/api$/, '');
+  // If API_BASE is empty, use same-origin path (e.g. Vercel + `/api/*` proxy).
+  const trimmedBase = API_BASE.trim();
+  if (!trimmedBase) return fetch(path, { ...options, headers: { 'Content-Type': 'application/json', ...options?.headers } });
+
+  let base = trimmedBase.replace(/\/+$/, '');
+  // Prevent double "/api" when VITE_API_URL is mistakenly set to ".../api" or ".../api/api".
+  base = base.replace(/(?:\/api)+$/, '');
+
   const url = path.startsWith('/') ? `${base}${path}` : `${base}/${path}`;
   return fetch(url, { ...options, headers: { 'Content-Type': 'application/json', ...options?.headers } });
 }

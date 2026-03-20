@@ -1,66 +1,84 @@
 export const runtime = 'edge';
 
 async function proxy(request: Request): Promise<Response> {
-  const targetBase = process.env.PROXY_TARGET?.trim();
-  if (!targetBase) {
-    return new Response(JSON.stringify({ error: 'Missing PROXY_TARGET env var' }), {
-      status: 500,
-      headers: { 'content-type': 'application/json' },
-    });
-  }
-
-  const method = (request.method || 'GET').toUpperCase();
-  const url = new URL(request.url);
-  const targetUrl = targetBase.replace(/\/$/, '') + url.pathname + url.search;
-
-  const headers = new Headers(request.headers);
-  // Let the upstream host header and content-length be recalculated by fetch.
-  headers.delete('host');
-  headers.delete('connection');
-  headers.delete('content-length');
-
-  const secret = process.env.PROXY_SECRET;
-  if (secret) headers.set('x-proxy-secret', secret);
-
-  const body = method === 'GET' || method === 'HEAD' ? undefined : request.body;
-
-  let upstream: Response;
   try {
+    const targetBase = process.env.PROXY_TARGET?.trim();
+    if (!targetBase) {
+      return new Response(JSON.stringify({ error: 'Missing PROXY_TARGET env var' }), {
+        status: 500,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+
+    const method = (request.method || 'GET').toUpperCase();
+    const url = new URL(request.url);
+    const targetUrl = targetBase.replace(/\/$/, '') + url.pathname + url.search;
+
+    const headers = new Headers(request.headers);
+    // Let the upstream host header and content-length be recalculated by fetch.
+    headers.delete('host');
+    headers.delete('connection');
+    headers.delete('content-length');
+
+    const secret = process.env.PROXY_SECRET;
+    if (secret) headers.set('x-proxy-secret', secret);
+
+    const body = method === 'GET' || method === 'HEAD' ? undefined : request.body;
+
     const controller = new AbortController();
     const timeoutMs = 12000;
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-    upstream = await fetch(targetUrl, {
-      method,
-      headers,
-      body,
-      redirect: 'manual',
-      signal: controller.signal,
+    let upstream: Response;
+    try {
+      upstream = await fetch(targetUrl, {
+        method,
+        headers,
+        body,
+        redirect: 'manual',
+        signal: controller.signal,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const isAbort = err instanceof DOMException ? err.name === 'AbortError' : false;
+      return new Response(
+        JSON.stringify({
+          error: isAbort ? 'Upstream request timeout' : 'Upstream request failed',
+          detail: msg,
+          targetUrl,
+        }),
+        {
+          status: isAbort ? 504 : 502,
+          headers: { 'content-type': 'application/json' },
+        }
+      );
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
+    const respHeaders = new Headers(upstream.headers);
+    // Avoid hop-by-hop headers that might break edge responses.
+    respHeaders.delete('transfer-encoding');
+    respHeaders.delete('connection');
+
+    return new Response(await upstream.arrayBuffer(), {
+      status: upstream.status,
+      headers: respHeaders,
     });
-    clearTimeout(timeoutId);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return new Response(
       JSON.stringify({
-        error: 'Upstream request failed',
+        error: 'Proxy function crashed',
         detail: msg,
-        targetUrl,
+        // For debugging: include request path too.
+        path: request.url,
       }),
       {
-        status: 502,
+        status: 500,
         headers: { 'content-type': 'application/json' },
       }
     );
   }
-
-  const respHeaders = new Headers(upstream.headers);
-  // Avoid hop-by-hop headers that might break edge responses.
-  respHeaders.delete('transfer-encoding');
-  respHeaders.delete('connection');
-
-  return new Response(await upstream.arrayBuffer(), {
-    status: upstream.status,
-    headers: respHeaders,
-  });
 }
 
 export async function GET(request: Request): Promise<Response> {
