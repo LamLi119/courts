@@ -1,55 +1,28 @@
-type Req = any;
-type Res = any;
+export const runtime = 'edge';
 
-// Ensure Vercel runs this function in Node.js mode (needed for req.on('data') and Buffer).
-export const runtime = 'nodejs';
-
-/** Vercel may pass pathname+query or a full URL; Express upstream always uses /api/... paths. */
-function incomingPath(url: string | undefined): string {
-  if (!url) return '/';
-  if (url.startsWith('http://') || url.startsWith('https://')) {
-    try {
-      const u = new URL(url);
-      return (u.pathname || '/') + u.search;
-    } catch {
-      return '/';
-    }
-  }
-  return url;
-}
-
-function readBody(req: Req): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    req.on('data', (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
-    req.on('end', () => resolve(Buffer.concat(chunks)));
-    req.on('error', reject);
-  });
-}
-
-async function proxyHandler(req: Req, res: Res) {
-  // Same-origin on Vercel usually means no CORS preflight, but handle OPTIONS anyway.
-  if (req.method === 'OPTIONS') return res.status(204).end();
-
+async function proxy(request: Request): Promise<Response> {
   const targetBase = process.env.PROXY_TARGET?.trim();
-  if (!targetBase) return res.status(500).json({ error: 'Missing PROXY_TARGET env var' });
-
-  const path = incomingPath(req.url);
-  const targetUrl = targetBase.replace(/\/$/, '') + path;
-
-  const headers: Record<string, string> = {};
-  for (const [k, v] of Object.entries(req.headers)) {
-    if (!v) continue;
-    const key = k.toLowerCase();
-    if (key === 'host' || key === 'connection' || key === 'content-length') continue;
-    headers[k] = Array.isArray(v) ? v.join(',') : String(v);
+  if (!targetBase) {
+    return new Response(JSON.stringify({ error: 'Missing PROXY_TARGET env var' }), {
+      status: 500,
+      headers: { 'content-type': 'application/json' },
+    });
   }
-  const secret = process.env.PROXY_SECRET;
-  if (secret) headers['x-proxy-secret'] = secret;
 
-  const method = (req.method || 'GET').toUpperCase();
-  const bodyBuf = method === 'GET' || method === 'HEAD' ? undefined : await readBody(req);
-  const body = bodyBuf ? new Uint8Array(bodyBuf) : undefined;
+  const method = (request.method || 'GET').toUpperCase();
+  const url = new URL(request.url);
+  const targetUrl = targetBase.replace(/\/$/, '') + url.pathname + url.search;
+
+  const headers = new Headers(request.headers);
+  // Let the upstream host header and content-length be recalculated by fetch.
+  headers.delete('host');
+  headers.delete('connection');
+  headers.delete('content-length');
+
+  const secret = process.env.PROXY_SECRET;
+  if (secret) headers.set('x-proxy-secret', secret);
+
+  const body = method === 'GET' || method === 'HEAD' ? undefined : request.body;
 
   const upstream = await fetch(targetUrl, {
     method,
@@ -58,36 +31,36 @@ async function proxyHandler(req: Req, res: Res) {
     redirect: 'manual',
   });
 
-  res.status(upstream.status);
-  upstream.headers.forEach((value, key) => {
-    const k = key.toLowerCase();
-    if (k === 'transfer-encoding' || k === 'connection') return;
-    res.setHeader(key, value);
+  const respHeaders = new Headers(upstream.headers);
+  // Avoid hop-by-hop headers that might break edge responses.
+  respHeaders.delete('transfer-encoding');
+  respHeaders.delete('connection');
+
+  return new Response(await upstream.arrayBuffer(), {
+    status: upstream.status,
+    headers: respHeaders,
   });
-
-  const buf = Buffer.from(await upstream.arrayBuffer());
-  return res.send(buf);
 }
 
-export default proxyHandler;
+export async function GET(request: Request): Promise<Response> {
+  return proxy(request);
+}
+export async function POST(request: Request): Promise<Response> {
+  return proxy(request);
+}
+export async function PUT(request: Request): Promise<Response> {
+  return proxy(request);
+}
+export async function PATCH(request: Request): Promise<Response> {
+  return proxy(request);
+}
+export async function DELETE(request: Request): Promise<Response> {
+  return proxy(request);
+}
+export async function OPTIONS(request: Request): Promise<Response> {
+  return proxy(request);
+}
 
-// Export per-method handlers so Vercel doesn't 404 on PUT/DELETE for this catch-all proxy.
-export async function GET(req: Req, res: Res) {
-  return proxyHandler(req, res);
-}
-export async function POST(req: Req, res: Res) {
-  return proxyHandler(req, res);
-}
-export async function PUT(req: Req, res: Res) {
-  return proxyHandler(req, res);
-}
-export async function PATCH(req: Req, res: Res) {
-  return proxyHandler(req, res);
-}
-export async function DELETE(req: Req, res: Res) {
-  return proxyHandler(req, res);
-}
-export async function OPTIONS(req: Req, res: Res) {
-  return proxyHandler(req, res);
-}
+// Fallback: in case Vercel routes to the default export instead of method exports.
+export default proxy;
 
