@@ -12,7 +12,11 @@ async function proxy(request: Request): Promise<Response> {
 
     const method = (request.method || 'GET').toUpperCase();
     const url = new URL(request.url);
-    const targetUrl = targetBase.replace(/\/$/, '') + url.pathname + url.search;
+    // If frontend accidentally requests `/api/api/...`, normalize it so upstream Express routes correctly.
+    let pathname = url.pathname;
+    if (pathname === '/api/api') pathname = '/api';
+    if (pathname.startsWith('/api/api/')) pathname = pathname.replace(/^\/api\/api/, '/api');
+    const targetUrl = targetBase.replace(/\/$/, '') + pathname + url.search;
 
     const headers = new Headers(request.headers);
     // Let the upstream host header and content-length be recalculated by fetch.
