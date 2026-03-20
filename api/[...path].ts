@@ -1,6 +1,20 @@
 type Req = any;
 type Res = any;
 
+/** Vercel may pass pathname+query or a full URL; Express upstream always uses /api/... paths. */
+function incomingPath(url: string | undefined): string {
+  if (!url) return '/';
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    try {
+      const u = new URL(url);
+      return (u.pathname || '/') + u.search;
+    } catch {
+      return '/';
+    }
+  }
+  return url;
+}
+
 function readBody(req: Req): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
@@ -17,7 +31,8 @@ export default async function handler(req: Req, res: Res) {
   const targetBase = process.env.PROXY_TARGET?.trim();
   if (!targetBase) return res.status(500).json({ error: 'Missing PROXY_TARGET env var' });
 
-  const targetUrl = targetBase.replace(/\/$/, '') + (req.url || '/');
+  const path = incomingPath(req.url);
+  const targetUrl = targetBase.replace(/\/$/, '') + path;
 
   const headers: Record<string, string> = {};
   for (const [k, v] of Object.entries(req.headers)) {
