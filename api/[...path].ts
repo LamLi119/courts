@@ -1,6 +1,9 @@
 type Req = any;
 type Res = any;
 
+// Ensure Vercel runs this function in Node.js mode (needed for req.on('data') and Buffer).
+export const runtime = 'nodejs';
+
 /** Vercel may pass pathname+query or a full URL; Express upstream always uses /api/... paths. */
 function incomingPath(url: string | undefined): string {
   if (!url) return '/';
@@ -24,7 +27,7 @@ function readBody(req: Req): Promise<Buffer> {
   });
 }
 
-export default async function handler(req: Req, res: Res) {
+async function proxyHandler(req: Req, res: Res) {
   // Same-origin on Vercel usually means no CORS preflight, but handle OPTIONS anyway.
   if (req.method === 'OPTIONS') return res.status(204).end();
 
@@ -64,5 +67,27 @@ export default async function handler(req: Req, res: Res) {
 
   const buf = Buffer.from(await upstream.arrayBuffer());
   return res.send(buf);
+}
+
+export default proxyHandler;
+
+// Export per-method handlers so Vercel doesn't 404 on PUT/DELETE for this catch-all proxy.
+export async function GET(req: Req, res: Res) {
+  return proxyHandler(req, res);
+}
+export async function POST(req: Req, res: Res) {
+  return proxyHandler(req, res);
+}
+export async function PUT(req: Req, res: Res) {
+  return proxyHandler(req, res);
+}
+export async function PATCH(req: Req, res: Res) {
+  return proxyHandler(req, res);
+}
+export async function DELETE(req: Req, res: Res) {
+  return proxyHandler(req, res);
+}
+export async function OPTIONS(req: Req, res: Res) {
+  return proxyHandler(req, res);
 }
 
