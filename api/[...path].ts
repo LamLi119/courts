@@ -108,3 +108,94 @@ export default async function handler(req: any, res: any) {
   }
 }
 
+// --------
+// Fetch-style proxy handler for Vercel route handlers.
+// We keep the default (req,res) handler above, but Vercel sometimes selects
+// method-based exports depending on the runtime. These exports ensure PUT/DELETE/etc work.
+// --------
+const HOP_BY_HOP_HEADERS_FETCH = HOP_BY_HOP_HEADERS;
+
+function filterHopByHopHeadersFetch(headers: Headers): Headers {
+  const next = new Headers(headers);
+  for (const h of HOP_BY_HOP_HEADERS_FETCH) next.delete(h);
+  return next;
+}
+
+async function proxyFetch(request: Request): Promise<Response> {
+  const targetBase = process.env.PROXY_TARGET?.trim();
+  if (!targetBase) {
+    return new Response(JSON.stringify({ error: 'Missing PROXY_TARGET env var' }), {
+      status: 500,
+      headers: { 'content-type': 'application/json' },
+    });
+  }
+
+  const method = (request.method || 'GET').toUpperCase();
+  const url = new URL(request.url);
+  const pathname = normalizeUpstreamPath(url.pathname);
+  const targetUrl = `${targetBase.replace(/\/$/, '')}${pathname}${url.search}`;
+
+  const headers = new Headers(request.headers);
+  headers.delete('host');
+  headers.delete('content-length');
+  headers.delete('connection');
+  if (process.env.PROXY_SECRET) headers.set('x-proxy-secret', process.env.PROXY_SECRET);
+
+  const body = method === 'GET' || method === 'HEAD' ? undefined : await request.arrayBuffer();
+
+  const controller = new AbortController();
+  const timeoutMs = 12000;
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const upstream = await fetch(targetUrl, {
+      method,
+      headers,
+      body,
+      redirect: 'manual',
+      signal: controller.signal,
+    });
+
+    return new Response(await upstream.arrayBuffer(), {
+      status: upstream.status,
+      headers: filterHopByHopHeadersFetch(upstream.headers),
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const isAbort = (err as any)?.name === 'AbortError';
+    return new Response(
+      JSON.stringify({
+        error: isAbort ? 'Upstream request timeout' : 'Upstream request failed',
+        detail: msg,
+        targetUrl,
+        method,
+      }),
+      {
+        status: isAbort ? 504 : 502,
+        headers: { 'content-type': 'application/json' },
+      }
+    );
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+export async function GET(request: Request): Promise<Response> {
+  return proxyFetch(request);
+}
+export async function POST(request: Request): Promise<Response> {
+  return proxyFetch(request);
+}
+export async function PUT(request: Request): Promise<Response> {
+  return proxyFetch(request);
+}
+export async function PATCH(request: Request): Promise<Response> {
+  return proxyFetch(request);
+}
+export async function DELETE(request: Request): Promise<Response> {
+  return proxyFetch(request);
+}
+export async function OPTIONS(request: Request): Promise<Response> {
+  return proxyFetch(request);
+}
+
