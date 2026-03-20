@@ -1,4 +1,4 @@
-export const runtime = 'edge';
+export const runtime = 'nodejs';
 
 async function proxy(request: Request): Promise<Response> {
   try {
@@ -39,7 +39,8 @@ async function proxy(request: Request): Promise<Response> {
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      const isAbort = err instanceof DOMException ? err.name === 'AbortError' : false;
+      // In some runtimes `DOMException` may be undefined; only check the error name.
+      const isAbort = (err as any)?.name === 'AbortError';
       return new Response(
         JSON.stringify({
           error: isAbort ? 'Upstream request timeout' : 'Upstream request failed',
