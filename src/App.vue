@@ -271,7 +271,7 @@ const handleAdminLogin = async () => {
   }
   try {
     const API_BASE = import.meta.env.VITE_API_URL ?? '';
-    const base = API_BASE.replace(/\/$/, '');
+    const base = API_BASE.replace(/\/$/, '').replace(/\/api$/, '');
     const url = `${base}/api/auth/login`;
     const res = await fetch(url, {
       method: 'POST',

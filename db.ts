@@ -137,7 +137,9 @@ function venueToRow(venue: Record<string, any>): Record<string, any> {
 }
 
 async function apiFetch(path: string, options?: RequestInit): Promise<Response> {
-  const base = API_BASE.replace(/\/$/, '');
+  let base = API_BASE.replace(/\/$/, '');
+  // Prevent double "/api" when VITE_API_URL is mistakenly set to something like ".../api".
+  if (base.endsWith('/api') && path.startsWith('/api/')) base = base.replace(/\/api$/, '');
   const url = path.startsWith('/') ? `${base}${path}` : `${base}/${path}`;
   return fetch(url, { ...options, headers: { 'Content-Type': 'application/json', ...options?.headers } });
 }
