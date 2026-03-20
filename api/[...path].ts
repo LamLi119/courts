@@ -1,88 +1,89 @@
 export const runtime = 'nodejs';
 
+const HOP_BY_HOP_HEADERS = new Set([
+  'connection',
+  'keep-alive',
+  'proxy-authenticate',
+  'proxy-authorization',
+  'te',
+  'trailer',
+  'transfer-encoding',
+  'upgrade',
+]);
+
+function normalizeUpstreamPath(pathname: string): string {
+  // If frontend accidentally requests `/api/api/...`, normalize it to `/api/...`.
+  if (pathname === '/api/api') return '/api';
+  if (pathname.startsWith('/api/api/')) return pathname.replace(/^\/api\/api/, '/api');
+  return pathname;
+}
+
+function filterHopByHopHeaders(headers: Headers): Headers {
+  const next = new Headers(headers);
+  for (const h of HOP_BY_HOP_HEADERS) next.delete(h);
+  return next;
+}
+
 async function proxy(request: Request): Promise<Response> {
+  const targetBase = process.env.PROXY_TARGET?.trim();
+  if (!targetBase) {
+    return new Response(
+      JSON.stringify({ error: 'Missing PROXY_TARGET env var' }),
+      { status: 500, headers: { 'content-type': 'application/json' } }
+    );
+  }
+
+  const method = (request.method || 'GET').toUpperCase();
+  const url = new URL(request.url);
+  const pathname = normalizeUpstreamPath(url.pathname);
+  const targetUrl = `${targetBase.replace(/\/$/, '')}${pathname}${url.search}`;
+
+  // Copy headers, but remove hop-by-hop and fields that should be recalculated.
+  const headers = new Headers(request.headers);
+  headers.delete('host');
+  headers.delete('content-length');
+  headers.delete('connection');
+  if (process.env.PROXY_SECRET) headers.set('x-proxy-secret', process.env.PROXY_SECRET);
+
+  // IMPORTANT: read body fully to avoid stream/duplex issues in Node fetch.
+  const body =
+    method === 'GET' || method === 'HEAD' ? undefined : Buffer.from(await request.arrayBuffer());
+
+  const controller = new AbortController();
+  const timeoutMs = 12000;
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
   try {
-    const targetBase = process.env.PROXY_TARGET?.trim();
-    if (!targetBase) {
-      return new Response(JSON.stringify({ error: 'Missing PROXY_TARGET env var' }), {
-        status: 500,
-        headers: { 'content-type': 'application/json' },
-      });
-    }
+    const upstream = await fetch(targetUrl, {
+      method,
+      headers,
+      body,
+      redirect: 'manual',
+      signal: controller.signal,
+    });
 
-    const method = (request.method || 'GET').toUpperCase();
-    const url = new URL(request.url);
-    // If frontend accidentally requests `/api/api/...`, normalize it so upstream Express routes correctly.
-    let pathname = url.pathname;
-    if (pathname === '/api/api') pathname = '/api';
-    if (pathname.startsWith('/api/api/')) pathname = pathname.replace(/^\/api\/api/, '/api');
-    const targetUrl = targetBase.replace(/\/$/, '') + pathname + url.search;
-
-    const headers = new Headers(request.headers);
-    // Let the upstream host header and content-length be recalculated by fetch.
-    headers.delete('host');
-    headers.delete('connection');
-    headers.delete('content-length');
-
-    const secret = process.env.PROXY_SECRET;
-    if (secret) headers.set('x-proxy-secret', secret);
-
-    const body = method === 'GET' || method === 'HEAD' ? undefined : request.body;
-
-    const controller = new AbortController();
-    const timeoutMs = 12000;
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-    let upstream: Response;
-    try {
-      upstream = await fetch(targetUrl, {
-        method,
-        headers,
-        body,
-        redirect: 'manual',
-        signal: controller.signal,
-      });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      // In some runtimes `DOMException` may be undefined; only check the error name.
-      const isAbort = (err as any)?.name === 'AbortError';
-      return new Response(
-        JSON.stringify({
-          error: isAbort ? 'Upstream request timeout' : 'Upstream request failed',
-          detail: msg,
-          targetUrl,
-        }),
-        {
-          status: isAbort ? 504 : 502,
-          headers: { 'content-type': 'application/json' },
-        }
-      );
-    } finally {
-      clearTimeout(timeoutId);
-    }
-
-    const respHeaders = new Headers(upstream.headers);
-    // Avoid hop-by-hop headers that might break edge responses.
-    respHeaders.delete('transfer-encoding');
-    respHeaders.delete('connection');
-
+    const respHeaders = filterHopByHopHeaders(upstream.headers);
     return new Response(await upstream.arrayBuffer(), {
       status: upstream.status,
       headers: respHeaders,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+    const isAbort = (err as any)?.name === 'AbortError';
     return new Response(
       JSON.stringify({
-        error: 'Proxy function crashed',
+        error: isAbort ? 'Upstream request timeout' : 'Upstream request failed',
         detail: msg,
-        // For debugging: include request path too.
-        path: request.url,
+        targetUrl,
+        method,
       }),
       {
-        status: 500,
+        status: isAbort ? 504 : 502,
         headers: { 'content-type': 'application/json' },
       }
     );
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
@@ -105,6 +106,5 @@ export async function OPTIONS(request: Request): Promise<Response> {
   return proxy(request);
 }
 
-// Fallback: in case Vercel routes to the default export instead of method exports.
 export default proxy;
 
