@@ -10,7 +10,7 @@ async function proxy(request: Request): Promise<Response> {
   }
 
   const method = (request.method || 'GET').toUpperCase();
-  const url = new URL(request.url);
+  const url = new URL(request.url, 'http://localhost');
   const targetUrl = targetBase.replace(/\/$/, '') + url.pathname + url.search;
 
   const headers = new Headers(request.headers);
