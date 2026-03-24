@@ -1,5 +1,5 @@
 {
-  "include": ["src", "api", "*.ts", "*.vue"],
+  "include": ["src", "api", "lib", "*.ts", "*.vue"],
   "exclude": ["node_modules", "dist", "server"],
   "compilerOptions": {
     "target": "ES2022",

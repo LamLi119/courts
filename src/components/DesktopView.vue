@@ -85,6 +85,10 @@ const props = defineProps<{
   /** When set (e.g. after clicking a pin), list shows only these venues. */
   listVenues?: Venue[] | null;
   onShowVenuesAtLocation?: (venues: Venue[]) => void;
+  /** True when list is currently filtered to a single location (after clicking a pin). */
+  hasLocationFilter?: boolean;
+  /** Clears the location filter so the full list can show again. */
+  onClearLocationFilter?: () => void;
 }>();
 
 const leftListVenues = computed(() =>
@@ -339,11 +343,11 @@ const leftListVenues = computed(() =>
 
       <div class="flex-1 min-h-0 overflow-y-auto p-6 space-y-6 custom-scrollbar">
         <button
-          v-if="selectedVenue"
+          v-if="selectedVenue || hasLocationFilter"
           type="button"
           class="w-full mb-2 py-2 text-sm font-bold rounded-[8px] transition-colors"
           :class="darkMode ? 'text-gray-400 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-200'"
-          @click="async () => { onSelectVenue(null); await nextTick(); mapViewRef?.resetView?.(); }"
+          @click="async () => { onClearLocationFilter?.(); onSelectVenue(null); await nextTick(); mapViewRef?.resetView?.(); }"
         >
           ← {{ language === 'en' ? 'Show all courts' : '顯示全部場地' }}
         </button>

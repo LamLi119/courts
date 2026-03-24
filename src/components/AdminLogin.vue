@@ -6,6 +6,7 @@ const props = defineProps<{
   setPassword: (val: string) => void;
   onLogin: () => void;
   onClose: () => void;
+  isLoading?: boolean;
   language: Language;
   t: (key: string) => string;
   darkMode: boolean;
@@ -34,21 +35,24 @@ const props = defineProps<{
         type="password"
         :value="password"
         @input="e => setPassword((e.target as HTMLInputElement).value)"
-        @keydown.enter="onLogin"
+        @keydown.enter="() => { if (!isLoading) onLogin(); }"
         :placeholder="language === 'en' ? 'Enter password' : '輸入密碼'"
         class="w-full px-4 py-2 border rounded-[8px] mb-4 focus:ring-2 focus:ring-[#007a67] focus:outline-none transition-all"
         :class="darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'"
+        :disabled="isLoading"
         autofocus
       />
       <div class="flex gap-2">
         <button
           @click="onLogin"
-          class="flex-1 px-4 py-2 bg-[#007a67] text-white rounded-[8px] font-[900] hover:brightness-110 active:scale-95 transition-all"
+          :disabled="isLoading"
+          class="flex-1 px-4 py-2 bg-[#007a67] text-white rounded-[8px] font-[900] hover:brightness-110 active:scale-95 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
         >
-          {{ t('login') }}
+          {{ isLoading ? (language === 'en' ? 'Logging in...' : '登入中...') : t('login') }}
         </button>
         <button
           @click="onClose"
+          :disabled="isLoading"
           class="flex-1 px-4 py-2 rounded-[8px] font-[700] transition-all"
           :class="darkMode ? 'bg-gray-700 text-white hover:bg-gray-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'"
         >

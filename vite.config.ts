@@ -10,6 +10,13 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 3000,
       host: '0.0.0.0',
+      // Proxy /api to court server so login works without env in dev
+      proxy: {
+        '/api': {
+          target: (env.VITE_THE_GRIND_API_URL || env.VITE_API_URL || 'http://localhost:3001').replace(/\/$/, ''),
+          changeOrigin: true,
+        },
+      },
     },
     build: {
       rollupOptions: {

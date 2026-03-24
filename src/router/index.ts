@@ -7,11 +7,20 @@ export const routes = [
   { path: '/venues/:slug', name: 'venue', meta: { title: 'Venue' } },
   { path: '/search/:sport', name: 'search', meta: { title: 'Search' } },
   { path: '/admin', name: 'admin', meta: { title: 'Admin' } },
+  { path: '/admin/manage', name: 'admin-manage', meta: { title: 'Admin Manage' } },
+  { path: '/login', name: 'login', meta: { title: 'Login' } },
+  { path: '/signup', name: 'signup', meta: { title: 'Sign Up' } },
+  { path: '/token-login', name: 'token-login', meta: { title: 'Token Login' } },
+  // Backend may redirect here with ?token= / ?refreshToken= (same as server extractOAuthTokens).
+  {
+    path: '/auth/google/callback',
+    redirect: (to) => ({ path: '/token-login', query: to.query, hash: to.hash }),
+  },
 ];
 
 const router = createRouter({
   history: createWebHistory(typeof import.meta.env?.BASE_URL === 'string' ? import.meta.env.BASE_URL : '/'),
-  routes,
+  routes: routes as any,
 });
 
 export function useVenueSlug(venue: { name: string }): string {

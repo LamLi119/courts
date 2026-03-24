@@ -10,19 +10,38 @@ import { useVenueSlug } from './router';
 import { db } from '../db';
 import Header from './components/Header.vue';
 import AdminLogin from './components/AdminLogin.vue';
+import UserLoginPage from './components/UserLoginPage.vue';
+import UserSignUpPage from './components/UserSignUpPage.vue';
+import TokenLoginPage from './components/TokenLoginPage.vue';
 import DesktopView from './components/DesktopView.vue';
 import MobileView from './components/MobileView.vue';
 import MobileNav from './components/MobileNav.vue';
 import VenueDetail from './components/VenueDetail.vue';
 import VenueForm from './components/VenueForm.vue';
+import { useAuth } from './composables/auth';
 
 const route = useRoute();
 const router = useRouter();
+
+const { user: authUser, logout: userLogout, session: restoreSession, isAuthenticated } = useAuth();
+const showLogout = computed(() => !!authUser.value);
+
+const handleUserLogout = async () => {
+  await userLogout();
+  router.push('/');
+};
+
+onMounted(() => {
+  if (isAuthenticated.value) {
+    restoreSession().catch(() => null);
+  }
+});
 
 const language = ref<Language>('zh');
 const currentTab = ref<AppTab>('explore');
 const adminPassword = ref('');
 const showAdminLogin = ref(false);
+const isAdminLoggingIn = ref(false);
 const showVenueForm = ref(false);
 const editingVenue = ref<Venue | null>(null);
 const venueToDelete = ref<Venue | null>(null);
@@ -60,7 +79,6 @@ const VENUES_CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutes
 const adminStatus = ref<{ type: 'none' | 'super' | 'court'; allowedIds: number[] }>({ type: 'none', allowedIds: [] });
 const isSuperAdmin = computed(() => adminStatus.value.type === 'super');
 const isAnyAdmin = computed(() => adminStatus.value.type !== 'none');
-const SUPER_ADMIN_PASSWORD = 'abc321A!';
 
 function canEditVenue(venueId: number): boolean {
   if (adminStatus.value.type === 'super') return true;
@@ -98,10 +116,7 @@ const loadData = async () => {
           saveAdminOrder();
           isLoading.value = false;
           // Revalidate in background
-          const [fresh, sportsList] = await Promise.all([
-            db.getVenues(isSuperAdmin ? SUPER_ADMIN_PASSWORD : undefined),
-            db.getSports()
-          ]);
+          const [fresh, sportsList] = await Promise.all([db.getVenues(), db.getSports()]);
           if (fresh?.length !== undefined) {
             venues.value = fresh;
             adminOrder.value = fresh.map(v => v.id);
@@ -117,8 +132,7 @@ const loadData = async () => {
     }
 
     isLoading.value = true;
-    const pwd = isSuperAdmin.value ? SUPER_ADMIN_PASSWORD : undefined;
-    const [data, sportsList] = await Promise.all([db.getVenues(pwd), db.getSports()]);
+    const [data, sportsList] = await Promise.all([db.getVenues(), db.getSports()]);
     venues.value = data || [];
     sports.value = sportsList || [];
     adminOrder.value = venues.value.map(v => v.id);
@@ -201,7 +215,22 @@ onMounted(() => {
   window.addEventListener('resize', handleResize);
   (window as any).__adminPopState = onPopState;
 
-  loadData();
+  const restoreAdminSession = async () => {
+    try {
+      const API_BASE = import.meta.env.VITE_API_URL ?? '';
+      const base = API_BASE.replace(/\/$/, '');
+      const res = await fetch(`${base}/api/auth/session`, { method: 'GET', credentials: 'include' });
+      if (!res.ok) throw new Error('No admin session');
+      const data = await res.json();
+      adminStatus.value = { type: data.type === 'super' ? 'super' : 'court', allowedIds: data.allowedVenueIds || [] };
+      if (isAdminPath()) currentTab.value = 'admin';
+    } catch {
+      adminStatus.value = { type: 'none', allowedIds: [] };
+    } finally {
+      await loadData();
+    }
+  };
+  restoreAdminSession();
 
   try {
     const saved = localStorage.getItem('pickleball_saved_ids');
@@ -260,15 +289,8 @@ const clearFilters = () => {
 };
 
 const handleAdminLogin = async () => {
-  if (adminPassword.value === SUPER_ADMIN_PASSWORD) {
-    adminStatus.value = { type: 'super', allowedIds: [] };
-    showAdminLogin.value = false;
-    adminPassword.value = '';
-    currentTab.value = 'admin';
-    invalidateVenuesCache();
-    await loadData();
-    return;
-  }
+  if (isAdminLoggingIn.value) return;
+  isAdminLoggingIn.value = true;
   try {
     const API_BASE = (import.meta.env.VITE_API_URL ?? '').trim();
     const base = API_BASE.replace(/\/+$/, '').replace(/(?:\/api)+$/, '');
@@ -276,20 +298,71 @@ const handleAdminLogin = async () => {
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ password: adminPassword.value })
     });
     if (res.ok) {
       const data = await res.json();
-      adminStatus.value = { type: 'court', allowedIds: data.allowedVenueIds };
+      adminStatus.value = { type: data.type === 'super' ? 'super' : 'court', allowedIds: data.allowedVenueIds || [] };
       showAdminLogin.value = false;
       adminPassword.value = '';
       currentTab.value = 'admin';
+      invalidateVenuesCache();
+      await loadData();
     } else {
       alert('Incorrect password');
     }
   } catch (e) {
     alert('Login failed');
+  } finally {
+    isAdminLoggingIn.value = false;
   }
+};
+
+const handleAdminLoginFromUserLoginPage = async (password: string) => {
+  if (isAdminLoggingIn.value) return;
+  isAdminLoggingIn.value = true;
+  const pwd = (password || '').toString();
+
+  try {
+    const API_BASE = import.meta.env.VITE_API_URL ?? '';
+    const base = API_BASE.replace(/\/$/, '');
+    const url = `${base}/api/auth/login`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ password: pwd })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      adminStatus.value = { type: data.type === 'super' ? 'super' : 'court', allowedIds: data.allowedVenueIds || [] };
+      currentTab.value = 'admin';
+      invalidateVenuesCache();
+      await loadData();
+      router.push('/admin');
+    } else {
+      alert('Incorrect password');
+    }
+  } catch {
+    alert('Login failed');
+  } finally {
+    isAdminLoggingIn.value = false;
+  }
+};
+
+const handleAdminLogout = async () => {
+  try {
+    const API_BASE = import.meta.env.VITE_API_URL ?? '';
+    const base = API_BASE.replace(/\/$/, '');
+    await fetch(`${base}/api/auth/logout`, { method: 'POST', credentials: 'include' });
+  } catch {
+    // ignore logout request failure; clear local state anyway
+  }
+  adminStatus.value = { type: 'none', allowedIds: [] };
+  currentTab.value = 'explore';
+  invalidateVenuesCache();
+  await loadData();
 };
 
 const filteredVenues = computed(() => {
@@ -343,6 +416,10 @@ const listVenues = computed(() => {
 
 const showVenuesAtLocation = (venueList: Venue[]) => {
   locationVenueIds.value = venueList.map((v) => v.id);
+};
+
+const clearVenuesAtLocation = () => {
+  locationVenueIds.value = null;
 };
 
 const toggleSaveVenue = (venueId: number) => {
@@ -570,8 +647,10 @@ const handleAddSport = async () => {
     newSportNameZh.value = '';
     showAddSportInput.value = false;
     adminSportFilter.value = created.slug;
+    showAdminNotification('success', language.value === 'en' ? 'Sport type added.' : '運動類型已新增。');
   } catch (err: any) {
     addSportError.value = err?.message || 'Failed to add sport.';
+    showAdminNotification('error', err?.message || (language.value === 'en' ? 'Failed to add sport.' : '新增運動類型失敗。'));
   } finally {
     isAddingSport.value = false;
   }
@@ -589,8 +668,9 @@ const updateSportApiCall = async (s: Sport) => {
     const updated = await db.updateSport(s.id, { name: s.name, name_zh: s.name_zh ?? undefined });
     const idx = sports.value.findIndex((x) => x.id === s.id);
     if (idx !== -1) sports.value = sports.value.map((x, i) => (i === idx ? { ...x, ...updated } : x));
+    showAdminNotification('success', language.value === 'en' ? 'Sport type saved.' : '運動類型已儲存。');
   } catch (err: any) {
-    alert(err?.message || 'Failed to update sport');
+    showAdminNotification('error', err?.message || (language.value === 'en' ? 'Failed to update sport.' : '儲存運動類型失敗。'));
   }
 };
 
@@ -610,11 +690,43 @@ const deleteSportApiCall = async (sportId: number) => {
 
 <template>
   <div :class="['min-h-screen pb-safe transition-colors', darkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900']">
+    <UserLoginPage
+      v-if="route.name === 'login'"
+      :language="language"
+      :t="t"
+      :darkMode="darkMode"
+      :onAdminLogin="handleAdminLoginFromUserLoginPage"
+    />
+    <UserSignUpPage
+      v-else-if="route.name === 'signup'"
+      :language="language"
+      :t="t"
+      :darkMode="darkMode"
+    />
+
+    <TokenLoginPage
+      v-else-if="route.name === 'token-login'"
+      :language="language"
+      :t="t"
+      :darkMode="darkMode"
+    />
+    
+    <AdminManagePage
+      v-else-if="route.name === 'admin-manage'"
+      :language="language"
+      :t="t"
+      :darkMode="darkMode"
+    />
+
     <Header
+      v-else
       :language="language"
       :setLanguage="(l: Language) => { language = l; }"
       :isAdmin="isAnyAdmin"
-      :onAdminClick="() => { if (isAnyAdmin) currentTab = 'admin'; else { showAdminLogin = true; syncAdminUrl(true); } }"
+      :onAdminClick="() => { currentTab = 'admin'; selectedVenue = null; showDesktopDetail = false; router.push('/admin'); }"
+      :onLoginClick="() => { router.push('/login'); }"
+      :showLogout="showLogout"
+      :onUserLogout="handleUserLogout"
       :darkMode="darkMode"
       :setDarkMode="(d: boolean) => { darkMode = d; }"
       :t="t"
@@ -632,7 +744,7 @@ const deleteSportApiCall = async (sportId: number) => {
       :hideNavTabs="!!selectedVenue && (route.name === 'venue' || showDesktopDetail)"
     />
 
-    <main class="h-full">
+    <main v-if="route.name !== 'login' && route.name !== 'signup' && route.name !== 'token-login'" class="h-full">
       <div
         v-if="currentTab === 'admin' && isAnyAdmin && !selectedVenue"
         class="container mx-auto p-4 md:p-8 pb-32 md:pb-8 space-y-8 animate-in fade-in duration-500"
@@ -762,7 +874,7 @@ const deleteSportApiCall = async (sportId: number) => {
             <button
               v-if="!isSortEditing"
               class="px-4 py-3 md:px-6 md:py-3 bg-red-500 text-white rounded-lg font-black shadow-xl hover:scale-105 active:scale-95 transition-all text-xs md:text-base"
-              @click="() => { adminStatus = { type: 'none', allowedIds: [] }; currentTab = 'explore'; }"
+              @click="handleAdminLogout"
             >
               LOGOUT
             </button>
@@ -921,6 +1033,7 @@ const deleteSportApiCall = async (sportId: number) => {
           :savedVenues="savedVenues"
           :toggleSave="toggleSaveVenue"
           :isAdmin="isAnyAdmin"
+          :canEdit="canEditVenue(selectedVenue.id)"
           :onEdit="() => { editingVenue = selectedVenue; showVenueForm = true; }"
         />
 
@@ -929,6 +1042,8 @@ const deleteSportApiCall = async (sportId: number) => {
           :venues="filteredVenues"
           :listVenues="listVenues"
           :onShowVenuesAtLocation="showVenuesAtLocation"
+          :hasLocationFilter="!!(locationVenueIds && locationVenueIds.length)"
+          :onClearLocationFilter="clearVenuesAtLocation"
           :selectedVenue="selectedVenue"
           :onSelectVenue="(v: Venue | null) => { selectedVenue = v; }"
           :onViewDetail="(v: Venue) => { selectedVenue = v; showDesktopDetail = true; router.push('/venues/' + useVenueSlug(v)); }"
@@ -970,6 +1085,7 @@ const deleteSportApiCall = async (sportId: number) => {
       :setPassword="(val: string) => { adminPassword = val; }"
       :onLogin="handleAdminLogin"
       :onClose="() => { showAdminLogin = false; syncAdminUrl(false); }"
+      :isLoading="isAdminLoggingIn"
       :language="language"
       :t="t"
       :darkMode="darkMode"
