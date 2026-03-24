@@ -1,6 +1,4 @@
-// Shared Vercel serverless proxy: forwards /api/* to PROXY_TARGET (your Node/MySQL backend).
-
-export const config = { runtime: 'nodejs' as const };
+// Shared Vercel proxy → PROXY_TARGET. Matches api/venues.ts style (Record headers, no config export).
 
 const HOP_BY_HOP_HEADERS = new Set([
   'connection',
@@ -33,37 +31,33 @@ function sendJson(res: any, status: number, payload: any) {
   res.end(JSON.stringify(payload));
 }
 
-export default async function nodeHandler(req: any, res: any) {
+export default async function proxyToBackend(req: any, res: any) {
   const started = Date.now();
   try {
     const targetBase = process.env.PROXY_TARGET?.trim();
     if (!targetBase) return sendJson(res, 500, { error: 'Missing PROXY_TARGET env var' });
 
     const method = String(req?.method || 'GET').toUpperCase();
-
     const url = new URL(req?.url || '/', 'http://localhost');
     let pathname = url.pathname || '/';
     if (!pathname.startsWith('/api')) pathname = `/api${pathname}`;
     pathname = normalizeUpstreamPath(pathname);
     const targetUrl = `${targetBase.replace(/\/$/, '')}${pathname}${url.search}`;
 
-    const headers = new Headers();
+    const headers: Record<string, string> = {};
     const incomingHeaders = req?.headers || {};
     for (const [k, v] of Object.entries(incomingHeaders)) {
       if (v === undefined) continue;
-      const key = k.toLowerCase();
-      if (key === 'host' || key === 'connection' || key === 'content-length') continue;
-      if (Array.isArray(v)) headers.set(k, v.join(','));
-      else headers.set(k, String(v));
+      const lk = k.toLowerCase();
+      if (lk === 'host' || lk === 'connection' || lk === 'content-length') continue;
+      headers[k] = Array.isArray(v) ? v.join(',') : String(v);
     }
-    if (process.env.PROXY_SECRET) headers.set('x-proxy-secret', process.env.PROXY_SECRET);
+    if (process.env.PROXY_SECRET) headers['x-proxy-secret'] = process.env.PROXY_SECRET;
 
     let body: any = undefined;
-    if (method !== 'GET' && method !== 'HEAD') {
-      if (req.body !== undefined) {
-        if (Buffer.isBuffer(req.body) || typeof req.body === 'string') body = req.body;
-        else body = JSON.stringify(req.body);
-      }
+    if (method !== 'GET' && method !== 'HEAD' && req.body !== undefined) {
+      if (typeof req.body === 'string' || Buffer.isBuffer(req.body)) body = req.body;
+      else body = JSON.stringify(req.body);
     }
 
     const controller = new AbortController();
@@ -80,14 +74,23 @@ export default async function nodeHandler(req: any, res: any) {
       });
 
       res.statusCode = upstream.status;
-      for (const [k, v] of upstream.headers.entries()) {
-        const key = k.toLowerCase();
-        if (HOP_BY_HOP_HEADERS.has(key)) continue;
-        res.setHeader(k, v);
-      }
+      upstream.headers.forEach((value, key) => {
+        const lk = key.toLowerCase();
+        if (HOP_BY_HOP_HEADERS.has(lk)) return;
+        res.setHeader(key, value);
+      });
 
       const buf = Buffer.from(await upstream.arrayBuffer());
       res.end(buf);
+    } catch (err: any) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const isAbort = err?.name === 'AbortError';
+      sendJson(res, isAbort ? 504 : 502, {
+        error: isAbort ? 'Upstream request timeout' : 'Upstream request failed',
+        detail: msg,
+        targetUrl,
+        method,
+      });
     } finally {
       clearTimeout(timeoutId);
     }
@@ -100,6 +103,3 @@ export default async function nodeHandler(req: any, res: any) {
     });
   }
 }
-
-// IMPORTANT: Do not export GET/POST/... (Web Fetch API) alongside this default handler.
-// Vercel Node.js functions can crash with FUNCTION_INVOCATION_FAILED when both exist.
