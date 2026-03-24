@@ -8,10 +8,7 @@
   ],
   "functions": {
     "api/**/*.{ts,js}": {
-      "includeFiles": [
-        "lib/**",
-        "dist/index.html"
-      ]
+      "includeFiles": "{lib/**,dist/index.html}"
     }
   }
 }
