@@ -11,6 +11,11 @@ export const routes = [
   { path: '/login', name: 'login', meta: { title: 'Login' } },
   { path: '/signup', name: 'signup', meta: { title: 'Sign Up' } },
   { path: '/token-login', name: 'token-login', meta: { title: 'Token Login' } },
+  // Backend may redirect here with ?token= / ?refreshToken= (same as server extractOAuthTokens).
+  {
+    path: '/auth/google/callback',
+    redirect: (to) => ({ path: '/token-login', query: to.query, hash: to.hash }),
+  },
 ];
 
 const router = createRouter({

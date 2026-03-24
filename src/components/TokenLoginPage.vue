@@ -45,14 +45,24 @@ function parseTokenFromLocation(): { accessToken?: string; refreshToken?: string
   // Example: /token-login#accessToken=...&refreshToken=...
   const hash = (window.location.hash || '').replace(/^#/, '');
   const hashParams = new URLSearchParams(hash);
-  const at = hashParams.get('accessToken') || hashParams.get('access_token') || undefined;
+  const at =
+    hashParams.get('accessToken')
+    || hashParams.get('access_token')
+    || hashParams.get('token')
+    || hashParams.get('jwt')
+    || undefined;
   const rt = hashParams.get('refreshToken') || hashParams.get('refresh_token') || undefined;
   if (at || rt) return { accessToken: at || undefined, refreshToken: rt || undefined };
 
-  // Fallback: query string (less ideal)
+  // Fallback: query string (less ideal; some OAuth flows use ?token=)
   const qs = new URLSearchParams(window.location.search || '');
   return {
-    accessToken: qs.get('accessToken') || qs.get('access_token') || undefined,
+    accessToken:
+      qs.get('accessToken')
+      || qs.get('access_token')
+      || qs.get('token')
+      || qs.get('jwt')
+      || undefined,
     refreshToken: qs.get('refreshToken') || qs.get('refresh_token') || undefined,
   };
 }
