@@ -254,11 +254,14 @@ async function grindFetch(pathname, options) {
   }
 
   let msg = lastText && lastText.length < 500 ? lastText : 'Request failed';
-  // Prefer backend-provided message body when it returns JSON error payloads.
-  try {
-    const parsed = JSON.parse(msg);
-    if (parsed && typeof parsed === 'object') {
-      msg = parsed.message || parsed.error || msg;
+  if (lastText) {
+    try {
+      const parsed = JSON.parse(lastText);
+      if (parsed && typeof parsed === 'object') {
+        if (typeof parsed.message === 'string' && parsed.message.trim()) {
+          msg = parsed.message.trim();
+        } else if (typeof parsed.error === 'string' && parsed.error.trim()) {
+          msg = parsed.error.trim();
         }
       }
     } catch (_) {
