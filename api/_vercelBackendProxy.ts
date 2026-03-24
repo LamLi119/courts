@@ -1,4 +1,4 @@
-// Shared Vercel proxy → PROXY_TARGET. Matches api/venues.ts style (Record headers, no config export).
+// Shared Vercel proxy → PROXY_TARGET. Leading _ keeps this file from becoming a /api route.
 
 const HOP_BY_HOP_HEADERS = new Set([
   'connection',
