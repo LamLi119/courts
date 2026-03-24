@@ -139,7 +139,7 @@ function setCanonical(url: string): void {
 const DEFAULT_TITLE = `Courts Finder | Find Sports Courts in Hong Kong`;
 const DEFAULT_DESCRIPTION = `Find and book sports courts near MTR stations. Compare prices, amenities, and walking distance.`;
 /** Default share preview image (home page). Use absolute URL so crawlers see it when sharing site URL. */
-const DEFAULT_OG_IMAGE_PATH = '/green_G.png';
+const DEFAULT_OG_IMAGE_PATH = '/gray-G.png';
 
 /** Apply dynamic meta and OG tags for a venue (detail page). Call when venue is shown. */
 export function applyVenueSeo(venue: Venue, baseUrl: string, lang: 'en' | 'zh' = 'en'): void {
