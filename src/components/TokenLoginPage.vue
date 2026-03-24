@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import type { Language } from '../../types';
 import { useAuth } from '../composables/auth';
+import authSideImageUrl from '../assets/auth_side.png';
 
 const props = defineProps<{
   language: Language;
@@ -17,8 +18,6 @@ const accessToken = ref('');
 const refreshToken = ref('');
 const error = ref('');
 const autoLoginTriggered = ref(false);
-
-const canSubmit = computed(() => accessToken.value.trim().length > 0 && !loading.value);
 
 async function saveAndLogin() {
   error.value = '';
@@ -76,83 +75,97 @@ onMounted(() => {
   const hashError = hashParams.get('error') || hashParams.get('message');
   if (hashError) error.value = hashError;
 
-  // Auto-login when accessToken is provided via URL.
   if (parsed.accessToken) {
     autoLoginTriggered.value = true;
     saveAndLogin();
+  } else if (!hashError) {
+    router.replace('/login');
   }
 });
 </script>
 
 <template>
-  <div class="min-h-screen flex items-center justify-center px-4 py-10" :class="darkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'">
-    <div class="w-full max-w-xl">
-      <div class="flex items-center justify-between mb-6">
+  <div
+    class="min-h-screen grid grid-cols-1 md:grid-cols-2"
+    :class="darkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'"
+  >
+    <!-- Left: completing auth, error from OAuth, or brief redirect -->
+    <div
+      class="relative flex min-h-screen flex-col"
+      :class="darkMode ? 'md:bg-gray-900' : 'md:bg-white'"
+    >
+      <div
+        class="absolute top-4 z-10 flex w-full items-center justify-between px-6 md:w-1/2 md:px-8"
+      >
         <button
           type="button"
-          class="font-black text-sm opacity-70 hover:opacity-100 transition"
+          class="font-black text-sm opacity-70 transition hover:opacity-100"
           @click="router.push('/login')"
         >
           ← {{ language === 'en' ? 'Back' : '返回' }}
         </button>
       </div>
 
-      <div class="rounded-3xl border shadow-lg p-6" :class="darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'">
-        <h2 class="text-2xl font-black tracking-tight mb-1">
-          {{ language === 'en' ? 'Paste token' : '貼上 Token 登入' }}
-        </h2>
-        <p class="text-sm font-bold opacity-60 mb-6">
-          {{ language === 'en' ? 'For internal/testing use only.' : '只建議內部/測試使用。' }}
-        </p>
-        <p
+      <div class="flex flex-1 items-center justify-center px-4 py-16 md:py-10">
+        <div
           v-if="autoLoginTriggered && loading"
-          class="text-sm font-bold text-[#007a67] mb-4"
+          class="flex flex-col items-center justify-center text-center"
         >
-          {{ language === 'en' ? 'Google sign-in in progress...' : 'Google 登入中...' }}
-        </p>
-
-        <div class="space-y-4">
-          <div class="space-y-1">
-            <label class="text-xs font-black uppercase tracking-wider opacity-70">
-              accessToken
-            </label>
-            <textarea
-              v-model="accessToken"
-              rows="6"
-              class="w-full px-4 py-3 rounded-xl border font-bold focus:outline-none focus:ring-2 focus:ring-[#007a67]"
-              :class="darkMode ? 'bg-gray-900 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'"
-              placeholder="Paste accessToken here"
-            />
-          </div>
-
-          <div class="space-y-1">
-            <label class="text-xs font-black uppercase tracking-wider opacity-70">
-              refreshToken (optional)
-            </label>
-            <textarea
-              v-model="refreshToken"
-              rows="3"
-              class="w-full px-4 py-3 rounded-xl border font-bold focus:outline-none focus:ring-2 focus:ring-[#007a67]"
-              :class="darkMode ? 'bg-gray-900 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'"
-              placeholder="Paste refreshToken here (optional)"
-            />
-          </div>
-
-          <button
-            type="button"
-            class="w-full py-3 rounded-xl font-black shadow-xl transition-all active:scale-[0.99]"
-            :class="canSubmit ? 'bg-[#007a67] text-white hover:brightness-110' : (darkMode ? 'bg-gray-700 text-gray-400 cursor-not-allowed' : 'bg-gray-200 text-gray-400 cursor-not-allowed')"
-            :disabled="!canSubmit"
-            @click="saveAndLogin"
+          <svg
+            class="h-10 w-10 shrink-0 text-[#007a67] motion-safe:animate-spin"
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            stroke-width="1.75"
+            aria-hidden="true"
           >
-            {{ loading ? (language === 'en' ? 'Logging in…' : '登入中…') : (language === 'en' ? 'Save & Login' : '保存並登入') }}
-          </button>
-
-          <p v-if="error" class="text-sm font-bold text-red-500">
-            {{ error }}
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"
+            />
+          </svg>
+          <p
+            class="mt-4 max-w-sm text-[15px] font-medium leading-snug"
+            :class="darkMode ? 'text-gray-300' : 'text-[#2d3748]'"
+          >
+            {{
+              language === 'en'
+                ? 'Completing authentication...'
+                : '正在完成驗證...'
+            }}
           </p>
         </div>
+
+        <div
+          v-else-if="error"
+          class="max-w-md px-2 text-center"
+        >
+          <p class="text-sm font-bold text-red-500">
+            {{ error }}
+          </p>
+          <button
+            type="button"
+            class="mt-6 text-sm font-black text-[#007a67] underline"
+            @click="router.push('/login')"
+          >
+            {{ language === 'en' ? 'Back to sign in' : '返回登入' }}
+          </button>
+        </div>
       </div>
+    </div>
+
+    <!-- Right: venue photo (md+) -->
+    <div class="relative hidden min-h-[40vh] md:block md:min-h-screen">
+      <div
+        class="absolute inset-0 bg-cover bg-center"
+        :style="{ backgroundImage: `url(${authSideImageUrl})` }"
+      />
+      <div
+        class="absolute inset-0"
+        :class="darkMode ? 'bg-black/30' : 'bg-black/10'"
+      />
     </div>
   </div>
 </template>
