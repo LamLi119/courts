@@ -1,4 +1,5 @@
 import type { Venue } from '../../types';
+import { slugify } from './slugify';
 
 const SITE_NAME = 'Courts Finder';
 const DEFAULT_KEYWORDS =
@@ -146,7 +147,10 @@ export function applyVenueSeo(venue: Venue, baseUrl: string, lang: 'en' | 'zh' =
   const description = getVenueDescription(venue, lang);
   const keywords = getVenueKeywords(venue, lang);
   const image = (venue.images && venue.images[0]) || '';
-  const pageUrl = typeof window !== 'undefined' ? window.location.href : `${baseUrl}/venues/${venue.id}`;
+  const pageUrl =
+    typeof window !== 'undefined'
+      ? window.location.href
+      : `${baseUrl.replace(/\/$/, '')}/venues/${slugify(venue.name)}`;
   const origin = typeof window !== 'undefined' ? window.location.origin : baseUrl.replace(/\/$/, '');
 
   document.title = title;
@@ -235,7 +239,10 @@ function injectVenueJsonLd(venue: Venue, baseUrl: string): void {
   const sport = getSportTypeLabel(venue);
   const image = (venue.images && venue.images[0]);
   const imageUrl = image && image.startsWith('http') ? image : image ? new URL(image, baseUrl).href : undefined;
-  const pageUrl = typeof window !== 'undefined' ? window.location.href : `${baseUrl}/venues/${venue.id}`;
+  const pageUrl =
+    typeof window !== 'undefined'
+      ? window.location.href
+      : `${baseUrl.replace(/\/$/, '')}/venues/${slugify(venue.name)}`;
 
   const jsonLd: Record<string, unknown> = {
     '@context': 'https://schema.org',

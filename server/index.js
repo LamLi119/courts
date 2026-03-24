@@ -259,9 +259,11 @@ async function grindFetch(pathname, options) {
     const parsed = JSON.parse(msg);
     if (parsed && typeof parsed === 'object') {
       msg = parsed.message || parsed.error || msg;
+        }
+      }
+    } catch (_) {
+      // Non-JSON response body; keep original text.
     }
-  } catch (_) {
-    // keep raw message
   }
   const err = new Error(msg);
   err.statusCode = lastStatus || 500;
@@ -339,17 +341,6 @@ app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   if (req.method === 'OPTIONS') return res.status(200).end();
   next();
-});
-
-// Optional: protect API when running behind a proxy (e.g. Vercel).
-// If PROXY_SECRET is set on the server, require callers to send matching x-proxy-secret.
-const PROXY_SECRET = process.env.PROXY_SECRET || '';
-app.use('/api', (req, res, next) => {
-  if (!PROXY_SECRET) return next();
-  if (req.method === 'OPTIONS') return next();
-  const incoming = req.get('x-proxy-secret') || '';
-  if (incoming !== PROXY_SECRET) return res.status(401).json({ error: 'Unauthorized' });
-  return next();
 });
 
 // Optional: protect API when running behind a proxy (e.g. Vercel).
@@ -461,6 +452,7 @@ app.post('/api/user/auth/register', async (req, res) => {
     return res.status(code).json({ error: message });
   }
 });
+
 
 app.get('/api/user/auth/session', async (req, res) => {
   try {
@@ -650,64 +642,6 @@ app.post('/api/sports', async (req, res) => {
     if (err.code === 'ER_BAD_FIELD_ERROR' && err.message && err.message.includes('name_zh')) {
       return res.status(500).json({ error: 'Run migration: add name_zh to sports. See scripts/add-sports-name_zh.sql' });
     }
-    res.status(500).json({ error: dbErrorMessage(err) });
-  }
-});
-
-app.put('/api/sports/:id', async (req, res) => {
-  try {
-    const db = getPool();
-    const id = parseInt(req.params.id, 10);
-    if (Number.isNaN(id)) return res.status(400).json({ error: 'Invalid id' });
-
-    const { name, name_zh } = req.body || {};
-    const n = (name || '').toString().trim();
-    if (!n) return res.status(400).json({ error: 'name is required' });
-
-    const slug = slugify(n) || 'sport';
-
-    if (name_zh === undefined) {
-      await db.execute('UPDATE sports SET name = ?, slug = ? WHERE id = ?', [n, slug, id]);
-    } else {
-      const zh = (name_zh || '').toString().trim() || null;
-      try {
-        await db.execute('UPDATE sports SET name = ?, name_zh = ?, slug = ? WHERE id = ?', [n, zh, slug, id]);
-      } catch (err) {
-        // Backward compatibility: sports table may not have name_zh column.
-        if (err && err.code === 'ER_BAD_FIELD_ERROR' && err.message && err.message.includes('name_zh')) {
-          await db.execute('UPDATE sports SET name = ?, slug = ? WHERE id = ?', [n, slug, id]);
-        } else {
-          throw err;
-        }
-      }
-    }
-
-    // Return updated row (support both schemas: with/without name_zh).
-    try {
-      const [rows] = await db.execute('SELECT id, name, name_zh, slug FROM sports WHERE id = ?', [id]);
-      return res.json(rows?.[0] ?? null);
-    } catch (err) {
-      if (err && err.code === 'ER_BAD_FIELD_ERROR' && err.message && err.message.includes('name_zh')) {
-        const [rows] = await db.execute('SELECT id, name, slug FROM sports WHERE id = ?', [id]);
-        const r = rows?.[0] ?? null;
-        if (!r) return res.status(404).json({ error: 'Sport not found' });
-        return res.json({ ...r, name_zh: null });
-      }
-      throw err;
-    }
-  } catch (err) {
-    res.status(500).json({ error: dbErrorMessage(err) });
-  }
-});
-
-app.delete('/api/sports/:id', async (req, res) => {
-  try {
-    const db = getPool();
-    const id = req.params.id;
-    await db.execute('DELETE FROM venue_sports WHERE sport_id = ?', [id]);
-    await db.execute('DELETE FROM sports WHERE id = ?', [id]);
-    return res.status(204).send();
-  } catch (err) {
     res.status(500).json({ error: dbErrorMessage(err) });
   }
 });

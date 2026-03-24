@@ -3,11 +3,15 @@
   "outputDirectory": "dist",
   "framework": "vite",
   "rewrites": [
+    { "source": "/venues/:slug", "destination": "/api/html-venue?slug=:slug" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],
   "functions": {
     "api/**/*.ts": {
       "includeFiles": "lib/**"
+    },
+    "api/html-venue.ts": {
+      "includeFiles": "lib/**\ndist/index.html"
     }
   }
 }
