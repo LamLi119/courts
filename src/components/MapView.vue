@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { onMounted, onBeforeUnmount, ref, watch, computed } from 'vue';
 import type { Venue, Language } from '../../types';
-import courtIconUrl from '../assets/green-G.svg';
-
 declare const google: any;
+
+const courtIconUrl = `${import.meta.env.BASE_URL}green-G.svg`;
 
 const props = defineProps<{
   venues: Venue[];

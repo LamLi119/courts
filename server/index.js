@@ -4,11 +4,17 @@ import express from 'express';
 import mysql from 'mysql2/promise';
 import axios from 'axios';
 import FormData from 'form-data';
+import crypto from 'crypto';
 
 const app = express();
 app.use(express.json({ limit: '5mb' })); // Increased limit for Base64
 
 let pool;
+const THE_GRIND_BACKEND_URL = (process.env.THE_GRIND_BACKEND_URL || process.env.THEGRIND_BACKEND_URL || '').replace(/\/$/, '');
+const SUPER_ADMIN_PASSWORD = process.env.SUPER_ADMIN_PASSWORD || 'abc321A!';
+const ADMIN_SESSION_COOKIE = 'courts_admin_session';
+const ADMIN_SESSION_TTL_MS = 1000 * 60 * 60 * 12; // 12 hours
+const adminSessions = new Map();
 
 /** SSL only when cert files exist (e.g. Cloud SQL); otherwise connect without SSL for local MySQL. */
 function getSslOptions() {
@@ -86,6 +92,182 @@ function dbErrorMessage(err) {
   return err && err.message ? err.message : 'Database error';
 }
 
+function md5(str) {
+  return crypto.createHash('md5').update(String(str), 'utf8').digest('hex');
+}
+
+function parseCookies(req) {
+  const raw = req.headers?.cookie || '';
+  const out = {};
+  raw.split(';').forEach((part) => {
+    const idx = part.indexOf('=');
+    if (idx <= 0) return;
+    const k = part.slice(0, idx).trim();
+    const v = part.slice(idx + 1).trim();
+    if (!k) return;
+    out[k] = decodeURIComponent(v || '');
+  });
+  return out;
+}
+
+function cleanupAdminSessions() {
+  const now = Date.now();
+  for (const [sid, value] of adminSessions.entries()) {
+    if (!value || value.expiresAt <= now) adminSessions.delete(sid);
+  }
+}
+
+function getAdminSession(req) {
+  cleanupAdminSessions();
+  const sid = parseCookies(req)[ADMIN_SESSION_COOKIE];
+  if (!sid) return null;
+  const session = adminSessions.get(sid);
+  if (!session) return null;
+  if (session.expiresAt <= Date.now()) {
+    adminSessions.delete(sid);
+    return null;
+  }
+  return { sid, ...session };
+}
+
+function setAdminSession(res, req, payload) {
+  cleanupAdminSessions();
+  const sid = crypto.randomBytes(32).toString('hex');
+  const expiresAt = Date.now() + ADMIN_SESSION_TTL_MS;
+  adminSessions.set(sid, { ...payload, expiresAt });
+  const forwardedProto = (req.get('x-forwarded-proto') || '').split(',')[0].trim();
+  const secure = req.secure || forwardedProto === 'https';
+  res.cookie(ADMIN_SESSION_COOKIE, sid, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure,
+    maxAge: ADMIN_SESSION_TTL_MS,
+    path: '/',
+  });
+}
+
+function clearAdminSession(req, res) {
+  const sid = parseCookies(req)[ADMIN_SESSION_COOKIE];
+  if (sid) adminSessions.delete(sid);
+  res.clearCookie(ADMIN_SESSION_COOKIE, { path: '/' });
+}
+
+function trimTrailingSlash(input) {
+  return (input || '').toString().trim().replace(/\/$/, '');
+}
+
+function getPublicServerBase(req) {
+  const xfProto = (req.get('x-forwarded-proto') || '').split(',')[0].trim();
+  const xfHost = (req.get('x-forwarded-host') || '').split(',')[0].trim();
+  const proto = xfProto || req.protocol || 'http';
+  const host = xfHost || req.get('host') || '';
+  return host ? `${proto}://${host}` : '';
+}
+
+function getFrontendBase(req) {
+  const fromEnv = trimTrailingSlash(
+    process.env.COURTS_FRONTEND_URL
+    || process.env.FRONTEND_URL
+  );
+  if (fromEnv) return fromEnv;
+
+  const fromQuery = trimTrailingSlash(req.query?.frontendUrl || req.query?.frontend_url);
+  if (fromQuery) return fromQuery;
+
+  const origin = trimTrailingSlash(req.get('origin'));
+  if (origin) return origin;
+
+  return '';
+}
+
+function extractOAuthTokens(query) {
+  const q = query || {};
+  const accessToken = (
+    q.accessToken
+    || q.access_token
+    || q.token
+    || q.jwt
+    || ''
+  ).toString().trim();
+  const refreshToken = (
+    q.refreshToken
+    || q.refresh_token
+    || ''
+  ).toString().trim();
+  return { accessToken, refreshToken };
+}
+
+async function grindFetch(pathname, options) {
+  if (!THE_GRIND_BACKEND_URL) {
+    throw new Error('THE_GRIND_BACKEND_URL is not set');
+  }
+  const normalizedPath = pathname.startsWith('/') ? pathname : `/${pathname}`;
+  const base = THE_GRIND_BACKEND_URL.replace(/\/$/, '');
+
+  const tryUrls = [];
+  // Try both "with /api" and "without /api" mounting styles.
+  // This repo has had deployments where THE_GRIND_BACKEND_URL includes or omits `/api`.
+  // We try both to avoid brittle 404s.
+  tryUrls.push(`${base}${normalizedPath}`);
+  if (base.endsWith('/api')) {
+    // If base already includes `/api`, also try stripping it.
+    tryUrls.push(`${base.replace(/\/api$/, '')}${normalizedPath}`);
+  } else {
+    // Otherwise, also try mounting under `/api`.
+    tryUrls.push(`${base}/api${normalizedPath}`);
+  }
+  // Deduplicate while preserving order.
+  const uniqueTryUrls = [];
+  const seen = new Set();
+  for (const u of tryUrls) {
+    if (seen.has(u)) continue;
+    seen.add(u);
+    uniqueTryUrls.push(u);
+  }
+
+  let lastText = '';
+  let lastStatus = 0;
+  let lastUrl = uniqueTryUrls[0];
+
+  for (const url of uniqueTryUrls) {
+    lastUrl = url;
+    let res;
+    try {
+      res = await fetch(url, {
+        method: options?.method || 'GET',
+        headers: { 'Content-Type': 'application/json', ...(options?.headers || {}) },
+        body: options?.body ? JSON.stringify(options.body) : undefined,
+      });
+    } catch (e) {
+      // Important: fetch() errors (DNS/connection refused/etc) would otherwise lose context.
+      lastStatus = 0;
+      lastText = e?.message || 'fetch failed';
+      continue;
+    }
+    if (res.ok) return res.json();
+
+    lastStatus = res.status;
+    lastText = await res.text().catch(() => '');
+
+    // If it's not a 404, don't try alternate mount points.
+    if (res.status !== 404) break;
+  }
+
+  let msg = lastText && lastText.length < 500 ? lastText : 'Request failed';
+  // Prefer backend-provided message body when it returns JSON error payloads.
+  try {
+    const parsed = JSON.parse(msg);
+    if (parsed && typeof parsed === 'object') {
+      msg = parsed.message || parsed.error || msg;
+    }
+  } catch (_) {
+    // keep raw message
+  }
+  const err = new Error(msg);
+  err.statusCode = lastStatus || 500;
+  throw err;
+}
+
 /** Fetch a single venue by id with sport_data populated (name, name_zh, slug, sort_order). Strips admin_password. */
 async function getVenueWithSports(db, venueId) {
   const [rows] = await db.execute('SELECT * FROM venues WHERE id = ?', [venueId]);
@@ -145,9 +327,16 @@ function sanitizeRow(body) {
 
 // --- CORS ---
 app.use((req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  const origin = req.get('origin') || '';
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
   if (req.method === 'OPTIONS') return res.status(200).end();
   next();
 });
@@ -163,23 +352,256 @@ app.use('/api', (req, res, next) => {
   return next();
 });
 
+// Optional: protect API when running behind a proxy (e.g. Vercel).
+// If PROXY_SECRET is set on the server, require callers to send matching x-proxy-secret.
+const PROXY_SECRET = process.env.PROXY_SECRET || '';
+app.use('/api', (req, res, next) => {
+  if (!PROXY_SECRET) return next();
+  if (req.method === 'OPTIONS') return next();
+  const incoming = req.get('x-proxy-secret') || '';
+  if (incoming !== PROXY_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  return next();
+});
+
 // --- ROUTES ---
+
+// --- USER AUTH (proxy to TheGround backend) ---
+app.post('/api/user/auth/login', async (req, res) => {
+  try {
+    const { username, password } = req.body || {};
+    const loginId = (username || '').toString().trim();
+    const rawPassword = (password || '').toString();
+    if (!loginId || rawPassword.length < 1) return res.status(400).json({ error: 'username and password required' });
+
+    const data = await grindFetch('/authentication/login', {
+      method: 'POST',
+      body: {
+        loginId,
+        password: md5(rawPassword),
+      },
+    });
+
+    const accessToken = data.accessToken || data.access_token;
+    const refreshToken = data.refreshToken || data.refresh_token;
+    if (!accessToken) return res.status(500).json({ error: 'Missing access token from backend' });
+
+    return res.json({
+      token: accessToken,
+      refreshToken,
+      user: {
+        id: data.id,
+        name: data.name,
+        username: data.loginId,
+        email: data.email,
+      },
+    });
+  } catch (err) {
+    const code = err.statusCode || 500;
+    return res.status(code).json({ error: err.message || 'Login failed' });
+  }
+});
+
+app.post('/api/user/auth/register', async (req, res) => {
+  try {
+    const {
+      email,
+      loginId,
+      name,
+      phoneNo,
+      password,
+      country_code,
+      description,
+      page,
+    } = req.body || {};
+
+    const emailTrimmed = (email || '').toString().trim();
+    const loginIdTrimmed = (loginId || '').toString().trim();
+    const nameTrimmed = (name || '').toString().trim();
+    const phoneTrimmed = (phoneNo || '').toString().trim();
+    const rawPassword = (password || '').toString();
+
+    if (!emailTrimmed || !loginIdTrimmed || !nameTrimmed || !phoneTrimmed || !rawPassword) {
+      return res.status(400).json({ error: 'email, loginId, name, phoneNo and password are required' });
+    }
+
+    const payload = {
+      email: emailTrimmed,
+      loginId: loginIdTrimmed,
+      name: nameTrimmed,
+      phoneNo: phoneTrimmed,
+      country_code: (country_code || '852').toString(),
+      description: (description || '').toString(),
+      page: (page || '').toString(),
+      password: md5(rawPassword),
+    };
+
+    const data = await grindFetch('/authentication/register', {
+      method: 'POST',
+      body: payload,
+    });
+
+    const accessToken = data.accessToken || data.access_token;
+    const refreshToken = data.refreshToken || data.refresh_token;
+    if (!accessToken) return res.status(500).json({ error: 'Missing access token from backend' });
+
+    return res.json({
+      token: accessToken,
+      refreshToken,
+      user: {
+        id: data.id,
+        name: data.name,
+        username: data.loginId || loginIdTrimmed,
+        email: data.email || emailTrimmed,
+        type: data.type,
+      },
+    });
+  } catch (err) {
+    const code = err.statusCode || 500;
+    const message = err.message || 'Register failed';
+    return res.status(code).json({ error: message });
+  }
+});
+
+app.get('/api/user/auth/session', async (req, res) => {
+  try {
+    const auth = req.headers?.authorization || '';
+    const m = /^Bearer\s+(.+)$/.exec(auth);
+    const token = m ? m[1] : '';
+    if (!token) return res.status(401).json({ error: 'Missing token' });
+
+    // Use the same endpoint TheGround uses for profile hydration.
+    const profile = await grindFetch('/usersNonOdoo/v2', {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    return res.json({
+      user: {
+        id: profile?.id,
+        name: profile?.name,
+        username: profile?.loginId || profile?.login_id || profile?.username || '',
+        email: profile?.email,
+        type: profile?.type,
+        avatarSrc: profile?.profile?.filePath,
+      },
+    });
+  } catch (err) {
+    const code = err.statusCode || 401;
+    return res.status(code).json({ error: err.message || 'Invalid session' });
+  }
+});
+
+app.post('/api/user/auth/refresh', async (req, res) => {
+  try {
+    const { refreshToken } = req.body || {};
+    const rt = (refreshToken || '').toString().trim();
+    if (!rt) return res.status(400).json({ error: 'refreshToken required' });
+
+    // Use the same proxy URL-mounting logic as login/session.
+    const data = await grindFetch(
+      `/authentication/refreshToken?refreshToken=${encodeURIComponent(rt)}`,
+      { method: 'GET' }
+    );
+    return res.json({ token: data.access_token, refreshToken: data.refresh_token });
+  } catch (err) {
+    return res.status(500).json({ error: err.message || 'Refresh failed' });
+  }
+});
+
+app.get('/api/user/auth/google/start', async (req, res) => {
+  try {
+    if (!THE_GRIND_BACKEND_URL) {
+      return res.status(500).json({ error: 'THE_GRIND_BACKEND_URL is not set' });
+    }
+
+    const backendBase = trimTrailingSlash(THE_GRIND_BACKEND_URL);
+    const serverBase = getPublicServerBase(req);
+    const callbackUrl = `${serverBase}/api/user/auth/google/callback`;
+    const frontendUrl = getFrontendBase(req);
+    const platform = (req.query?.platform || 'courts').toString();
+
+    const params = new URLSearchParams();
+    params.set('platform', platform);
+    if (frontendUrl) params.set('frontendUrl', frontendUrl);
+    if (callbackUrl) {
+      // Keep multiple common callback keys for backend compatibility.
+      params.set('redirectUrl', callbackUrl);
+      params.set('callbackUrl', callbackUrl);
+      params.set('redirect_uri', callbackUrl);
+    }
+
+    const target = `${backendBase}/authentication/google?${params.toString()}`;
+    return res.redirect(302, target);
+  } catch (err) {
+    return res.status(500).json({ error: err.message || 'Failed to start Google sign-in' });
+  }
+});
+
+app.get('/api/user/auth/google/callback', async (req, res) => {
+  try {
+    const { accessToken, refreshToken } = extractOAuthTokens(req.query);
+    const frontendBase = getFrontendBase(req);
+    const tokenLoginPath = frontendBase ? `${frontendBase}/token-login` : '/token-login';
+    const hash = new URLSearchParams();
+
+    if (accessToken) hash.set('accessToken', accessToken);
+    if (refreshToken) hash.set('refreshToken', refreshToken);
+
+    const error = (req.query?.error || req.query?.message || '').toString().trim();
+    if (!accessToken && error) hash.set('error', error);
+    if (!accessToken && !error) hash.set('error', 'Google login callback missing access token');
+
+    const redirectTo = `${tokenLoginPath}#${hash.toString()}`;
+    return res.redirect(302, redirectTo);
+  } catch (err) {
+    const frontendBase = getFrontendBase(req);
+    const tokenLoginPath = frontendBase ? `${frontendBase}/token-login` : '/token-login';
+    const hash = new URLSearchParams({
+      error: err.message || 'Google login callback failed',
+    });
+    return res.redirect(302, `${tokenLoginPath}#${hash.toString()}`);
+  }
+});
+
+// --- USER LOGOUT (client-side token storage; server-side no-op for now) ---
+app.post('/api/user/auth/logout', async (_req, res) => {
+  // Tokens are stored in the client (localStorage). There is no server session to clear.
+  // This endpoint exists for API symmetry and future token revocation support.
+  return res.json({ success: true });
+});
 
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { password } = req.body || {};
     if (!password) return res.status(400).json({ error: 'Password required' });
+    const rawPassword = String(password);
+    if (rawPassword === SUPER_ADMIN_PASSWORD) {
+      setAdminSession(res, req, { type: 'super', allowedIds: [] });
+      return res.json({ type: 'super', allowedVenueIds: [] });
+    }
     const db = getPool();
     const [rows] = await db.execute(
       'SELECT id FROM venues WHERE admin_password = ?',
-      [password]
+      [rawPassword]
     );
     if (rows.length === 0) return res.status(401).json({ error: 'Invalid password' });
     const allowedVenueIds = rows.map((r) => r.id);
-    return res.json({ allowedVenueIds });
+    setAdminSession(res, req, { type: 'court', allowedIds: allowedVenueIds });
+    return res.json({ type: 'court', allowedVenueIds });
   } catch (err) {
     res.status(500).json({ error: dbErrorMessage(err) });
   }
+});
+
+app.get('/api/auth/session', (_req, res) => {
+  const session = getAdminSession(_req);
+  if (!session) return res.status(401).json({ error: 'Not logged in' });
+  return res.json({ type: session.type, allowedVenueIds: session.allowedIds || [] });
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  clearAdminSession(req, res);
+  return res.json({ success: true });
 });
 
 app.get('/api/sports', async (req, res) => {
@@ -214,11 +636,16 @@ app.post('/api/sports', async (req, res) => {
     if (!n) return res.status(400).json({ error: 'name or name_en required' });
     const zh = (name_zh || '').toString().trim() || null;
     const slug = slugify(n) || 'sport';
+    // Avoid duplicate slug insert (uq_sports_slug): if exists, update it.
     const [result] = await db.execute(
-      'INSERT INTO sports (name, name_zh, slug) VALUES (?, ?, ?)',
+      'INSERT INTO sports (name, name_zh, slug) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE name = VALUES(name), name_zh = VALUES(name_zh)',
       [n, zh, slug]
     );
-    return res.status(201).json({ id: result.insertId, name: n, name_zh: zh, slug });
+
+    // If it was an update, insertId may be 0; fetch current row id.
+    const [rows] = await db.execute('SELECT id FROM sports WHERE slug = ?', [slug]);
+    const id = rows?.[0]?.id;
+    return res.status(201).json({ id, name: n, name_zh: zh, slug });
   } catch (err) {
     if (err.code === 'ER_BAD_FIELD_ERROR' && err.message && err.message.includes('name_zh')) {
       return res.status(500).json({ error: 'Run migration: add name_zh to sports. See scripts/add-sports-name_zh.sql' });
@@ -285,10 +712,76 @@ app.delete('/api/sports/:id', async (req, res) => {
   }
 });
 
+app.put('/api/sports/:id', async (req, res) => {
+  try {
+    const db = getPool();
+    const id = parseInt(req.params.id, 10);
+    if (Number.isNaN(id)) return res.status(400).json({ error: 'Invalid id' });
+
+    const { name, name_zh } = req.body || {};
+    const n = (name || '').toString().trim();
+    if (!n) return res.status(400).json({ error: 'name is required' });
+
+    const slug = slugify(n) || 'sport';
+    if (name_zh === undefined) {
+      await db.execute('UPDATE sports SET name = ?, slug = ? WHERE id = ?', [n, slug, id]);
+    } else {
+      const zh = (name_zh || '').toString().trim() || null;
+      try {
+        await db.execute('UPDATE sports SET name = ?, name_zh = ?, slug = ? WHERE id = ?', [n, zh, slug, id]);
+      } catch (err) {
+        // Backward compatibility: sports table may not have name_zh column.
+        if (err && err.code === 'ER_BAD_FIELD_ERROR' && err.message && err.message.includes('name_zh')) {
+          await db.execute('UPDATE sports SET name = ?, slug = ? WHERE id = ?', [n, slug, id]);
+        } else {
+          // Helpful error when slug collides with another row.
+          if (err && err.message && err.message.includes("Duplicate entry") && err.message.includes('uq_sports_slug')) {
+            return res.status(409).json({ error: 'Slug already exists for another sport type' });
+          }
+          throw err;
+        }
+      }
+    }
+
+    // Return updated row (support both schemas: with/without name_zh).
+    try {
+      const [rows] = await db.execute('SELECT id, name, name_zh, slug FROM sports WHERE id = ?', [id]);
+      return res.json(rows?.[0] ?? null);
+    } catch (err) {
+      if (err && err.code === 'ER_BAD_FIELD_ERROR' && err.message && err.message.includes('name_zh')) {
+        const [rows] = await db.execute('SELECT id, name, slug FROM sports WHERE id = ?', [id]);
+        const r = rows?.[0] ?? null;
+        if (!r) return res.status(404).json({ error: 'Sport not found' });
+        return res.json({ ...r, name_zh: null });
+      }
+      throw err;
+    }
+  } catch (err) {
+    if (err && err.message && err.message.includes("Duplicate entry") && err.message.includes('uq_sports_slug')) {
+      return res.status(409).json({ error: 'Slug already exists for another sport type' });
+    }
+    res.status(500).json({ error: dbErrorMessage(err) });
+  }
+});
+
+app.delete('/api/sports/:id', async (req, res) => {
+  try {
+    const db = getPool();
+    const id = req.params.id;
+    await db.execute('DELETE FROM venue_sports WHERE sport_id = ?', [id]);
+    await db.execute('DELETE FROM sports WHERE id = ?', [id]);
+    return res.status(204).send();
+  } catch (err) {
+    res.status(500).json({ error: dbErrorMessage(err) });
+  }
+});
+
 app.get('/api/venues', async (req, res) => {
   try {
     const db = getPool();
-    const includePasswords = req.query.superAdminPassword === (process.env.SUPER_ADMIN_PASSWORD || 'abc321A!');
+    const adminSession = getAdminSession(req);
+    const includePasswords = (adminSession && adminSession.type === 'super')
+      || req.query.superAdminPassword === SUPER_ADMIN_PASSWORD;
     const [rows] = await db.execute(
       `SELECT * FROM venues ORDER BY sort_order IS NULL, sort_order ASC, name ASC`
     );

@@ -4,6 +4,7 @@ import type { Venue, Language } from '../../types';
 import { getStationDisplayName } from '../utils/mtrStations';
 import { applyVenueSeo, resetSeoToDefault, getSportTypeLabel, getVenueImageAlt } from '../utils/seo';
 import ImageCarousel from './ImageCarousel.vue';
+import { useAuth } from '../composables/auth';
 
 const ALLOWED_TAGS = new Set([
   'b', 'i', 'u', 's', 'strong', 'em', 'br', 'p', 'span', 'div',
@@ -64,6 +65,22 @@ const props = defineProps<{
   canEdit?: boolean;
   onEdit: () => void;
 }>();
+
+const { user } = useAuth();
+const canSeeSpecialOffer = computed(() => props.isAdmin || !!user.value);
+
+const goToLogin = () => {
+  if (typeof window !== 'undefined') {
+    try {
+      const path = window.location.pathname + window.location.search + window.location.hash;
+      window.sessionStorage?.setItem('auth_redirect_path', path);
+    } catch (_) {
+      // ignore
+    }
+  }
+  // Route is not available in this component; use location for simplicity.
+  if (typeof window !== 'undefined') window.location.href = '/login';
+};
 
 const allDetailImages = computed(() => [...(props.venue.images || [])]);
 
@@ -406,17 +423,27 @@ watch(
                 :class="language === 'en' ? 'text-[12px]' : 'text-[14px]'">
                   {{ language === 'en' ? 'Special offer' : '特別優惠' }}
                 </h3>
-                <button v-if="venue.membership_join_link" type="button" class="text-[12px] font-[700] text-[#007a67] uppercase w-1/2 text-right hover:underline"
+                <button v-if="venue.membership_join_link && canSeeSpecialOffer" type="button" class="text-[12px] font-[700] text-[#007a67] uppercase w-1/2 text-right hover:underline"
                   @click="openJoinMembership">
                   {{ language === 'en' ? 'Get the offer' : '獲取優惠' }} →
                 </button>
               </div>
               <div v-if="venue.membership_enabled && (venue.membership_description || venue.membership_join_link)"
-                class="p-4 rounded-[16px] border w-full"
+                class="p-4 rounded-[16px] border w-full relative overflow-hidden"
                 :class="darkMode ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-gray-50 border-gray-100 text-gray-700'">
                 <div v-if="venue.membership_description" class="text-[14px] font-[400] leading-relaxed description-html"
                   :class="darkMode ? 'text-gray-200' : 'text-gray-800'"
+                  :style="!canSeeSpecialOffer ? 'filter: blur(6px); user-select: none; pointer-events: none;' : ''"
                   v-html="sanitizeDescription(venue.membership_description)"></div>
+                <div v-if="!canSeeSpecialOffer" class="absolute inset-0 flex items-center justify-center">
+                  <button
+                    type="button"
+                    class="px-4 py-2 rounded-xl font-black shadow-xl bg-[#007a67] text-white hover:brightness-110"
+                    @click="goToLogin"
+                  >
+                    {{ language === 'en' ? 'Login to view' : '登入以查看' }}
+                  </button>
+                </div>
               </div>
             </div>
             <!-- Desktop: social links at left bottom with full URL -->
@@ -532,15 +559,25 @@ watch(
                 :class="language === 'en' ? 'text-[14px]' : 'text-[16px]'">
                 {{ language === 'en' ? 'Special offer' : '特別優惠' }}
               </h3>
-              <div class="p-4 rounded-[16px] border w-full"
+              <div class="p-4 rounded-[16px] border w-full relative overflow-hidden"
                 :class="darkMode ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-gray-50 border-gray-100 text-gray-700'">
                 <div v-if="venue.membership_description" class="text-[14px] font-[400] leading-relaxed description-html"
                   :class="darkMode ? 'text-gray-200' : 'text-gray-800'"
+                  :style="!canSeeSpecialOffer ? 'filter: blur(6px); user-select: none; pointer-events: none;' : ''"
                   v-html="sanitizeDescription(venue.membership_description)" />
+                <div v-if="!canSeeSpecialOffer" class="absolute inset-0 flex items-center justify-center">
+                  <button
+                    type="button"
+                    class="px-4 py-2 rounded-xl font-black shadow-xl bg-[#007a67] text-white hover:brightness-110"
+                    @click="goToLogin"
+                  >
+                    {{ language === 'en' ? 'Login to view' : '登入以查看' }}
+                  </button>
+                </div>
               </div>
             </div>
 
-            <button v-if="venue.membership_enabled && venue.membership_join_link"
+            <button v-if="canSeeSpecialOffer && venue.membership_enabled && venue.membership_join_link"
               class="flex-shrink-0 w-full py-4 rounded-[12px] text-white font-[900] text-lg bg-[#007a67]"
               @click="openSocialLink(venue.membership_join_link)">
               {{ t('joinMembership') }}
@@ -565,7 +602,7 @@ watch(
           </span>
           <span class="text-[14px] opacity-60">/{{ t('hour') }}</span>
         </div>
-        <button v-if="venue.membership_enabled && venue.membership_join_link" type="button"
+        <button v-if="canSeeSpecialOffer && venue.membership_enabled && venue.membership_join_link" type="button"
           class="btn btn-cta flex-shrink-0 max-w-[200px] py-3 px-4" @click="openSocialLink(venue.membership_join_link)">
           {{ t('joinMembership') }}
         </button>
