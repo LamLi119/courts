@@ -212,6 +212,29 @@ onUnmounted(() => {
 });
 
 const venueImageAlt = computed(() => getVenueImageAlt(props.venue, props.language));
+
+/** Description + pricing share one panel with tabs when both exist. */
+const hasDescriptionText = computed(() => !!props.venue.description?.trim());
+
+const hasPricingDetail = computed(() => {
+  const p = props.venue.pricing;
+  if (!p) return false;
+  if (p.type === 'text' && p.content?.trim()) return true;
+  return !!p.imageUrl?.trim();
+});
+
+const showDetailTabs = computed(() => hasDescriptionText.value && hasPricingDetail.value);
+
+const detailTab = ref<'description' | 'pricing'>('description');
+
+watch(
+  () => [props.venue.id, hasDescriptionText.value, hasPricingDetail.value] as const,
+  () => {
+    if (hasDescriptionText.value) detailTab.value = 'description';
+    else if (hasPricingDetail.value) detailTab.value = 'pricing';
+  },
+  { immediate: true }
+);
 </script>
 
 <template>
@@ -314,23 +337,53 @@ const venueImageAlt = computed(() => getVenueImageAlt(props.venue, props.languag
                 🥅 {{ venue.court_count }} {{ venue.court_count === 1 ? t('court') : t('courts') }}
               </span>
             </div>
-            <div v-if="venue.description">
-              <h3 class="text-[14px] uppercase tracking-widest font-bold mb-2">{{ t('description') }}</h3>
-              <div class="text-[14px] font-[400] leading-relaxed description-html pr-2 pl-2"
-                :class="darkMode ? 'text-gray-300' : 'text-gray-600'" v-html="sanitizeDescription(venue.description)">
+            <div v-if="hasDescriptionText || hasPricingDetail"
+              class="rounded-[12px] border overflow-hidden"
+              :class="darkMode ? 'border-gray-700 bg-gray-800/40' : 'border-gray-200 bg-gray-50/80'">
+              <div v-if="showDetailTabs" class="flex border-b"
+                :class="darkMode ? 'border-gray-700' : 'border-gray-200'" role="tablist"
+                :aria-label="language === 'en' ? 'Venue details' : '場地資訊'">
+                <button type="button" role="tab" :aria-selected="detailTab === 'description'"
+                  class="flex-1 py-3 px-3 text-[12px] md:text-[13px] font-bold uppercase tracking-wider transition-colors"
+                  :class="detailTab === 'description'
+                    ? (darkMode ? 'bg-gray-800 text-white shadow-[inset_0_-2px_0_0_#007a67]' : 'bg-white text-gray-900 shadow-[inset_0_-2px_0_0_#007a67]')
+                    : (darkMode ? 'text-gray-400 hover:bg-gray-800/80' : 'text-gray-500 hover:bg-gray-100')"
+                  @click="detailTab = 'description'">
+                  {{ t('description') }}
+                </button>
+                <button type="button" role="tab" :aria-selected="detailTab === 'pricing'"
+                  class="flex-1 py-3 px-3 text-[12px] md:text-[13px] font-bold uppercase tracking-wider transition-colors"
+                  :class="detailTab === 'pricing'
+                    ? (darkMode ? 'bg-gray-800 text-white shadow-[inset_0_-2px_0_0_#007a67]' : 'bg-white text-gray-900 shadow-[inset_0_-2px_0_0_#007a67]')
+                    : (darkMode ? 'text-gray-400 hover:bg-gray-800/80' : 'text-gray-500 hover:bg-gray-100')"
+                  @click="detailTab = 'pricing'">
+                  {{ t('pricing') }}
+                </button>
               </div>
-            </div>
-            <div v-if="venue.pricing.type === 'text' && venue.pricing.content" class="space-y-2">
-              <h3 class="text-[11px] uppercase tracking-widest font-bold opacity-60">{{ t('pricing') }}</h3>
-              <div v-if="venue.pricing.type === 'text' && venue.pricing.content"
-                class="p-4 rounded-[12px] border text-[14px] description-html pr-2 pl-2"
-                :class="darkMode ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-gray-50 border-gray-200 text-gray-700'"
-                v-html="sanitizeDescription(venue.pricing.content)"></div>
-              <button v-else-if="venue.pricing.imageUrl" type="button"
-                class="w-full rounded-[12px] overflow-hidden border dark:border-gray-600 cursor-pointer block text-left"
-                @click="openFullscreen(venue.pricing.imageUrl!)">
-                <img :src="venue.pricing.imageUrl" class="w-full" alt="Pricing" />
-              </button>
+              <div v-else class="px-4 pt-3 pb-1 border-b"
+                :class="darkMode ? 'border-gray-700' : 'border-gray-200'">
+                <h3 class="text-[11px] uppercase tracking-widest font-bold opacity-70 m-0">
+                  {{ hasDescriptionText ? t('description') : t('pricing') }}
+                </h3>
+              </div>
+              <div class="p-4">
+                <div v-show="hasDescriptionText && (!showDetailTabs || detailTab === 'description')"
+                  class="text-[14px] font-[400] leading-relaxed description-html pr-2 pl-2"
+                  :class="darkMode ? 'text-gray-300' : 'text-gray-600'"
+                  v-html="sanitizeDescription(venue.description)" />
+                <div v-show="hasPricingDetail && (!showDetailTabs || detailTab === 'pricing')" class="space-y-2">
+                  <div v-if="venue.pricing.type === 'text' && venue.pricing.content"
+                    class="text-[14px] description-html pr-2 pl-2 rounded-[8px]"
+                    :class="darkMode ? 'text-gray-300' : 'text-gray-700'"
+                    v-html="sanitizeDescription(venue.pricing.content)" />
+                  <button v-else-if="venue.pricing.imageUrl" type="button"
+                    class="w-full rounded-[12px] overflow-hidden border cursor-pointer block text-left"
+                    :class="darkMode ? 'border-gray-600' : 'border-gray-200'"
+                    @click="openFullscreen(venue.pricing.imageUrl!)">
+                    <img :src="venue.pricing.imageUrl" class="w-full" alt="Pricing" />
+                  </button>
+                </div>
+              </div>
             </div>
             <!-- Mobile view -->
             <div class="lg:hidden space-y-4 mt-4">

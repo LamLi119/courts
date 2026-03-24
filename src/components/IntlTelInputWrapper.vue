@@ -62,7 +62,7 @@ const filteredCountries = computed(() => {
   return countries.value.filter((c) =>
     c.label.toLowerCase().includes(q)
     || c.code.includes(q.replace(/^\+/, ''))
-    || c.flag.includes(q)
+    || c.iso2.toLowerCase().includes(q)
   );
 });
 
@@ -142,17 +142,17 @@ onMounted(async () => {
     class="w-full rounded-xl border flex items-center overflow-visible focus-within:ring-2 focus-within:ring-[#007a67] relative"
     :class="props.darkMode ? 'bg-gray-900 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'"
   >
-    <div class="w-[138px] border-r relative border-inherit">
+    <div class="w-[52px] shrink-0 md:w-[138px] border-r relative border-inherit">
       <button
         type="button"
-        class="w-full px-3 py-3 text-left font-bold bg-transparent outline-none flex items-center justify-between"
+        class="w-full px-1.5 py-3 md:px-3 font-bold bg-transparent outline-none flex items-center justify-center gap-0.5 md:justify-between md:gap-2"
         @click="openDropdown"
       >
-        <span class="inline-flex items-center gap-2">
+        <span class="inline-flex items-center gap-1 md:gap-2">
           <img :src="flagUrl(selectedCountry.iso2)" alt="" class="w-5 h-[14px] object-cover rounded-sm" />
-          <span>{{ `+${selectedCountry.code}` }}</span>
+          <span class="hidden md:inline">{{ `+${selectedCountry.code}` }}</span>
         </span>
-        <span class="text-xs opacity-70">▼</span>
+        <span class="text-[10px] leading-none opacity-70 md:text-xs">▼</span>
       </button>
 
       <div

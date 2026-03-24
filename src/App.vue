@@ -292,8 +292,8 @@ const handleAdminLogin = async () => {
   if (isAdminLoggingIn.value) return;
   isAdminLoggingIn.value = true;
   try {
-    const API_BASE = import.meta.env.VITE_API_URL ?? '';
-    const base = API_BASE.replace(/\/$/, '');
+    const API_BASE = (import.meta.env.VITE_API_URL ?? '').trim();
+    const base = API_BASE.replace(/\/+$/, '').replace(/(?:\/api)+$/, '');
     const url = `${base}/api/auth/login`;
     const res = await fetch(url, {
       method: 'POST',
