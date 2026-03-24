@@ -3,14 +3,14 @@ import { Language } from '../../types';
 
 export const translations = {
     en: {
-        title: "HK Pickleball Finder",
+        title: "Courts",
         search: "Search venues...",
         findEvents: "Find events",
         multiVenueMapView: "Multi-Venue Map View",
         filter: "Filter",
         mtrStation: "MTR Station",
         walkingDistance: "Walking Distance",
-        min: "min",
+        min: "min", 
         admin: "Admin",
         login: "Login",
         logout: "Logout",
@@ -95,7 +95,7 @@ export const translations = {
         typePricingDetails: "Type pricing details...",
     },
     zh: {
-        title: "香港匹克球場地搜尋",
+        title: "場地搜尋",
         search: "搜尋場地...",
         findEvents: "尋找活動",
         multiVenueMapView: "多場地地圖",

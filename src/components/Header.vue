@@ -1,16 +1,19 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router';
 import type { Language, AppTab } from '../../types';
-import logoUrl from '../assets/green-G.svg';
-
 const router = useRouter();
+
+const logoUrl = `${import.meta.env.BASE_URL}green-G.svg`;
 
 const props = defineProps<{
   language: Language;
   setLanguage: (l: Language) => void;
   isAdmin: boolean;
   onAdminClick: () => void;
+  onLoginClick: () => void;
   onLogout?: () => void;
+  showLogout?: boolean;
+  onUserLogout?: () => void | Promise<void>;
   darkMode: boolean;
   setDarkMode: (d: boolean) => void;
   t: (key: string) => string;
@@ -84,7 +87,18 @@ const openFindEvents = () => {
           </button>
 
         </div>
-        <button type="button" class="btn btn-nav-icon" @click="onAdminClick" aria-label="Admin">
+        <button
+          v-if="showLogout"
+          type="button"
+          class="btn btn-cta btn-cta-md hidden md:inline-flex px-4 py-2"
+          @click="onUserLogout && onUserLogout()"
+        >
+          {{ t('logout') }}
+        </button>
+        <button v-if="!showLogout && !isAdmin" type="button" class="btn btn-nav-icon" @click="onLoginClick" aria-label="Admin">
+          🔑
+        </button>
+        <button v-if="!showLogout && isAdmin" type="button" class="btn btn-nav-icon" @click="onAdminClick" aria-label="Admin">
           🔑
         </button>
       </div>

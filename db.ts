@@ -139,7 +139,11 @@ function venueToRow(venue: Record<string, any>): Record<string, any> {
 async function apiFetch(path: string, options?: RequestInit): Promise<Response> {
   const base = API_BASE.replace(/\/$/, '');
   const url = path.startsWith('/') ? `${base}${path}` : `${base}/${path}`;
-  return fetch(url, { ...options, headers: { 'Content-Type': 'application/json', ...options?.headers } });
+  return fetch(url, {
+    ...options,
+    credentials: options?.credentials ?? 'include',
+    headers: { 'Content-Type': 'application/json', ...options?.headers }
+  });
 }
 
 export const db = {
