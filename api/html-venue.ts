@@ -28,7 +28,8 @@ export default async function handler(req: any, res: any) {
   }
 
   const url = new URL(req?.url || '/', 'http://localhost');
-  const slug = (url.searchParams.get('slug') || '').trim();
+  const rawSlug = (url.searchParams.get('slug') || '').trim();
+  const slug = rawSlug.replace(/^\/+|\/+$/g, '').split('/')[0];
   if (!slug) return sendJson(res, 400, { error: 'slug required' });
 
   const targetBase = process.env.PROXY_TARGET?.trim();
@@ -52,6 +53,8 @@ export default async function handler(req: any, res: any) {
       }
       res.statusCode = 200;
       res.setHeader('content-type', 'text/html; charset=utf-8');
+      res.setHeader('x-og-handler', 'html-venue');
+      res.setHeader('x-og-slug', slug);
       if (method === 'HEAD') return res.end();
       return res.end(html);
     }
@@ -85,6 +88,8 @@ export default async function handler(req: any, res: any) {
 
   res.statusCode = 200;
   res.setHeader('content-type', 'text/html; charset=utf-8');
+  res.setHeader('x-og-handler', 'html-venue');
+  res.setHeader('x-og-slug', slug);
   res.setHeader('cache-control', 'public, max-age=0, s-maxage=300, stale-while-revalidate=86400');
   if (method === 'HEAD') return res.end();
   res.end(out);
