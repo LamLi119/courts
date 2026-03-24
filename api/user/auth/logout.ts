@@ -1,2 +1,2 @@
-import proxyToBackend from '../../_vercelBackendProxy';
+import proxyToBackend from '../../../lib/vercelBackendProxy.js';
 export default proxyToBackend;
