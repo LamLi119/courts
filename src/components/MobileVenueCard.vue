@@ -78,7 +78,7 @@ const handleShare = async () => {
 
       <div class="self-start flex flex-col items-end justify-end">
         <div class="flex items-center gap-2">
-        <button type="button" aria-label="Share"
+        <button type="button" id="share-button" aria-label="Share"
         class="p-2.5 rounded-full mt-auto shadow-sm transition-all active:scale-90"
           :class="darkMode ? 'text-gray-300 hover:bg-gray-700' : 'bg-white/90 text-gray-600 hover:bg-gray-100'"
           @click="handleShare">

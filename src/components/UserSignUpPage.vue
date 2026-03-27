@@ -186,6 +186,7 @@ async function submitSignUp() {
 
             <button
               type="submit"
+              id="sign-up-button"
               class="w-full py-3 rounded-xl font-black shadow-sm transition-all active:scale-[0.99]"
               :class="canSubmit ? 'bg-[#007a67] text-white hover:brightness-110' : (darkMode ? 'bg-gray-700 text-gray-400 cursor-not-allowed' : 'bg-gray-200 text-gray-400 cursor-not-allowed')"
               :disabled="!canSubmit"

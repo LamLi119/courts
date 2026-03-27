@@ -146,7 +146,7 @@ const toggleExpand = (e: MouseEvent) => {
         {{ t('specialOffer') }}
       </span>
       <div class="absolute top-2 right-12">
-      <button type="button" aria-label="Share"
+      <button type="button" id="share-button" aria-label="Share"
         class="p-3 mr-2 rounded-full shadow-lg transition-all active:scale-90 rounded-[999px]"
           :class="darkMode ? 'text-gray-300 hover:bg-gray-700' : 'bg-white/90 text-gray-600 hover:bg-gray-100'"
           @click="handleShare">

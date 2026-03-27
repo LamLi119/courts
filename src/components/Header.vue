@@ -72,7 +72,7 @@ const openFindEvents = () => {
           {{ darkMode ? '☀️' : '🌙' }}
         </button>
 
-        <button type="button" class="btn btn-cta btn-cta-md hidden md:inline-flex px-4 py-2" @click="openFindEvents">
+        <button type="button" id="find-events-button" class="btn btn-cta btn-cta-md hidden md:inline-flex px-4 py-2" @click="openFindEvents">
           {{ t('findEvents') }}
         </button>
         <div class="flex rounded-[8px] p-1 border"
