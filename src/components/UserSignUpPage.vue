@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { computed, onMounted, ref } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import type { Language } from '../../types';
 import { useAuth } from '../composables/auth';
+import { useAuthStore } from '../stores/auth';
 import IntlTelInputWrapper from './IntlTelInputWrapper.vue';
 import authSideImageUrl from '../assets/auth_side.png';
 
@@ -14,7 +15,9 @@ const props = defineProps<{
   darkMode: boolean;
 }>();
 
+const route = useRoute();
 const router = useRouter();
+const authStore = useAuthStore();
 const { register, loading } = useAuth();
 
 const email = ref('');
@@ -72,11 +75,20 @@ async function submitSignUp() {
 
   try {
     await register(payload);
-    router.push('/');
+    const redirect = authStore.redirectPath && authStore.redirectPath !== '/' ? authStore.redirectPath : '/';
+    authStore.setRedirectPath('/');
+    router.push(redirect);
   } catch (e: any) {
     error.value = e?.message || (props.language === 'en' ? 'Registration failed.' : '註冊失敗。');
   }
 }
+
+onMounted(() => {
+  const redirectUrl = route.query.redirectUrl as string | undefined;
+  if (redirectUrl && typeof redirectUrl === 'string' && redirectUrl.startsWith('/') && !redirectUrl.startsWith('//')) {
+    authStore.setRedirectPath(redirectUrl);
+  }
+});
 
 </script>
 

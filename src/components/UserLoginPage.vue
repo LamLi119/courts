@@ -74,6 +74,11 @@ const onSignInWithGoogle = () => {
   window.location.href = googleSignInUrl;
 }
 
+const goToSignup = () => {
+  const redirect = authStore.redirectPath && authStore.redirectPath !== '/' ? authStore.redirectPath : '';
+  router.push(redirect ? { path: '/signup', query: { redirectUrl: redirect } } : '/signup');
+};
+
 onMounted(() => {
   const redirectUrl = route.query.redirectUrl as string | undefined;
   if (redirectUrl && typeof redirectUrl === 'string' && redirectUrl.startsWith('/') && !redirectUrl.startsWith('//')) {
@@ -218,7 +223,7 @@ onMounted(() => {
                 {{ language === 'en' ? 'Don\'t have an account?' : '未有帳戶？' }}
               </span>
               <a href="/signup" class="text-[14px] font-bold text-[#007a67] underline"
-                @click.prevent="router.push('/signup')">
+                @click.prevent="goToSignup">
                 {{ language === 'en' ? 'Sign up' : '註冊' }}
               </a>
             </div>

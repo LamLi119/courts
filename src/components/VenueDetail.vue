@@ -74,6 +74,8 @@ const goToLogin = () => {
     try {
       const path = window.location.pathname + window.location.search + window.location.hash;
       window.sessionStorage?.setItem('auth_redirect_path', path);
+      window.location.href = `/login?redirectUrl=${encodeURIComponent(path)}`;
+      return;
     } catch (_) {
       // ignore
     }
