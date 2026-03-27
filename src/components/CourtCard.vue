@@ -3,6 +3,7 @@ import { ref, computed } from 'vue';
 import type { Venue, Language } from '../../types';
 import { getStationDisplayName } from '../utils/mtrStations';
 import { getVenueImageAlt } from '../utils/seo';
+import { slugify } from '../utils/slugify';
 
 const props = defineProps<{
   venue: Venue;
@@ -21,7 +22,9 @@ const imageAlt = computed(() => getVenueImageAlt(props.venue));
 
 const shareFeedback = ref<string | null>(null);
 const handleShare = async () => {
-  const url = typeof window !== 'undefined' ? window.location.href : '';
+  const url = typeof window !== 'undefined'
+    ? `${window.location.origin}/venues/${slugify(props.venue.name)}`
+    : '';
   const title = props.venue.name;
   try {
     if (navigator.share) {
@@ -146,11 +149,11 @@ const toggleExpand = (e: MouseEvent) => {
         {{ t('specialOffer') }}
       </span>
       <div class="absolute top-2 right-12">
-      <button type="button" aria-label="Share"
+      <button type="button" id="share-button" aria-label="Share"
         class="p-3 mr-2 rounded-full shadow-lg transition-all active:scale-90 rounded-[999px]"
           :class="darkMode ? 'text-gray-300 hover:bg-gray-700' : 'bg-white/90 text-gray-600 hover:bg-gray-100'"
-          @click="handleShare">
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          @click.stop="handleShare">
+          <svg id="share-icon" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
           </svg>
         </button>

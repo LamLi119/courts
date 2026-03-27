@@ -136,6 +136,18 @@ function setCanonical(url: string): void {
   link.setAttribute('href', url);
 }
 
+function getReadableCurrentUrl(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    const { origin, pathname, search, hash } = window.location;
+    // Keep Unicode path readable in meta tags while preserving valid URL structure.
+    const readablePath = decodeURI(pathname);
+    return `${origin}${readablePath}${search}${hash}`;
+  } catch {
+    return window.location.href;
+  }
+}
+
 const DEFAULT_TITLE = `Courts Finder | Find Sports Courts in Hong Kong`;
 const DEFAULT_DESCRIPTION = `Find and book sports courts near MTR stations. Compare prices, amenities, and walking distance.`;
 /** Default share preview image (home page). Use absolute URL so crawlers see it when sharing site URL. */
@@ -149,7 +161,7 @@ export function applyVenueSeo(venue: Venue, baseUrl: string, lang: 'en' | 'zh' =
   const image = (venue.images && venue.images[0]) || '';
   const pageUrl =
     typeof window !== 'undefined'
-      ? window.location.href
+      ? getReadableCurrentUrl()
       : `${baseUrl.replace(/\/$/, '')}/venues/${slugify(venue.name)}`;
   const origin = typeof window !== 'undefined' ? window.location.origin : baseUrl.replace(/\/$/, '');
 
@@ -241,7 +253,7 @@ function injectVenueJsonLd(venue: Venue, baseUrl: string): void {
   const imageUrl = image && image.startsWith('http') ? image : image ? new URL(image, baseUrl).href : undefined;
   const pageUrl =
     typeof window !== 'undefined'
-      ? window.location.href
+      ? getReadableCurrentUrl()
       : `${baseUrl.replace(/\/$/, '')}/venues/${slugify(venue.name)}`;
 
   const jsonLd: Record<string, unknown> = {

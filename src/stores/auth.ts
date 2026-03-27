@@ -24,7 +24,9 @@ const state = reactive<AuthState>({
 	user: null,
 	isLoading: false,
 	isInitialized: false,
-	redirectPath: "/",
+	redirectPath: typeof window !== "undefined"
+		? (sessionStorage.getItem(REDIRECT_PATH_STORAGE_KEY) || "/")
+		: "/",
 	isClient: typeof window !== "undefined",
 });
 

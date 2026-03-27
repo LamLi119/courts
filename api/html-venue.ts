@@ -31,11 +31,17 @@ export default async function handler(req: any, res: any) {
   const rawSlug = (url.searchParams.get('slug') || '').trim();
   const slug = rawSlug.replace(/^\/+|\/+$/g, '').split('/')[0];
   if (!slug) return sendJson(res, 400, { error: 'slug required' });
+  let decodedSlug = slug;
+  try {
+    decodedSlug = decodeURIComponent(slug);
+  } catch {
+    decodedSlug = slug;
+  }
 
   const targetBase = process.env.PROXY_TARGET?.trim();
   if (!targetBase) return sendJson(res, 500, { error: 'Missing PROXY_TARGET env var' });
 
-  const upstreamUrl = `${targetBase.replace(/\/$/, '')}/api/venues/slug/${encodeURIComponent(slug)}`;
+  const upstreamUrl = `${targetBase.replace(/\/$/, '')}/api/venues/slug/${encodeURIComponent(decodedSlug)}`;
   const headers: Record<string, string> = {};
   if (process.env.PROXY_SECRET) headers['x-proxy-secret'] = process.env.PROXY_SECRET;
 
@@ -73,9 +79,9 @@ export default async function handler(req: any, res: any) {
   const proto = xfProto || 'https';
   const origin = host ? `${proto}://${host}` : '';
 
-  const pageUrl = origin
-    ? new URL(`/venues/${slug.replace(/^\/+/, '')}`, `${origin}/`).href
-    : `/venues/${slug.replace(/^\/+/, '')}`;
+  const normalizedSlug = decodedSlug.replace(/^\/+/, '');
+  const pagePath = `/venues/${normalizedSlug}`;
+  const pageUrl = origin ? `${origin.replace(/\/$/, '')}${pagePath}` : pagePath;
 
   const meta = buildVenueOgMeta(venue, { pageUrl, origin: origin || 'https://courts.theground.io', lang: 'en' });
   let html: string;

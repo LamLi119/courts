@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import type { Language } from '../../types';
 import { useAuth } from '../composables/auth';
+import { useAuthStore } from '../stores/auth';
 import authSideImageUrl from '../assets/auth_side.png';
 
 const props = defineProps<{
@@ -12,6 +13,7 @@ const props = defineProps<{
 }>();
 
 const router = useRouter();
+const authStore = useAuthStore();
 const { session, loading } = useAuth();
 
 const accessToken = ref('');
@@ -31,7 +33,9 @@ async function saveAndLogin() {
 
     const u = await session();
     if (!u) throw new Error(props.language === 'en' ? 'Invalid token' : 'Token 無效');
-    router.push('/');
+    const redirect = authStore.redirectPath && authStore.redirectPath !== '/' ? authStore.redirectPath : '/';
+    authStore.setRedirectPath('/');
+    router.push(redirect);
   } catch (e: any) {
     error.value = e?.message || (props.language === 'en' ? 'Login failed' : '登入失敗');
   }
