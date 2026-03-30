@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import type { Venue, Language } from '../../types';
 import { getStationDisplayName } from '../utils/mtrStations';
 import { applyVenueSeo, resetSeoToDefault, getSportTypeLabel, getVenueImageAlt } from '../utils/seo';
+import { slugify } from '../utils/slugify';
 import ImageCarousel from './ImageCarousel.vue';
 import { useAuth } from '../composables/auth';
 
@@ -69,19 +70,38 @@ const props = defineProps<{
 const { user } = useAuth();
 const canSeeSpecialOffer = computed(() => props.isAdmin || !!user.value);
 
+/** Canonical detail URL for this venue (mobile list/map often keeps browser on `/`). */
+function venueDetailHref(): string {
+  const rawBase = import.meta.env.BASE_URL || '/';
+  const base = rawBase.replace(/\/$/, '');
+  const slug = slugify(props.venue.name);
+  return base ? `${base}/venues/${slug}` : `/venues/${slug}`;
+}
+
+function loginPageHref(): string {
+  const b = import.meta.env.BASE_URL || '/';
+  return b.endsWith('/') ? `${b}login` : `${b}/login`;
+}
+
 const goToLogin = () => {
   if (typeof window !== 'undefined') {
     try {
-      const path = window.location.pathname + window.location.search + window.location.hash;
+      const pathname = window.location.pathname || '';
+      const search = window.location.search || '';
+      const hash = window.location.hash || '';
+      const canonical = venueDetailHref();
+      const slug = slugify(props.venue.name);
+      // Use current path only when it already is this app’s venue route (e.g. deep link / desktop).
+      const onVenueRoute = pathname === canonical || pathname.endsWith(`/${slug}`);
+      const path = (onVenueRoute ? pathname : canonical) + search + hash;
       window.sessionStorage?.setItem('auth_redirect_path', path);
-      window.location.href = `/login?redirectUrl=${encodeURIComponent(path)}`;
+      window.location.href = `${loginPageHref()}?redirectUrl=${encodeURIComponent(path)}`;
       return;
     } catch (_) {
       // ignore
     }
   }
-  // Route is not available in this component; use location for simplicity.
-  if (typeof window !== 'undefined') window.location.href = '/login';
+  if (typeof window !== 'undefined') window.location.href = loginPageHref();
 };
 
 const allDetailImages = computed(() => [...(props.venue.images || [])]);
@@ -388,7 +408,7 @@ watch(
             <div class="lg:hidden space-y-4 mt-4">
               <!-- Mobile: Contact button -->
               <div class="flex justify-end">
-                <button type="button" :id="`${venue.id}-contact-button`" class="btn btn-ghost shrink-0"
+                <button type="button" :id="`${venue.id}-contact-button-mobile`" class="btn btn-ghost shrink-0"
                   @click="handleWhatsApp">
                   <svg class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                     <path
@@ -427,7 +447,7 @@ watch(
                   {{ language === 'en' ? 'Special offer' : '特別優惠' }}
                 </h3>
                 <button v-if="venue.membership_join_link && canSeeSpecialOffer" type="button"
-                  :id="`${venue.id}-special-offer-button`"
+                  :id="`${venue.id}-special-offer-button-mobile`"
                   class="text-[12px] font-[700] text-[#007a67] uppercase w-1/2 text-right hover:underline"
                   @click="openJoinMembership">
                   {{ language === 'en' ? 'Get the offer' : '獲取優惠' }} →
@@ -441,7 +461,7 @@ watch(
                   :style="!canSeeSpecialOffer ? 'filter: blur(6px); user-select: none; pointer-events: none;' : ''"
                   v-html="sanitizeDescription(venue.membership_description)"></div>
                 <div v-if="!canSeeSpecialOffer" class="absolute inset-0 flex items-center justify-center">
-                  <button type="button" :id="`${venue.id}-login-to-view-button`"
+                  <button type="button" :id="`${venue.id}-login-to-view-button-mobile`"
                     class="px-4 py-2 rounded-xl font-black shadow-xl bg-[#007a67] text-white hover:brightness-110"
                     @click="goToLogin">
                     {{ language === 'en' ? 'Login to view' : '登入以查看' }}
@@ -528,7 +548,7 @@ watch(
                 <span class="text-[14px] opacity-60">/{{ language === 'en' ? 'hr' : '小時' }}</span>
               </div>
             </div>
-            <button type="button" :id="`${venue.id}-contact-button`"
+            <button type="button" :id="`${venue.id}-contact-button-desktop`"
               class="btn btn-ghost btn-cta-block btn-cta-md w-full" @click="handleWhatsApp">
               <svg class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                 <path
@@ -573,7 +593,7 @@ watch(
                   :style="!canSeeSpecialOffer ? 'filter: blur(6px); user-select: none; pointer-events: none;' : ''"
                   v-html="sanitizeDescription(venue.membership_description)" />
                 <div v-if="!canSeeSpecialOffer" class="absolute inset-0 flex items-center justify-center">
-                  <button type="button" :id="`${venue.id}-login-to-view-button`"
+                  <button type="button" :id="`${venue.id}-login-to-view-button-desktop`"
                     class="px-4 py-2 rounded-xl font-black shadow-xl bg-[#007a67] text-white hover:brightness-110"
                     @click="goToLogin">
                     {{ language === 'en' ? 'Login to view' : '登入以查看' }}
@@ -583,7 +603,7 @@ watch(
             </div>
 
             <button v-if="canSeeSpecialOffer && venue.membership_enabled && venue.membership_join_link" type="button"
-              :id="`${venue.id}-special-offer-button`"
+              :id="`${venue.id}-special-offer-button-desktop`"
               class="flex-shrink-0 w-full py-4 rounded-[12px] text-white font-[900] text-lg bg-[#007a67]"
               @click="openSocialLink(venue.membership_join_link)">
               {{ t('joinMembership') }}
@@ -609,13 +629,13 @@ watch(
           <span class="text-[14px] opacity-60">/{{ t('hour') }}</span>
         </div>
         <div v-if="!canSeeSpecialOffer" class="flex items-center justify-center max-w-[200px]">
-          <button type="button" :id="`${venue.id}-login-to-view-button`" class="btn btn-cta flex-shrink-0 max-w-[200px] py-3 px-4"
+          <button type="button" :id="`${venue.id}-login-to-view-button-fixed`" class="btn btn-cta flex-shrink-0 max-w-[200px] py-3 px-4"
             @click="goToLogin">
             {{ t('joinMembership') }}
           </button>
         </div>
         <button v-if="canSeeSpecialOffer && venue.membership_enabled && venue.membership_join_link" type="button"
-          :id="`${venue.id}-special-offer-button`" class="btn btn-cta flex-shrink-0 max-w-[200px] py-3 px-4"
+          :id="`${venue.id}-special-offer-button-fixed`" class="btn btn-cta flex-shrink-0 max-w-[200px] py-3 px-4"
           @click="openSocialLink(venue.membership_join_link)">
           {{ t('joinMembership') }}
         </button>
