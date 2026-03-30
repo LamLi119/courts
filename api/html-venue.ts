@@ -31,6 +31,8 @@ export default async function handler(req: any, res: any) {
   const rawSlug = (url.searchParams.get('slug') || '').trim();
   const slug = rawSlug.replace(/^\/+|\/+$/g, '').split('/')[0];
   if (!slug) return sendJson(res, 400, { error: 'slug required' });
+  // Header values must be ASCII-safe in Node; keep a percent-encoded version for debugging.
+  const safeSlugHeader = encodeURIComponent(slug);
   let decodedSlug = slug;
   try {
     decodedSlug = decodeURIComponent(slug);
@@ -60,7 +62,7 @@ export default async function handler(req: any, res: any) {
       res.statusCode = 200;
       res.setHeader('content-type', 'text/html; charset=utf-8');
       res.setHeader('x-og-handler', 'html-venue');
-      res.setHeader('x-og-slug', slug);
+      res.setHeader('x-og-slug', safeSlugHeader);
       if (method === 'HEAD') return res.end();
       return res.end(html);
     }
@@ -95,7 +97,7 @@ export default async function handler(req: any, res: any) {
   res.statusCode = 200;
   res.setHeader('content-type', 'text/html; charset=utf-8');
   res.setHeader('x-og-handler', 'html-venue');
-  res.setHeader('x-og-slug', slug);
+  res.setHeader('x-og-slug', safeSlugHeader);
   res.setHeader('cache-control', 'public, max-age=0, s-maxage=300, stale-while-revalidate=86400');
   if (method === 'HEAD') return res.end();
   res.end(out);
