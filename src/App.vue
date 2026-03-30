@@ -28,7 +28,11 @@ const showLogout = computed(() => !!authUser.value);
 
 const handleUserLogout = async () => {
   await userLogout();
-  router.push('/');
+  // Keep the user on the current page (e.g. venue detail) after logout.
+  // Only redirect away if we're already on an auth page.
+  if (route.name === 'login' || route.name === 'signup' || route.name === 'token-login') {
+    router.replace('/');
+  }
 };
 
 onMounted(() => {

@@ -96,9 +96,11 @@ const displayListVenues = computed(() => (props.listVenues != null ? props.listV
 const showDetailPage = ref(false);
 
 watch(
-  () => props.forceShowDetail,
-  (force) => {
-    if (force && props.selectedVenue) showDetailPage.value = true;
+  // When landing on /venues/:slug, selectedVenue can be null initially (data loads async).
+  // Re-run when selectedVenue becomes available so mobile actually shows the detail page.
+  () => ({ force: props.forceShowDetail, selectedId: props.selectedVenue?.id ?? null }),
+  ({ force, selectedId }) => {
+    if (force && selectedId != null) showDetailPage.value = true;
   },
   { immediate: true }
 );
@@ -122,6 +124,9 @@ watch(
     if (val === 'map') {
       selectInitialVenue();
     } else if (val === 'list') {
+      // If we're on a deep link (/venues/:slug), don't clear the selection/detail state.
+      // Otherwise mobile would stay on the list even though the route is a venue detail page.
+      if (props.forceShowDetail) return;
       showDetailPage.value = false;
       props.onSelectVenue(null);
     }

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { useRouter } from 'vue-router';
 import type { Venue, Language } from '../../types';
 import { getStationDisplayName } from '../utils/mtrStations';
 import { applyVenueSeo, resetSeoToDefault, getSportTypeLabel, getVenueImageAlt } from '../utils/seo';
@@ -67,6 +68,8 @@ const props = defineProps<{
   onEdit: () => void;
 }>();
 
+const router = useRouter();
+
 const { user } = useAuth();
 const canSeeSpecialOffer = computed(() => props.isAdmin || !!user.value);
 
@@ -78,30 +81,23 @@ function venueDetailHref(): string {
   return base ? `${base}/venues/${slug}` : `/venues/${slug}`;
 }
 
-function loginPageHref(): string {
-  const b = import.meta.env.BASE_URL || '/';
-  return b.endsWith('/') ? `${b}login` : `${b}/login`;
-}
-
 const goToLogin = () => {
-  if (typeof window !== 'undefined') {
-    try {
-      const pathname = window.location.pathname || '';
-      const search = window.location.search || '';
-      const hash = window.location.hash || '';
-      const canonical = venueDetailHref();
-      const slug = slugify(props.venue.name);
-      // Use current path only when it already is this app’s venue route (e.g. deep link / desktop).
-      const onVenueRoute = pathname === canonical || pathname.endsWith(`/${slug}`);
-      const path = (onVenueRoute ? pathname : canonical) + search + hash;
-      window.sessionStorage?.setItem('auth_redirect_path', path);
-      window.location.href = `${loginPageHref()}?redirectUrl=${encodeURIComponent(path)}`;
-      return;
-    } catch (_) {
-      // ignore
-    }
+  // Use SPA navigation so mobile back/gesture doesn't bounce to /login unexpectedly.
+  if (typeof window === 'undefined') return;
+  const pathname = window.location.pathname || '';
+  const search = window.location.search || '';
+  const hash = window.location.hash || '';
+  const canonical = venueDetailHref();
+  const slug = slugify(props.venue.name);
+  // Use current path only when it already is this app’s venue route (e.g. deep link / desktop).
+  const onVenueRoute = pathname === canonical || pathname.endsWith(`/${slug}`);
+  const path = (onVenueRoute ? pathname : canonical) + search + hash;
+  try {
+    window.sessionStorage?.setItem('auth_redirect_path', path);
+  } catch {
+    // ignore
   }
-  if (typeof window !== 'undefined') window.location.href = loginPageHref();
+  router.push({ path: '/login', query: { redirectUrl: path } });
 };
 
 const allDetailImages = computed(() => [...(props.venue.images || [])]);
@@ -548,7 +544,7 @@ watch(
                 <span class="text-[14px] opacity-60">/{{ language === 'en' ? 'hr' : '小時' }}</span>
               </div>
             </div>
-            <button type="button" :id="`${venue.name}-contact-button-desktop`"
+            <button type="button" :id="`${venue.name}-contact-button`"
               class="btn btn-ghost btn-cta-block btn-cta-md w-full" @click="handleWhatsApp">
               <svg class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                 <path
