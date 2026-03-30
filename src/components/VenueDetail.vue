@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import type { Venue, Language } from '../../types';
 import { getStationDisplayName } from '../utils/mtrStations';
 import { applyVenueSeo, resetSeoToDefault, getSportTypeLabel, getVenueImageAlt } from '../utils/seo';
+import { slugify } from '../utils/slugify';
 import ImageCarousel from './ImageCarousel.vue';
 import { useAuth } from '../composables/auth';
 
@@ -69,19 +70,38 @@ const props = defineProps<{
 const { user } = useAuth();
 const canSeeSpecialOffer = computed(() => props.isAdmin || !!user.value);
 
+/** Canonical detail URL for this venue (mobile list/map often keeps browser on `/`). */
+function venueDetailHref(): string {
+  const rawBase = import.meta.env.BASE_URL || '/';
+  const base = rawBase.replace(/\/$/, '');
+  const slug = slugify(props.venue.name);
+  return base ? `${base}/venues/${slug}` : `/venues/${slug}`;
+}
+
+function loginPageHref(): string {
+  const b = import.meta.env.BASE_URL || '/';
+  return b.endsWith('/') ? `${b}login` : `${b}/login`;
+}
+
 const goToLogin = () => {
   if (typeof window !== 'undefined') {
     try {
-      const path = window.location.pathname + window.location.search + window.location.hash;
+      const pathname = window.location.pathname || '';
+      const search = window.location.search || '';
+      const hash = window.location.hash || '';
+      const canonical = venueDetailHref();
+      const slug = slugify(props.venue.name);
+      // Use current path only when it already is this app’s venue route (e.g. deep link / desktop).
+      const onVenueRoute = pathname === canonical || pathname.endsWith(`/${slug}`);
+      const path = (onVenueRoute ? pathname : canonical) + search + hash;
       window.sessionStorage?.setItem('auth_redirect_path', path);
-      window.location.href = `/login?redirectUrl=${encodeURIComponent(path)}`;
+      window.location.href = `${loginPageHref()}?redirectUrl=${encodeURIComponent(path)}`;
       return;
     } catch (_) {
       // ignore
     }
   }
-  // Route is not available in this component; use location for simplicity.
-  if (typeof window !== 'undefined') window.location.href = '/login';
+  if (typeof window !== 'undefined') window.location.href = loginPageHref();
 };
 
 const allDetailImages = computed(() => [...(props.venue.images || [])]);
@@ -285,8 +305,8 @@ watch(
         <button type="button" id="share-button" class="btn btn-utility btn-utility-round" aria-label="Share"
           :class="darkMode ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-100'"
           @click="handleShare">
-          <svg id="share-icon" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"
-            stroke-width="2">
+          <svg :id="`${venue.id}-share-icon`" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none"
+            viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round"
               d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
           </svg>
@@ -339,12 +359,10 @@ watch(
                 🥅 {{ venue.court_count }} {{ venue.court_count === 1 ? t('court') : t('courts') }}
               </span>
             </div>
-            <div v-if="hasDescriptionText || hasPricingDetail"
-              class="rounded-[12px] border overflow-hidden"
+            <div v-if="hasDescriptionText || hasPricingDetail" class="rounded-[12px] border overflow-hidden"
               :class="darkMode ? 'border-gray-700 bg-gray-800/40' : 'border-gray-200 bg-gray-50/80'">
-              <div v-if="showDetailTabs" class="flex border-b"
-                :class="darkMode ? 'border-gray-700' : 'border-gray-200'" role="tablist"
-                :aria-label="language === 'en' ? 'Venue details' : '場地資訊'">
+              <div v-if="showDetailTabs" class="flex border-b" :class="darkMode ? 'border-gray-700' : 'border-gray-200'"
+                role="tablist" :aria-label="language === 'en' ? 'Venue details' : '場地資訊'">
                 <button type="button" role="tab" :aria-selected="detailTab === 'description'"
                   class="flex-1 py-3 px-3 text-[12px] md:text-[13px] font-bold uppercase tracking-wider transition-colors"
                   :class="detailTab === 'description'
@@ -362,8 +380,7 @@ watch(
                   {{ t('pricing') }}
                 </button>
               </div>
-              <div v-else class="px-4 pt-3 pb-1 border-b"
-                :class="darkMode ? 'border-gray-700' : 'border-gray-200'">
+              <div v-else class="px-4 pt-3 pb-1 border-b" :class="darkMode ? 'border-gray-700' : 'border-gray-200'">
                 <h3 class="text-[11px] uppercase tracking-widest font-bold opacity-70 m-0">
                   {{ hasDescriptionText ? t('description') : t('pricing') }}
                 </h3>
@@ -391,7 +408,8 @@ watch(
             <div class="lg:hidden space-y-4 mt-4">
               <!-- Mobile: Contact button -->
               <div class="flex justify-end">
-                <button type="button" id="contact-button" class="btn btn-ghost shrink-0" @click="handleWhatsApp">
+                <button type="button" :id="`${venue.id}-contact-button-mobile`" class="btn btn-ghost shrink-0"
+                  @click="handleWhatsApp">
                   <svg class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                     <path
                       d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
@@ -400,14 +418,16 @@ watch(
                 </button>
               </div>
               <!-- Mobile: Location -->
-              <div v-if="venue.address && venue.address.trim() !== ''" class="lg:hidden pt-4 mt-2 mb-4 border-t border-gray-300">
+              <div v-if="venue.address && venue.address.trim() !== ''"
+                class="lg:hidden pt-4 mt-2 mb-4 border-t border-gray-300">
                 <div class="flex justify-between w-full">
                   <h3 class="uppercase tracking-widest font-bold opacity-90"
-                  :class="language === 'en' ? 'text-[12px]' : 'text-[14px]'">
+                    :class="language === 'en' ? 'text-[12px]' : 'text-[14px]'">
                     {{ t('location') }}
                   </h3>
 
-                  <button type="button" id="google-maps-button" class="btn btn-text btn-sm w-1/2" @click="openGoogleMaps">
+                  <button type="button" id="google-maps-button" class="btn btn-text btn-sm w-1/2"
+                    @click="openGoogleMaps">
                     📍 {{ t('openInGoogleMaps') }}
                   </button>
 
@@ -420,12 +440,15 @@ watch(
 
                 </div>
               </div>
-              <div v-if="venue.membership_enabled && (venue.membership_description || venue.membership_join_link)" class="flex justify-between w-full pt-4 mt-2 mb-4 border-t border-gray-300">
+              <div v-if="venue.membership_enabled && (venue.membership_description || venue.membership_join_link)"
+                class="flex justify-between w-full pt-4 mt-2 mb-4 border-t border-gray-300">
                 <h3 class="uppercase tracking-widest font-bold opacity-90"
-                :class="language === 'en' ? 'text-[12px]' : 'text-[14px]'">
+                  :class="language === 'en' ? 'text-[12px]' : 'text-[14px]'">
                   {{ language === 'en' ? 'Special offer' : '特別優惠' }}
                 </h3>
-                <button v-if="venue.membership_join_link && canSeeSpecialOffer" type="button" id="special-offer-button" class="text-[12px] font-[700] text-[#007a67] uppercase w-1/2 text-right hover:underline"
+                <button v-if="venue.membership_join_link && canSeeSpecialOffer" type="button"
+                  :id="`${venue.id}-special-offer-button-mobile`"
+                  class="text-[12px] font-[700] text-[#007a67] uppercase w-1/2 text-right hover:underline"
                   @click="openJoinMembership">
                   {{ language === 'en' ? 'Get the offer' : '獲取優惠' }} →
                 </button>
@@ -438,12 +461,9 @@ watch(
                   :style="!canSeeSpecialOffer ? 'filter: blur(6px); user-select: none; pointer-events: none;' : ''"
                   v-html="sanitizeDescription(venue.membership_description)"></div>
                 <div v-if="!canSeeSpecialOffer" class="absolute inset-0 flex items-center justify-center">
-                  <button
-                    type="button"
-                    id="login-to-view-button"
+                  <button type="button" :id="`${venue.id}-login-to-view-button-mobile`"
                     class="px-4 py-2 rounded-xl font-black shadow-xl bg-[#007a67] text-white hover:brightness-110"
-                    @click="goToLogin"
-                  >
+                    @click="goToLogin">
                     {{ language === 'en' ? 'Login to view' : '登入以查看' }}
                   </button>
                 </div>
@@ -454,7 +474,7 @@ watch(
               <div class="hidden lg:block space-y-3 pt-6 border-t"
                 :class="darkMode ? 'border-gray-700' : 'border-gray-200'">
                 <h3 class="uppercase tracking-widest font-bold opacity-90"
-                :class="language === 'en' ? 'text-[14px]' : 'text-[16px]'">
+                  :class="language === 'en' ? 'text-[14px]' : 'text-[16px]'">
                   {{ language === 'en' ? 'Social links' : '社群連結' }}
                 </h3>
                 <div class="space-y-2">
@@ -480,7 +500,7 @@ watch(
               <template v-if="socialLinksList().length > 0">
                 <div class="space-y-2">
                   <h3 class="uppercase tracking-widest font-bold opacity-90"
-                  :class="language === 'en' ? 'text-[12px]' : 'text-[14px]'">
+                    :class="language === 'en' ? 'text-[12px]' : 'text-[14px]'">
                     {{ language === 'en' ? 'Social links' : '社群連結' }}
                   </h3>
                   <div class="space-y-2">
@@ -507,11 +527,12 @@ watch(
 
         <!-- Desktop: right sidebar -->
         <div class="hidden lg:block lg:col-span-1">
-          <div v-if="venue.address && venue.address.trim() !== ''" class="sticky top-24 space-y-6 p-8 rounded-[16px] shadow-2xl border"
+          <div v-if="venue.address && venue.address.trim() !== ''"
+            class="sticky top-24 space-y-6 p-8 rounded-[16px] shadow-2xl border"
             :class="darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'">
             <div class="flex items-center justify-between gap-4 max-w-lg mx-auto mb-4">
               <span class="uppercase tracking-widest font-bold opacity-90 whitespace-nowrap"
-              :class="language === 'en' ? 'text-[14px]' : 'text-[16px]'">
+                :class="language === 'en' ? 'text-[14px]' : 'text-[16px]'">
                 {{ language === 'en' ? 'Price' : '價格' }}
               </span>
               <div class="flex items-baseline gap-1 min-w-0">
@@ -527,7 +548,8 @@ watch(
                 <span class="text-[14px] opacity-60">/{{ language === 'en' ? 'hr' : '小時' }}</span>
               </div>
             </div>
-            <button type="button" id="contact-button" class="btn btn-ghost btn-cta-block btn-cta-md w-full" @click="handleWhatsApp">
+            <button type="button" :id="`${venue.id}-contact-button-desktop`"
+              class="btn btn-ghost btn-cta-block btn-cta-md w-full" @click="handleWhatsApp">
               <svg class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                 <path
                   d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
@@ -538,11 +560,13 @@ watch(
             <div class="space-y-4">
               <div v-if="venue.address && venue.address.trim() !== ''" class="flex justify-between w-full">
                 <h3 class="uppercase tracking-widest font-bold opacity-90"
-                :class="language === 'en' ? 'text-[14px]' : 'text-[16px]'">
+                  :class="language === 'en' ? 'text-[14px]' : 'text-[16px]'">
                   {{ t('location') }}
                 </h3>
 
-                <button type="button" class="text-[12px] font-[700] text-[#007a67] uppercase w-1/2 text-right hover:font-bold hover:underline" @click="openGoogleMaps">
+                <button type="button"
+                  class="text-[12px] font-[700] text-[#007a67] uppercase w-1/2 text-right hover:font-bold hover:underline"
+                  @click="openGoogleMaps">
                   📍 {{ t('openInGoogleMaps') }}
                 </button>
 
@@ -569,21 +593,17 @@ watch(
                   :style="!canSeeSpecialOffer ? 'filter: blur(6px); user-select: none; pointer-events: none;' : ''"
                   v-html="sanitizeDescription(venue.membership_description)" />
                 <div v-if="!canSeeSpecialOffer" class="absolute inset-0 flex items-center justify-center">
-                  <button
-                    type="button"
-                    id="login-to-view-button"
+                  <button type="button" :id="`${venue.id}-login-to-view-button-desktop`"
                     class="px-4 py-2 rounded-xl font-black shadow-xl bg-[#007a67] text-white hover:brightness-110"
-                    @click="goToLogin"
-                  >
+                    @click="goToLogin">
                     {{ language === 'en' ? 'Login to view' : '登入以查看' }}
                   </button>
                 </div>
               </div>
             </div>
 
-            <button v-if="canSeeSpecialOffer && venue.membership_enabled && venue.membership_join_link"
-              type="button"
-              id="special-offer-button"
+            <button v-if="canSeeSpecialOffer && venue.membership_enabled && venue.membership_join_link" type="button"
+              :id="`${venue.id}-special-offer-button-desktop`"
               class="flex-shrink-0 w-full py-4 rounded-[12px] text-white font-[900] text-lg bg-[#007a67]"
               @click="openSocialLink(venue.membership_join_link)">
               {{ t('joinMembership') }}
@@ -608,10 +628,15 @@ watch(
           </span>
           <span class="text-[14px] opacity-60">/{{ t('hour') }}</span>
         </div>
-        <button v-if="canSeeSpecialOffer && venue.membership_enabled && venue.membership_join_link"
-         type="button"
-         id="special-offer-button-mobile"
-          class="btn btn-cta flex-shrink-0 max-w-[200px] py-3 px-4" @click="openSocialLink(venue.membership_join_link)">
+        <div v-if="!canSeeSpecialOffer" class="flex items-center justify-center max-w-[200px]">
+          <button type="button" :id="`${venue.id}-login-to-view-button-fixed`" class="btn btn-cta flex-shrink-0 max-w-[200px] py-3 px-4"
+            @click="goToLogin">
+            {{ t('joinMembership') }}
+          </button>
+        </div>
+        <button v-if="canSeeSpecialOffer && venue.membership_enabled && venue.membership_join_link" type="button"
+          :id="`${venue.id}-special-offer-button-fixed`" class="btn btn-cta flex-shrink-0 max-w-[200px] py-3 px-4"
+          @click="openSocialLink(venue.membership_join_link)">
           {{ t('joinMembership') }}
         </button>
       </div>

@@ -26,14 +26,43 @@ type RegisterPayload = {
   page?: string;
 };
 
-function getApiBase(): string {
-  // User auth: prefer The Grind API URL so login/session/refresh use it
-  const base = (
+function configuredAuthBaseRaw(): string {
+  return (
     import.meta.env.VITE_THE_GRIND_API_URL ??
     import.meta.env.VITE_API_URL ??
     ''
-  ).toString();
-  return base.replace(/\/$/, '');
+  )
+    .toString()
+    .replace(/\/$/, '');
+}
+
+/**
+ * In Vite dev, if the configured API host is not this machine, use same-origin `/api`
+ * so the dev server proxy forwards requests (avoids browser CORS to a remote API).
+ */
+function shouldPreferDevProxyOverDirectApi(): boolean {
+  if (!import.meta.env.DEV) return false;
+  const raw = configuredAuthBaseRaw();
+  if (!raw) return false;
+  try {
+    const { hostname } = new URL(raw);
+    return hostname !== 'localhost' && hostname !== '127.0.0.1';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Base URL for user auth (password login, session, refresh, Google OAuth start).
+ * Empty string means same-origin paths like `/api/...` (Vercel proxy or Vite dev proxy).
+ */
+export function getAuthApiBase(): string {
+  if (shouldPreferDevProxyOverDirectApi()) return '';
+  return configuredAuthBaseRaw();
+}
+
+function getApiBase(): string {
+  return getAuthApiBase();
 }
 
 function getToken(): string | null {

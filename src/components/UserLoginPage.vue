@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AdminLogin from './AdminLogin.vue';
 import type { Language } from '../../types';
-import { useAuth } from '../composables/auth';
+import { getAuthApiBase, useAuth } from '../composables/auth';
 import { useAuthStore } from '../stores/auth';
 import authSideImageUrl from '../assets/auth_side.png';
 
@@ -64,7 +64,7 @@ async function handleAdminLogin() {
 }
 
 const onSignInWithGoogle = () => {
-  const apiBase = (import.meta.env.VITE_API_URL ?? '').toString().replace(/\/$/, '');
+  const apiBase = getAuthApiBase();
   const frontendUrl = typeof window !== 'undefined' ? window.location.origin : '';
   const qs = new URLSearchParams({
     platform: 'courts',
