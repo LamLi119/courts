@@ -305,7 +305,7 @@ watch(
         <button type="button" id="share-button" class="btn btn-utility btn-utility-round" aria-label="Share"
           :class="darkMode ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-100'"
           @click="handleShare">
-          <svg :id="`${venue.id}-share-icon`" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none"
+          <svg :id="`${venue.name}-share-icon`" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none"
             viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round"
               d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
@@ -408,7 +408,7 @@ watch(
             <div class="lg:hidden space-y-4 mt-4">
               <!-- Mobile: Contact button -->
               <div class="flex justify-end">
-                <button type="button" :id="`${venue.id}-contact-button-mobile`" class="btn btn-ghost shrink-0"
+                <button type="button" :id="`${venue.name}-contact-button`" class="btn btn-ghost shrink-0"
                   @click="handleWhatsApp">
                   <svg class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                     <path
@@ -447,7 +447,7 @@ watch(
                   {{ language === 'en' ? 'Special offer' : '特別優惠' }}
                 </h3>
                 <button v-if="venue.membership_join_link && canSeeSpecialOffer" type="button"
-                  :id="`${venue.id}-special-offer-button-mobile`"
+                  :id="`${venue.name}-special-offer-button-mobile`"
                   class="text-[12px] font-[700] text-[#007a67] uppercase w-1/2 text-right hover:underline"
                   @click="openJoinMembership">
                   {{ language === 'en' ? 'Get the offer' : '獲取優惠' }} →
@@ -461,7 +461,7 @@ watch(
                   :style="!canSeeSpecialOffer ? 'filter: blur(6px); user-select: none; pointer-events: none;' : ''"
                   v-html="sanitizeDescription(venue.membership_description)"></div>
                 <div v-if="!canSeeSpecialOffer" class="absolute inset-0 flex items-center justify-center">
-                  <button type="button" :id="`${venue.id}-login-to-view-button-mobile`"
+                  <button type="button" :id="`${venue.name}-login-to-view-button`"
                     class="px-4 py-2 rounded-xl font-black shadow-xl bg-[#007a67] text-white hover:brightness-110"
                     @click="goToLogin">
                     {{ language === 'en' ? 'Login to view' : '登入以查看' }}
@@ -548,7 +548,7 @@ watch(
                 <span class="text-[14px] opacity-60">/{{ language === 'en' ? 'hr' : '小時' }}</span>
               </div>
             </div>
-            <button type="button" :id="`${venue.id}-contact-button-desktop`"
+            <button type="button" :id="`${venue.name}-contact-button-desktop`"
               class="btn btn-ghost btn-cta-block btn-cta-md w-full" @click="handleWhatsApp">
               <svg class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                 <path
@@ -593,7 +593,7 @@ watch(
                   :style="!canSeeSpecialOffer ? 'filter: blur(6px); user-select: none; pointer-events: none;' : ''"
                   v-html="sanitizeDescription(venue.membership_description)" />
                 <div v-if="!canSeeSpecialOffer" class="absolute inset-0 flex items-center justify-center">
-                  <button type="button" :id="`${venue.id}-login-to-view-button-desktop`"
+                  <button type="button" :id="`${venue.name}-login-to-view-button`"
                     class="px-4 py-2 rounded-xl font-black shadow-xl bg-[#007a67] text-white hover:brightness-110"
                     @click="goToLogin">
                     {{ language === 'en' ? 'Login to view' : '登入以查看' }}
@@ -603,7 +603,7 @@ watch(
             </div>
 
             <button v-if="canSeeSpecialOffer && venue.membership_enabled && venue.membership_join_link" type="button"
-              :id="`${venue.id}-special-offer-button-desktop`"
+              :id="`${venue.name}-special-offer-button`"
               class="flex-shrink-0 w-full py-4 rounded-[12px] text-white font-[900] text-lg bg-[#007a67]"
               @click="openSocialLink(venue.membership_join_link)">
               {{ t('joinMembership') }}
@@ -629,13 +629,13 @@ watch(
           <span class="text-[14px] opacity-60">/{{ t('hour') }}</span>
         </div>
         <div v-if="!canSeeSpecialOffer" class="flex items-center justify-center max-w-[200px]">
-          <button type="button" :id="`${venue.id}-login-to-view-button-fixed`" class="btn btn-cta flex-shrink-0 max-w-[200px] py-3 px-4"
+          <button type="button" :id="`${venue.name}-login-to-view-button`" class="btn btn-cta flex-shrink-0 max-w-[200px] py-3 px-4"
             @click="goToLogin">
             {{ t('joinMembership') }}
           </button>
         </div>
         <button v-if="canSeeSpecialOffer && venue.membership_enabled && venue.membership_join_link" type="button"
-          :id="`${venue.id}-special-offer-button-fixed`" class="btn btn-cta flex-shrink-0 max-w-[200px] py-3 px-4"
+          :id="`${venue.name}-special-offer-button`" class="btn btn-cta flex-shrink-0 max-w-[200px] py-3 px-4"
           @click="openSocialLink(venue.membership_join_link)">
           {{ t('joinMembership') }}
         </button>
