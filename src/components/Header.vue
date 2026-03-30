@@ -72,7 +72,7 @@ const openFindEvents = () => {
           {{ darkMode ? '☀️' : '🌙' }}
         </button>
 
-        <button type="button" class="btn btn-cta btn-cta-md hidden md:inline-flex px-4 py-2" @click="openFindEvents">
+        <button type="button" id="find-events-button" class="btn btn-cta btn-cta-md hidden md:inline-flex px-4 py-2" @click="openFindEvents">
           {{ t('findEvents') }}
         </button>
         <div class="flex rounded-[8px] p-1 border"
@@ -90,13 +90,13 @@ const openFindEvents = () => {
         <button
           v-if="showLogout"
           type="button"
-          class="btn btn-cta btn-cta-md hidden md:inline-flex px-4 py-2"
+          class="btn btn-error btn-error-md hidden md:inline-flex px-4 py-2"
           @click="onUserLogout && onUserLogout()"
         >
           {{ t('logout') }}
         </button>
-        <button v-if="!showLogout && !isAdmin" type="button" class="btn btn-nav-icon" @click="onLoginClick" aria-label="Admin">
-          🔑
+        <button v-if="!showLogout && !isAdmin" type="button" class="btn btn-cta btn-cta-md hidden md:inline-flex px-4 py-2" @click="onLoginClick" aria-label="Admin">
+          {{t('login')}}
         </button>
         <button v-if="!showLogout && isAdmin" type="button" class="btn btn-nav-icon" @click="onAdminClick" aria-label="Admin">
           🔑

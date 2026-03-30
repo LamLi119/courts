@@ -1018,7 +1018,7 @@ const deleteSportApiCall = async (sportId: number) => {
           :sports="sports"
           :filterSpecialOffer="filterSpecialOffer"
           :setFilterSpecialOffer="(v: boolean) => { filterSpecialOffer = v; }"
-          :onOpenDetail="() => { if (selectedVenue) router.push('/venues/' + useVenueSlug(selectedVenue)); }"
+          :onOpenDetail="(v: Venue) => { router.push('/venues/' + useVenueSlug(v)); }"
           :onBackFromDetail="() => { resetSeoToDefault(); router.push('/'); }"
           :force-show-detail="route.name === 'venue' && !!selectedVenue"
         />

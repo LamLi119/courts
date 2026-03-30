@@ -311,6 +311,11 @@
   background: rgba(239, 68, 68, 0.25);
 }
 
+.btn-error-md {
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+}
+
 /* Carousel / overlay controls (prev/next, close) */
 .btn-overlay {
   padding: 0.5rem;

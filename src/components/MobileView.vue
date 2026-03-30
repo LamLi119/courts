@@ -78,7 +78,8 @@ const props = defineProps<{
   sportFilter: string[];
   setSportFilter: (arr: string[]) => void;
   sports: { id: number; name: string; name_zh?: string | null; slug: string }[];
-  onOpenDetail?: () => void;
+  /** Pass the venue so the URL updates even if parent `selectedVenue` is one tick behind. */
+  onOpenDetail?: (venue: Venue) => void;
   onBackFromDetail?: () => void;
   /** When true (e.g. landed on /venues/slug), show full detail page. */
   forceShowDetail?: boolean;
@@ -444,7 +445,7 @@ const goNextVenue = () => {
             :darkMode="darkMode"
             :isSaved="savedVenues.includes(selectedVenue.id)"
             :onToggleSave="() => toggleSave(selectedVenue!.id)"
-            :onViewDetails="() => { showDetailPage = true; props.onOpenDetail?.(); }"
+            :onViewDetails="() => { showDetailPage = true; if (selectedVenue) props.onOpenDetail?.(selectedVenue); }"
           />
         </div>
         <div class="flex items-center justify-between px-4 pt-3 pb-1 text-[12px] font-[700] uppercase tracking-widest opacity-60">
@@ -772,7 +773,7 @@ const goNextVenue = () => {
           :onViewDetails="() => {
             onSelectVenue(venue);
             showDetailPage = true;
-            props.onOpenDetail?.();
+            props.onOpenDetail?.(venue);
           }"
         />
       </div>

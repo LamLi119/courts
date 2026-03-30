@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AdminLogin from './AdminLogin.vue';
 import type { Language } from '../../types';
-import { useAuth } from '../composables/auth';
+import { getAuthApiBase, useAuth } from '../composables/auth';
 import { useAuthStore } from '../stores/auth';
 import authSideImageUrl from '../assets/auth_side.png';
 
@@ -64,7 +64,7 @@ async function handleAdminLogin() {
 }
 
 const onSignInWithGoogle = () => {
-  const apiBase = (import.meta.env.VITE_API_URL ?? '').toString().replace(/\/$/, '');
+  const apiBase = getAuthApiBase();
   const frontendUrl = typeof window !== 'undefined' ? window.location.origin : '';
   const qs = new URLSearchParams({
     platform: 'courts',
@@ -73,6 +73,11 @@ const onSignInWithGoogle = () => {
   const googleSignInUrl = `${apiBase}/api/user/auth/google/start?${qs.toString()}`;
   window.location.href = googleSignInUrl;
 }
+
+const goToSignup = () => {
+  const redirect = authStore.redirectPath && authStore.redirectPath !== '/' ? authStore.redirectPath : '';
+  router.push(redirect ? { path: '/signup', query: { redirectUrl: redirect } } : '/signup');
+};
 
 onMounted(() => {
   const redirectUrl = route.query.redirectUrl as string | undefined;
@@ -121,7 +126,7 @@ onMounted(() => {
           <!-- Google Sign In (not wired yet) -->
           <!-- google login button (https://developers.google.com/identity/branding-guidelines?hl=zh-tw) -->
           <div class="flex justify-center items-center">
-            <button class="gsi-material-button" style="width: 1000px" @click="onSignInWithGoogle">
+            <button id="google-sign-in-button" class="gsi-material-button" style="width: 1000px" @click="onSignInWithGoogle">
               <div class="gsi-material-button-state"></div>
               <div class="gsi-material-button-content-wrapper">
                 <div class="gsi-material-button-icon">
@@ -188,7 +193,7 @@ onMounted(() => {
               </a>
             </div>
 
-            <button type="submit" class="w-full py-3 rounded-xl font-black shadow-sm transition-all active:scale-[0.99]"
+            <button type="submit" id="sign-in-button" class="w-full py-3 rounded-xl font-black shadow-sm transition-all active:scale-[0.99]"
               :class="canSubmit ? 'bg-[#007a67] text-white hover:brightness-110' : (darkMode ? 'bg-gray-700 text-gray-400 cursor-not-allowed' : 'bg-gray-200 text-gray-400 cursor-not-allowed')"
               :disabled="!canSubmit">
               {{ loading ? (language === 'en' ? 'Signing in…' : '登入中…') : (language === 'en' ? 'Sign in' : '登入') }}
@@ -218,7 +223,7 @@ onMounted(() => {
                 {{ language === 'en' ? 'Don\'t have an account?' : '未有帳戶？' }}
               </span>
               <a href="/signup" class="text-[14px] font-bold text-[#007a67] underline"
-                @click.prevent="router.push('/signup')">
+                @click.prevent="goToSignup">
                 {{ language === 'en' ? 'Sign up' : '註冊' }}
               </a>
             </div>
