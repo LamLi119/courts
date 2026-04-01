@@ -1,7 +1,7 @@
 import type { Venue } from '../../types';
 import { slugify } from './slugify';
 
-const SITE_NAME = 'Courts Finder';
+const SITE_NAME = 'Courts';
 const DEFAULT_KEYWORDS =
   'pickleball courts hong kong, pickleball court hk, sports courts Hong Kong, court booking, MTR courts, 香港球場, 球場預訂, pickleball Hong Kong, 匹克球, 匹克球香港, pickleball 香港, pickleball 場地, 匹克球場地, 匹克球 租場, 匹克球場收費';
 
