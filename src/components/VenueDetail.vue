@@ -81,17 +81,21 @@ function venueDetailHref(): string {
   return base ? `${base}/venues/${slug}` : `/venues/${slug}`;
 }
 
-const goToLogin = () => {
-  // Use SPA navigation so mobile back/gesture doesn't bounce to /login unexpectedly.
-  if (typeof window === 'undefined') return;
+/** Path to return after login/signup (canonical venue URL when mobile overlay still shows `/`). */
+function buildAuthRedirectPath(): string {
+  if (typeof window === 'undefined') return venueDetailHref();
   const pathname = window.location.pathname || '';
   const search = window.location.search || '';
   const hash = window.location.hash || '';
   const canonical = venueDetailHref();
   const slug = slugify(props.venue.name);
-  // Use current path only when it already is this app’s venue route (e.g. deep link / desktop).
   const onVenueRoute = pathname === canonical || pathname.endsWith(`/${slug}`);
-  const path = (onVenueRoute ? pathname : canonical) + search + hash;
+  return (onVenueRoute ? pathname : canonical) + search + hash;
+}
+
+const goToLogin = () => {
+  if (typeof window === 'undefined') return;
+  const path = buildAuthRedirectPath();
   try {
     window.sessionStorage?.setItem('auth_redirect_path', path);
   } catch {
@@ -456,7 +460,7 @@ watch(
                   :class="darkMode ? 'text-gray-200' : 'text-gray-800'"
                   :style="!canSeeSpecialOffer ? 'filter: blur(6px); user-select: none; pointer-events: none;' : ''"
                   v-html="sanitizeDescription(venue.membership_description)"></div>
-                <div v-if="!canSeeSpecialOffer" class="absolute inset-0 flex items-center justify-center">
+                <div v-if="!canSeeSpecialOffer" class="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4">
                   <button type="button" :id="`${venue.name}-login-to-view-button`"
                     class="px-4 py-2 rounded-xl font-black shadow-xl bg-[#007a67] text-white hover:brightness-110"
                     @click="goToLogin">
@@ -588,7 +592,7 @@ watch(
                   :class="darkMode ? 'text-gray-200' : 'text-gray-800'"
                   :style="!canSeeSpecialOffer ? 'filter: blur(6px); user-select: none; pointer-events: none;' : ''"
                   v-html="sanitizeDescription(venue.membership_description)" />
-                <div v-if="!canSeeSpecialOffer" class="absolute inset-0 flex items-center justify-center">
+                <div v-if="!canSeeSpecialOffer" class="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4">
                   <button type="button" :id="`${venue.name}-login-to-view-button`"
                     class="px-4 py-2 rounded-xl font-black shadow-xl bg-[#007a67] text-white hover:brightness-110"
                     @click="goToLogin">
@@ -624,8 +628,8 @@ watch(
           </span>
           <span class="text-[14px] opacity-60">/{{ t('hour') }}</span>
         </div>
-        <div v-if="!canSeeSpecialOffer" class="flex items-center justify-center max-w-[200px]">
-          <button type="button" :id="`${venue.name}-login-to-view-button`" class="btn btn-cta flex-shrink-0 max-w-[200px] py-3 px-4"
+        <div v-if="!canSeeSpecialOffer" class="flex flex-col items-end justify-center gap-1 max-w-[min(200px,45vw)]">
+          <button type="button" :id="`${venue.name}-login-to-view-button`" class="btn btn-cta flex-shrink-0 w-full py-3 px-4"
             @click="goToLogin">
             {{ t('joinMembership') }}
           </button>

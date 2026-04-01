@@ -90,13 +90,23 @@ onMounted(() => {
   }
 });
 
+const safeRedirectQuery = computed(() => {
+  const r = route.query.redirectUrl;
+  return typeof r === 'string' && r.startsWith('/') && !r.startsWith('//') ? r : '';
+});
+
+function goToLoginPage() {
+  const r = safeRedirectQuery.value;
+  router.push(r ? { path: '/login', query: { redirectUrl: r } } : '/login');
+}
+
 </script>
 
 <template>
   <div class="min-h-screen grid grid-cols-1 md:grid-cols-2" :class="darkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'">
     <div class="flex items-center justify-center px-4 py-10 pb-40">
       <div class="absolute w-full md:w-1/2 top-4 px-8 flex items-center justify-between">
-        <button type="button" class="font-black text-sm opacity-70 hover:opacity-100 transition" @click="router.push('/login')">
+        <button type="button" class="font-black text-sm opacity-70 hover:opacity-100 transition" @click="goToLoginPage">
           ← {{ language === 'en' ? 'Back' : '返回' }}
         </button>
       </div>
@@ -238,7 +248,7 @@ onMounted(() => {
               <span class="text-[16px] font-bold leading-none">
                 {{ language === 'en' ? 'Already have an account?' : '已有帳戶？' }}
               </span>
-              <a href="/login" class="text-[14px] font-bold text-[#007a67] underline" @click.prevent="router.push('/login')">
+              <a href="/login" class="text-[14px] font-bold text-[#007a67] underline" @click.prevent="goToLoginPage">
                 {{ language === 'en' ? 'Sign in' : '登入' }}
               </a>
             </div>            
