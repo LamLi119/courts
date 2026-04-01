@@ -75,7 +75,11 @@ const onSignInWithGoogle = () => {
 }
 
 const goToSignup = () => {
-  const redirect = authStore.redirectPath && authStore.redirectPath !== '/' ? authStore.redirectPath : '';
+  const fromStore = authStore.redirectPath && authStore.redirectPath !== '/' ? authStore.redirectPath : '';
+  const q = route.query.redirectUrl;
+  const fromRoute =
+    typeof q === 'string' && q.startsWith('/') && !q.startsWith('//') ? q : '';
+  const redirect = fromStore || fromRoute;
   router.push(redirect ? { path: '/signup', query: { redirectUrl: redirect } } : '/signup');
 };
 
