@@ -13,6 +13,7 @@ import AdminLogin from './components/AdminLogin.vue';
 import UserLoginPage from './components/UserLoginPage.vue';
 import UserSignUpPage from './components/UserSignUpPage.vue';
 import TokenLoginPage from './components/TokenLoginPage.vue';
+import CompletePhonePage from './components/CompletePhonePage.vue';
 import DesktopView from './components/DesktopView.vue';
 import MobileView from './components/MobileView.vue';
 import MobileNav from './components/MobileNav.vue';
@@ -30,7 +31,7 @@ const handleUserLogout = async () => {
   await userLogout();
   // Keep the user on the current page (e.g. venue detail) after logout.
   // Only redirect away if we're already on an auth page.
-  if (route.name === 'login' || route.name === 'signup' || route.name === 'token-login') {
+  if (route.name === 'login' || route.name === 'signup' || route.name === 'token-login' || route.name === 'complete-phone') {
     router.replace('/');
   }
 };
@@ -714,6 +715,13 @@ const deleteSportApiCall = async (sportId: number) => {
       :t="t"
       :darkMode="darkMode"
     />
+
+    <CompletePhonePage
+      v-else-if="route.name === 'complete-phone'"
+      :language="language"
+      :t="t"
+      :darkMode="darkMode"
+    />
     
     <AdminManagePage
       v-else-if="route.name === 'admin-manage'"
@@ -748,7 +756,7 @@ const deleteSportApiCall = async (sportId: number) => {
       :hideNavTabs="!!selectedVenue && (route.name === 'venue' || showDesktopDetail)"
     />
 
-    <main v-if="route.name !== 'login' && route.name !== 'signup' && route.name !== 'token-login'" class="h-full">
+    <main v-if="route.name !== 'login' && route.name !== 'signup' && route.name !== 'token-login' && route.name !== 'complete-phone'" class="h-full">
       <div
         v-if="currentTab === 'admin' && isAnyAdmin && !selectedVenue"
         class="container mx-auto p-4 md:p-8 pb-32 md:pb-8 space-y-8 animate-in fade-in duration-500"

@@ -403,6 +403,7 @@ app.post('/api/user/auth/register', async (req, res) => {
       name,
       phoneNo,
       password,
+      type,
       country_code,
       description,
       page,
@@ -423,6 +424,7 @@ app.post('/api/user/auth/register', async (req, res) => {
       loginId: loginIdTrimmed,
       name: nameTrimmed,
       phoneNo: phoneTrimmed,
+      type: (type || 'courts').toString(),
       country_code: (country_code || '852').toString(),
       description: (description || '').toString(),
       page: (page || '').toString(),
@@ -446,7 +448,8 @@ app.post('/api/user/auth/register', async (req, res) => {
         name: data.name,
         username: data.loginId || loginIdTrimmed,
         email: data.email || emailTrimmed,
-        type: data.type,
+        type: (data.type || payload.type || 'courts').toString(),
+        role: data.role || data.userRole || null,
       },
     });
   } catch (err) {
@@ -476,13 +479,87 @@ app.get('/api/user/auth/session', async (req, res) => {
         name: profile?.name,
         username: profile?.loginId || profile?.login_id || profile?.username || '',
         email: profile?.email,
-        type: profile?.type,
+        type: (profile?.type || profile?.platform || 'courts').toString(),
+        role: profile?.role || profile?.userRole || profile?.accountType || null,
+        phoneNo: profile?.phoneNo || profile?.phone_no || '',
+        countryCode: profile?.countryCode || profile?.country_code || '',
         avatarSrc: profile?.profile?.filePath,
       },
     });
   } catch (err) {
     const code = err.statusCode || 401;
     return res.status(code).json({ error: err.message || 'Invalid session' });
+  }
+});
+
+app.post('/api/user/auth/complete-phone', async (req, res) => {
+  try {
+    const auth = req.headers?.authorization || '';
+    const m = /^Bearer\s+(.+)$/.exec(auth);
+    const token = m ? m[1] : '';
+    if (!token) return res.status(401).json({ error: 'Missing token' });
+
+    const phoneNo = (req.body?.phoneNo || '').toString().trim();
+    const countryCode = (req.body?.country_code || req.body?.countryCode || '852').toString().trim();
+    if (!phoneNo) return res.status(400).json({ error: 'phoneNo is required' });
+
+    const updatePayload = {
+      phoneNo,
+      countryCode,
+      country_code: countryCode,
+    };
+
+    const candidates = [
+      { path: '/usersNonOdoo/v2', method: 'PATCH' },
+      { path: '/usersNonOdoo/v2', method: 'PUT' },
+      { path: '/usersNonOdoo/v2', method: 'POST' },
+      { path: '/usersNonOdoo', method: 'PATCH' },
+      { path: '/usersNonOdoo', method: 'PUT' },
+      { path: '/usersNonOdoo/update', method: 'POST' },
+    ];
+
+    let updated = null;
+    let lastErr = null;
+    for (const c of candidates) {
+      try {
+        updated = await grindFetch(c.path, {
+          method: c.method,
+          headers: { Authorization: `Bearer ${token}` },
+          body: updatePayload,
+        });
+        break;
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    if (!updated) {
+      const msg = lastErr?.message || 'Failed to update phone number';
+      const code = lastErr?.statusCode || 500;
+      return res.status(code).json({ error: msg });
+    }
+
+    const profile = await grindFetch('/usersNonOdoo/v2', {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    return res.json({
+      success: true,
+      user: {
+        id: profile?.id,
+        name: profile?.name,
+        username: profile?.loginId || profile?.login_id || profile?.username || '',
+        email: profile?.email,
+        type: (profile?.type || profile?.platform || 'courts').toString(),
+        role: profile?.role || profile?.userRole || profile?.accountType || null,
+        phoneNo: profile?.phoneNo || profile?.phone_no || phoneNo,
+        countryCode: profile?.countryCode || profile?.country_code || countryCode,
+        avatarSrc: profile?.profile?.filePath,
+      },
+    });
+  } catch (err) {
+    const code = err.statusCode || 500;
+    return res.status(code).json({ error: err.message || 'Failed to complete phone number' });
   }
 });
 

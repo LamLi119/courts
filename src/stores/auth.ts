@@ -5,7 +5,10 @@ export interface User {
 	name: string;
 	username: string;
 	email: string;
-	type: "trainee" | "coach";
+	type: string;
+	role?: "trainee" | "coach";
+	phoneNo?: string;
+	countryCode?: string;
 	avatarSrc?: string;
 }
 
@@ -110,7 +113,7 @@ export function useAuthStore() {
 		userEmail: computed(() => state.user?.email || ""),
 		userUsername: computed(() => state.user?.username || ""),
 		userProfileImage: computed(() => state.user?.avatarSrc || ""),
-		isCoach: computed(() => state.user?.type === "coach"),
-		isTrainee: computed(() => state.user?.type === "trainee"),
+		isCoach: computed(() => state.user?.role === "coach"),
+		isTrainee: computed(() => state.user?.role === "trainee"),
 	};
 }

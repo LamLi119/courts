@@ -11,6 +11,7 @@ export const routes = [
   { path: '/login', name: 'login', meta: { title: 'Login' } },
   { path: '/signup', name: 'signup', meta: { title: 'Sign Up' } },
   { path: '/token-login', name: 'token-login', meta: { title: 'Token Login' } },
+  { path: '/complete-phone', name: 'complete-phone', meta: { title: 'Complete Phone' } },
   // Backend may redirect here with ?token= / ?refreshToken= (same as server extractOAuthTokens).
   {
     path: '/auth/google/callback',

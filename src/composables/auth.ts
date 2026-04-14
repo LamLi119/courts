@@ -4,14 +4,17 @@ import { useAuthStore } from '../stores/auth';
 const AUTH_TOKEN_KEY = 'theground_access_token';
 const REFRESH_TOKEN_KEY = 'theground_refresh_token';
 
-type UserType = 'trainee' | 'coach';
+type UserRole = 'trainee' | 'coach';
 
 type User = {
   id: number;
   name: string;
   username: string;
   email: string;
-  type: UserType;
+  type: string;
+  role?: UserRole;
+  phoneNo?: string;
+  countryCode?: string;
   avatarSrc?: string;
 };
 
@@ -21,9 +24,15 @@ type RegisterPayload = {
   name: string;
   phoneNo: string;
   password: string;
+  type: string;
   country_code?: string;
   description?: string;
   page?: string;
+};
+
+type CompletePhonePayload = {
+  phoneNo: string;
+  country_code?: string;
 };
 
 function configuredAuthBaseRaw(): string {
@@ -155,6 +164,18 @@ async function apiJson<T>(path: string, options?: RequestInit & { _retry?: boole
 }
 
 export function useAuth() {
+  function normalizeUser(raw: any, fallbackRole: UserRole = 'trainee'): User {
+    const roleRaw = raw?.role ?? raw?.userRole ?? raw?.accountType;
+    const role = roleRaw === 'coach' || roleRaw === 'trainee'
+      ? roleRaw
+      : fallbackRole;
+    return {
+      ...raw,
+      type: (raw?.type || 'courts').toString(),
+      role,
+    } as User;
+  }
+
   const authStore = useAuthStore();
   const error = ref<string>('');
 
@@ -175,7 +196,7 @@ export function useAuth() {
       const data = await apiJson<{
         token: string;
         refreshToken?: string;
-        user: { id: number; name: string; username: string; email: string };
+        user: { id: number; name: string; username: string; email: string; type?: string; role?: UserRole };
       }>('/api/user/auth/login', {
         method: 'POST',
         body: JSON.stringify({ username, password }),
@@ -183,7 +204,7 @@ export function useAuth() {
 
       setToken(data.token);
       setRefreshToken(data.refreshToken ?? null);
-      authStore.setUser({ ...(data.user as any), type: 'trainee' });
+      authStore.setUser(normalizeUser(data.user, 'trainee'));
       await session();
     } catch (e: any) {
       clearToken();
@@ -205,7 +226,7 @@ export function useAuth() {
       const data = await apiJson<{
         token: string;
         refreshToken?: string;
-        user: { id: number; name: string; username: string; email: string; type?: UserType };
+        user: { id: number; name: string; username: string; email: string; type?: string; role?: UserRole };
       }>('/api/user/auth/register', {
         method: 'POST',
         body: JSON.stringify(payload),
@@ -213,7 +234,7 @@ export function useAuth() {
 
       setToken(data.token);
       setRefreshToken(data.refreshToken ?? null);
-      authStore.setUser({ ...(data.user as any), type: data.user?.type || 'coach' });
+      authStore.setUser(normalizeUser(data.user, 'coach'));
       await session();
     } catch (e: any) {
       clearToken();
@@ -271,10 +292,20 @@ export function useAuth() {
     authStore.reset();
   };
 
+  const completePhone = async (payload: CompletePhonePayload) => {
+    await apiJson<{ success: boolean; user?: User }>('/api/user/auth/complete-phone', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    authStore.setUser(null);
+    return session();
+  };
+
   return {
     login,
     register,
     logout,
+    completePhone,
     refresh,
     session,
     isAuthenticated,
