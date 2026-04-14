@@ -209,10 +209,10 @@ function parseSocialLinks(s: string | undefined): { name: string; url: string; i
       ];
       return entries
         .filter((e) => e.url && typeof e.url === 'string')
-        .map((e) => ({ name: e.label, url: e.url, icon: e.key === 'website' ? 'link' : e.key }));
+        .map((e) => ({ name: e.label, url: e.url, icon: e.key === 'website' ? 'website' : e.key }));
     }
   } catch (_) { }
-  return s.startsWith('http') ? [{ name: 'View on social', url: s, icon: 'link' }] : [];
+  return s.startsWith('http') ? [{ name: 'View on social', url: s, icon: 'website' }] : [];
 }
 
 const socialLinksList = () => parseSocialLinks(props.venue.socialLink);
@@ -484,7 +484,14 @@ watch(
                     :class="darkMode ? 'border-gray-600 text-gray-200 hover:bg-gray-700/50' : 'border-gray-300 text-gray-700 hover:bg-gray-50'">
                     <span class="flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center overflow-hidden"
                       :class="darkMode ? 'bg-gray-700' : 'bg-gray-100'" aria-hidden="true">
-                      <img :src="`${SOCIAL_ICON_CDN}/${link.icon}`" :alt="link.name" class="w-5 h-5 object-contain"
+                      <svg v-if="link.icon === 'website'" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+                        class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <circle cx="12" cy="12" r="9"></circle>
+                        <path d="M3 12h18"></path>
+                        <path d="M12 3a15 15 0 0 1 0 18"></path>
+                        <path d="M12 3a15 15 0 0 0 0 18"></path>
+                      </svg>
+                      <img v-else :src="`${SOCIAL_ICON_CDN}/${link.icon}`" :alt="link.name" class="w-5 h-5 object-contain"
                         loading="lazy" />
                     </span>
                     <div class="min-w-0 flex-1">
@@ -510,7 +517,14 @@ watch(
                       :class="darkMode ? 'border-gray-600 text-gray-200 hover:bg-gray-700/50' : 'border-gray-300 text-gray-700 hover:bg-gray-50'">
                       <span class="flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center overflow-hidden"
                         :class="darkMode ? 'bg-gray-700' : 'bg-gray-100'" aria-hidden="true">
-                        <img :src="`${SOCIAL_ICON_CDN}/${link.icon}`" :alt="link.name" class="w-5 h-5 object-contain"
+                        <svg v-if="link.icon === 'website'" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+                          class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                          <circle cx="12" cy="12" r="9"></circle>
+                          <path d="M3 12h18"></path>
+                          <path d="M12 3a15 15 0 0 1 0 18"></path>
+                          <path d="M12 3a15 15 0 0 0 0 18"></path>
+                        </svg>
+                        <img v-else :src="`${SOCIAL_ICON_CDN}/${link.icon}`" :alt="link.name" class="w-5 h-5 object-contain"
                           loading="lazy" />
                       </span>
                       <div class="min-w-0 flex-1">
