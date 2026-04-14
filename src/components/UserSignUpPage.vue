@@ -51,6 +51,7 @@ async function submitSignUp() {
     loginId: loginId.value.trim(),
     phoneNo: phoneNo.value.trim(),
     password: password.value,
+    type: 'courts',
     country_code: countryCode.value,
     description: '',
     page: '',

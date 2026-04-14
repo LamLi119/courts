@@ -33,6 +33,10 @@ async function saveAndLogin() {
 
     const u = await session();
     if (!u) throw new Error(props.language === 'en' ? 'Invalid token' : 'Token 無效');
+    if (!u.phoneNo || !u.phoneNo.trim()) {
+      router.push('/complete-phone');
+      return;
+    }
     const redirect = authStore.redirectPath && authStore.redirectPath !== '/' ? authStore.redirectPath : '/';
     authStore.setRedirectPath('/');
     router.push(redirect);
