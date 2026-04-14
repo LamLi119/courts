@@ -412,6 +412,37 @@ const filteredVenues = computed(() => {
   });
 });
 
+const selectedVenueIndex = computed(() => {
+  if (!selectedVenue.value) return -1;
+  return filteredVenues.value.findIndex((v) => v.id === selectedVenue.value?.id);
+});
+
+const prevVenue = computed(() => {
+  const idx = selectedVenueIndex.value;
+  if (idx <= 0) return null;
+  return filteredVenues.value[idx - 1] || null;
+});
+
+const nextVenue = computed(() => {
+  const idx = selectedVenueIndex.value;
+  if (idx < 0 || idx >= filteredVenues.value.length - 1) return null;
+  return filteredVenues.value[idx + 1] || null;
+});
+
+function goToPrevVenue() {
+  if (!prevVenue.value) return;
+  selectedVenue.value = prevVenue.value;
+  showDesktopDetail.value = true;
+  router.push('/venues/' + useVenueSlug(prevVenue.value));
+}
+
+function goToNextVenue() {
+  if (!nextVenue.value) return;
+  selectedVenue.value = nextVenue.value;
+  showDesktopDetail.value = true;
+  router.push('/venues/' + useVenueSlug(nextVenue.value));
+}
+
 /** List for left/filter side: when a pin is clicked, only venues at that location; otherwise all filtered. */
 const listVenues = computed(() => {
   if (!locationVenueIds.value || locationVenueIds.value.length === 0) return filteredVenues.value;
@@ -1039,6 +1070,10 @@ const deleteSportApiCall = async (sportId: number) => {
           v-else-if="showDesktopDetail && selectedVenue"
           :venue="selectedVenue"
           :onBack="() => { resetSeoToDefault(); selectedVenue = null; showDesktopDetail = false; router.push('/'); }"
+          :onPrevVenue="goToPrevVenue"
+          :onNextVenue="goToNextVenue"
+          :hasPrevVenue="!!prevVenue"
+          :hasNextVenue="!!nextVenue"
           :language="language"
           :t="t"
           :darkMode="darkMode"

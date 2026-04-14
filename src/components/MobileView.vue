@@ -107,10 +107,13 @@ watch(
 
 const currentIndex = computed(() => {
   if (!props.selectedVenue) return -1;
-  return props.venues.findIndex(v => v.id === props.selectedVenue!.id);
+  return displayListVenues.value.findIndex(v => v.id === props.selectedVenue!.id);
 });
 
 const showStickyCard = computed(() => props.mode === 'map' && !!props.selectedVenue);
+
+const hasPrevVenue = computed(() => currentIndex.value > 0);
+const hasNextVenue = computed(() => currentIndex.value >= 0 && currentIndex.value < displayListVenues.value.length - 1);
 
 const selectInitialVenue = () => {
   if (!props.selectedVenue && displayListVenues.value.length > 0) {
@@ -135,10 +138,10 @@ watch(
 );
 
 const goPrevVenue = () => {
-  if (props.venues.length === 0) return;
+  if (displayListVenues.value.length === 0) return;
   const idx = currentIndex.value;
-  const prevIndex = idx > 0 ? idx - 1 : props.venues.length - 1;
-  const target = props.venues[prevIndex];
+  const prevIndex = idx > 0 ? idx - 1 : displayListVenues.value.length - 1;
+  const target = displayListVenues.value[prevIndex];
   if (target) props.onSelectVenue(target);
 };
 
@@ -149,6 +152,22 @@ const goNextVenue = () => {
   const target = displayListVenues.value[nextIndex];
   if (target) props.onSelectVenue(target);
 };
+
+const goPrevVenueFromDetail = () => {
+  if (!hasPrevVenue.value) return;
+  const target = displayListVenues.value[currentIndex.value - 1];
+  if (!target) return;
+  props.onSelectVenue(target);
+  props.onOpenDetail?.(target);
+};
+
+const goNextVenueFromDetail = () => {
+  if (!hasNextVenue.value) return;
+  const target = displayListVenues.value[currentIndex.value + 1];
+  if (!target) return;
+  props.onSelectVenue(target);
+  props.onOpenDetail?.(target);
+};
 </script>
 
 <template>
@@ -156,6 +175,10 @@ const goNextVenue = () => {
     v-if="showDetailPage && selectedVenue"
     :venue="selectedVenue"
     :onBack="() => { showDetailPage = false; props.onBackFromDetail?.(); }"
+    :onPrevVenue="goPrevVenueFromDetail"
+    :onNextVenue="goNextVenueFromDetail"
+    :hasPrevVenue="hasPrevVenue"
+    :hasNextVenue="hasNextVenue"
     :language="language"
     :t="t"
     :darkMode="darkMode"

@@ -23,7 +23,7 @@ const imageAlt = computed(() =>
 <template>
   <div
     v-if="!images || images.length === 0"
-    class="w-full h-48 bg-gray-200 rounded-2xl flex items-center justify-center text-gray-400 italic"
+    class="w-full aspect-[16/9] bg-gray-200 rounded-2xl flex items-center justify-center text-gray-400 italic"
   >
     No images available
   </div>
@@ -32,13 +32,13 @@ const imageAlt = computed(() =>
     class="relative group"
   >
     <div
-      class="relative h-[300px] md:h-[450px] rounded-2xl overflow-hidden shadow-xl bg-gray-100 dark:bg-gray-800"
+      class="relative aspect-[16/9] rounded-2xl overflow-hidden shadow-xl bg-gray-100 dark:bg-gray-800"
       :class="onImageClick ? 'cursor-pointer' : ''"
       @click="onImageClick?.(images[index])"
     >
       <img
         :src="images[index]"
-        class="w-full h-full object-cover transition-opacity duration-300 pointer-events-none"
+        class="w-full h-full object-contain transition-opacity duration-300 pointer-events-none"
         :alt="index === 0 ? imageAlt : `${imageAlt} (${index + 1})`"
         :fetchpriority="index === 0 ? 'high' : undefined"
       />
