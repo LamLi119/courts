@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import type { Language } from '../../types';
 import { useAuth } from '../composables/auth';
@@ -15,7 +15,7 @@ const props = defineProps<{
 
 const router = useRouter();
 const authStore = useAuthStore();
-const { completePhone, loading } = useAuth();
+const { completePhone, loading, session } = useAuth();
 
 const countryCode = ref('852');
 const phoneNo = ref('');
@@ -49,6 +49,25 @@ async function submitPhone() {
     error.value = e?.message || (props.language === 'en' ? 'Failed to save phone number.' : '儲存電話號碼失敗。');
   }
 }
+
+onMounted(async () => {
+  const u = await session().catch(() => null);
+  if (!u) {
+    router.replace('/login');
+    return;
+  }
+
+  if (u.phoneNo && u.phoneNo.toString().trim()) {
+    const redirect = authStore.redirectPath && authStore.redirectPath !== '/' ? authStore.redirectPath : '/';
+    authStore.setRedirectPath('/');
+    router.replace(redirect);
+    return;
+  }
+
+  if (u.countryCode && u.countryCode.toString().trim()) {
+    countryCode.value = u.countryCode.toString().trim();
+  }
+});
 </script>
 
 <template>

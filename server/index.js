@@ -197,6 +197,36 @@ function extractOAuthTokens(query) {
   return { accessToken, refreshToken };
 }
 
+function normalizeText(value) {
+  if (value === undefined || value === null) return '';
+  return String(value).trim();
+}
+
+function extractPhone(profile) {
+  return (
+    normalizeText(profile?.phoneNo)
+    || normalizeText(profile?.phone_no)
+    || normalizeText(profile?.phone)
+    || normalizeText(profile?.mobile)
+    || normalizeText(profile?.mobileNo)
+    || normalizeText(profile?.contactNo)
+    || normalizeText(profile?.contact_no)
+    || normalizeText(profile?.user?.phoneNo)
+    || normalizeText(profile?.user?.phone_no)
+    || ''
+  );
+}
+
+function extractCountryCode(profile) {
+  return (
+    normalizeText(profile?.countryCode)
+    || normalizeText(profile?.country_code)
+    || normalizeText(profile?.dialCode)
+    || normalizeText(profile?.dial_code)
+    || '852'
+  );
+}
+
 async function grindFetch(pathname, options) {
   if (!THE_GRIND_BACKEND_URL) {
     throw new Error('THE_GRIND_BACKEND_URL is not set');
@@ -481,8 +511,8 @@ app.get('/api/user/auth/session', async (req, res) => {
         email: profile?.email,
         type: (profile?.type || profile?.platform || 'courts').toString(),
         role: profile?.role || profile?.userRole || profile?.accountType || null,
-        phoneNo: profile?.phoneNo || profile?.phone_no || '',
-        countryCode: profile?.countryCode || profile?.country_code || '',
+        phoneNo: extractPhone(profile),
+        countryCode: extractCountryCode(profile),
         avatarSrc: profile?.profile?.filePath,
       },
     });
@@ -505,17 +535,20 @@ app.post('/api/user/auth/complete-phone', async (req, res) => {
 
     const updatePayload = {
       phoneNo,
+      phone_no: phoneNo,
+      phone: phoneNo,
       countryCode,
       country_code: countryCode,
+      dialCode: countryCode,
+      dial_code: countryCode,
     };
 
     const candidates = [
       { path: '/usersNonOdoo/v2', method: 'PATCH' },
-      { path: '/usersNonOdoo/v2', method: 'PUT' },
       { path: '/usersNonOdoo/v2', method: 'POST' },
       { path: '/usersNonOdoo', method: 'PATCH' },
-      { path: '/usersNonOdoo', method: 'PUT' },
       { path: '/usersNonOdoo/update', method: 'POST' },
+      { path: '/usersNonOdoo/v2/update', method: 'POST' },
     ];
 
     let updated = null;
@@ -552,8 +585,8 @@ app.post('/api/user/auth/complete-phone', async (req, res) => {
         email: profile?.email,
         type: (profile?.type || profile?.platform || 'courts').toString(),
         role: profile?.role || profile?.userRole || profile?.accountType || null,
-        phoneNo: profile?.phoneNo || profile?.phone_no || phoneNo,
-        countryCode: profile?.countryCode || profile?.country_code || countryCode,
+        phoneNo: extractPhone(profile) || phoneNo,
+        countryCode: extractCountryCode(profile) || countryCode,
         avatarSrc: profile?.profile?.filePath,
       },
     });

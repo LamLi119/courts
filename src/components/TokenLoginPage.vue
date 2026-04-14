@@ -33,7 +33,8 @@ async function saveAndLogin() {
 
     const u = await session();
     if (!u) throw new Error(props.language === 'en' ? 'Invalid token' : 'Token 無效');
-    if (!u.phoneNo || !u.phoneNo.trim()) {
+    const phone = (u.phoneNo || '').toString().trim();
+    if (!phone) {
       router.push('/complete-phone');
       return;
     }
