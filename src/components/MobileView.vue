@@ -112,8 +112,8 @@ const currentIndex = computed(() => {
 
 const showStickyCard = computed(() => props.mode === 'map' && !!props.selectedVenue);
 
-const hasPrevVenue = computed(() => currentIndex.value > 0);
-const hasNextVenue = computed(() => currentIndex.value >= 0 && currentIndex.value < displayListVenues.value.length - 1);
+const hasPrevVenue = computed(() => displayListVenues.value.length > 1 && currentIndex.value >= 0);
+const hasNextVenue = computed(() => displayListVenues.value.length > 1 && currentIndex.value >= 0);
 
 const selectInitialVenue = () => {
   if (!props.selectedVenue && displayListVenues.value.length > 0) {
@@ -154,16 +154,22 @@ const goNextVenue = () => {
 };
 
 const goPrevVenueFromDetail = () => {
-  if (!hasPrevVenue.value) return;
-  const target = displayListVenues.value[currentIndex.value - 1];
+  const n = displayListVenues.value.length;
+  const idx = currentIndex.value;
+  if (n === 0 || idx < 0) return;
+  const prevIndex = (idx - 1 + n) % n;
+  const target = displayListVenues.value[prevIndex];
   if (!target) return;
   props.onSelectVenue(target);
   props.onOpenDetail?.(target);
 };
 
 const goNextVenueFromDetail = () => {
-  if (!hasNextVenue.value) return;
-  const target = displayListVenues.value[currentIndex.value + 1];
+  const n = displayListVenues.value.length;
+  const idx = currentIndex.value;
+  if (n === 0 || idx < 0) return;
+  const nextIndex = (idx + 1) % n;
+  const target = displayListVenues.value[nextIndex];
   if (!target) return;
   props.onSelectVenue(target);
   props.onOpenDetail?.(target);

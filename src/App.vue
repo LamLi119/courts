@@ -418,15 +418,19 @@ const selectedVenueIndex = computed(() => {
 });
 
 const prevVenue = computed(() => {
+  const n = filteredVenues.value.length;
   const idx = selectedVenueIndex.value;
-  if (idx <= 0) return null;
-  return filteredVenues.value[idx - 1] || null;
+  if (n === 0 || idx < 0) return null;
+  const prevIndex = (idx - 1 + n) % n;
+  return filteredVenues.value[prevIndex] || null;
 });
 
 const nextVenue = computed(() => {
+  const n = filteredVenues.value.length;
   const idx = selectedVenueIndex.value;
-  if (idx < 0 || idx >= filteredVenues.value.length - 1) return null;
-  return filteredVenues.value[idx + 1] || null;
+  if (n === 0 || idx < 0) return null;
+  const nextIndex = (idx + 1) % n;
+  return filteredVenues.value[nextIndex] || null;
 });
 
 function goToPrevVenue() {
