@@ -234,7 +234,7 @@ export function useAuth() {
 
       setToken(data.token);
       setRefreshToken(data.refreshToken ?? null);
-      authStore.setUser(normalizeUser(data.user, 'coach'));
+      authStore.setUser(normalizeUser(data.user, 'trainee'));
       await session();
     } catch (e: any) {
       clearToken();
