@@ -197,6 +197,18 @@ function extractOAuthTokens(query) {
   return { accessToken, refreshToken };
 }
 
+function parseJwtPayload(token) {
+  try {
+    const parts = String(token || '').split('.');
+    if (parts.length < 2) return null;
+    const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
+    return JSON.parse(Buffer.from(padded, 'base64').toString('utf8'));
+  } catch {
+    return null;
+  }
+}
+
 function normalizeText(value) {
   if (value === undefined || value === null) return '';
   return String(value).trim();
@@ -533,42 +545,59 @@ app.post('/api/user/auth/complete-phone', async (req, res) => {
     const countryCode = (req.body?.country_code || req.body?.countryCode || '852').toString().trim();
     if (!phoneNo) return res.status(400).json({ error: 'phoneNo is required' });
 
-    const updatePayload = {
+    const tokenPayload = parseJwtPayload(token);
+    const userId = Number(tokenPayload?.id);
+    if (Number.isNaN(userId) || userId <= 0) {
+      return res.status(400).json({
+        error: 'Unable to resolve user id from token',
+        debug: { endpoint: '/api/user/auth/complete-phone' },
+      });
+    }
+
+    let currentUser;
+    try {
+      currentUser = await grindFetch(`/usersNonOdoo/${userId}`, {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    } catch (e) {
+      const code = e?.statusCode || 500;
+      return res.status(code).json({
+        error: e?.message || 'Failed to load user before update',
+        debug: {
+          endpoint: '/api/user/auth/complete-phone',
+          step: 'get-user',
+          path: `/usersNonOdoo/${userId}`,
+        },
+      });
+    }
+
+    const updateBody = {
+      ...(currentUser && typeof currentUser === 'object' ? currentUser : {}),
+      id: userId,
       phoneNo,
       phone_no: phoneNo,
-      phone: phoneNo,
       countryCode,
       country_code: countryCode,
-      dialCode: countryCode,
-      dial_code: countryCode,
     };
 
-    const candidates = [
-      { path: '/usersNonOdoo/v2', method: 'PATCH' },
-      { path: '/usersNonOdoo/v2', method: 'POST' },
-      { path: '/usersNonOdoo', method: 'PATCH' },
-      { path: '/usersNonOdoo/update', method: 'POST' },
-      { path: '/usersNonOdoo/v2/update', method: 'POST' },
-    ];
-
-    let updated = null;
-    let lastErr = null;
-    for (const c of candidates) {
-      try {
-        updated = await grindFetch(c.path, {
-          method: c.method,
-          headers: { Authorization: `Bearer ${token}` },
-          body: updatePayload,
-        });
-        break;
-      } catch (e) {
-        lastErr = e;
-      }
-    }
-    if (!updated) {
-      const msg = lastErr?.message || 'Failed to update phone number';
-      const code = lastErr?.statusCode || 500;
-      return res.status(code).json({ error: msg });
+    try {
+      await grindFetch(`/usersNonOdoo/${userId}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}` },
+        body: updateBody,
+      });
+    } catch (e) {
+      const code = e?.statusCode || 500;
+      return res.status(code).json({
+        error: e?.message || 'Failed to update phone number',
+        debug: {
+          endpoint: '/api/user/auth/complete-phone',
+          step: 'patch-user',
+          path: `/usersNonOdoo/${userId}`,
+          payloadKeys: Object.keys(updateBody),
+        },
+      });
     }
 
     const profile = await grindFetch('/usersNonOdoo/v2', {
@@ -592,7 +621,10 @@ app.post('/api/user/auth/complete-phone', async (req, res) => {
     });
   } catch (err) {
     const code = err.statusCode || 500;
-    return res.status(code).json({ error: err.message || 'Failed to complete phone number' });
+    return res.status(code).json({
+      error: err.message || 'Failed to complete phone number',
+      debug: { endpoint: '/api/user/auth/complete-phone' },
+    });
   }
 });
 
