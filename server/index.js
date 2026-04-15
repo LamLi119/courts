@@ -239,6 +239,17 @@ function extractCountryCode(profile) {
   );
 }
 
+/**
+ * Product/platform string from a Grind user profile (e.g. usersNonOdoo).
+ * Prefer `platform` over `type`: OAuth flows may set `type` to a role-like value (coach)
+ * while `platform` reflects the app the user signed into (courts).
+ */
+function grindProfileAppType(profile) {
+  return normalizeText(profile?.platform)
+    || normalizeText(profile?.type)
+    || 'courts';
+}
+
 async function grindFetch(pathname, options) {
   if (!THE_GRIND_BACKEND_URL) {
     throw new Error('THE_GRIND_BACKEND_URL is not set');
@@ -521,7 +532,7 @@ app.get('/api/user/auth/session', async (req, res) => {
         name: profile?.name,
         username: profile?.loginId || profile?.login_id || profile?.username || '',
         email: profile?.email,
-        type: (profile?.type || profile?.platform || 'courts').toString(),
+        type: grindProfileAppType(profile),
         role: profile?.role || profile?.userRole || profile?.accountType || null,
         phoneNo: extractPhone(profile),
         countryCode: extractCountryCode(profile),
@@ -612,7 +623,7 @@ app.post('/api/user/auth/complete-phone', async (req, res) => {
         name: profile?.name,
         username: profile?.loginId || profile?.login_id || profile?.username || '',
         email: profile?.email,
-        type: (profile?.type || profile?.platform || 'courts').toString(),
+        type: grindProfileAppType(profile),
         role: profile?.role || profile?.userRole || profile?.accountType || null,
         phoneNo: extractPhone(profile) || phoneNo,
         countryCode: extractCountryCode(profile) || countryCode,
