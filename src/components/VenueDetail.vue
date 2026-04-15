@@ -358,7 +358,7 @@ watch(
     <div class="container mx-auto px-4 py-6">
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div class="lg:col-span-2 space-y-8">
-          <ImageCarousel :images="venue.images" :venue-name="venue.name"
+          <ImageCarousel :key="venue.id" :images="venue.images" :venue-name="venue.name"
             :sport-type="getSportTypeLabel(venue, language)" :on-image-click="openFullscreen" />
           <div class="space-y-6">
             <h2 class="text-[24px] md:text-[32px] font-[900] tracking-tight flex items-center gap-3"
@@ -437,7 +437,7 @@ watch(
             <!-- Mobile view -->
             <div class="lg:hidden space-y-4 mt-4">
               <!-- Mobile: Contact button -->
-              <div class="flex flex-row items-end gap-2">
+              <div class="flex flex-row items-end justify-end gap-2">
                 <button type="button" :id="`${venue.name}-WhatsApp-button`" class="btn btn-ghost shrink-0 w-1/2 justify-center"
                   @click="handleWhatsApp">
                   <svg class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -498,10 +498,19 @@ watch(
               <div v-if="venue.membership_enabled && (venue.membership_description || venue.membership_join_link)"
                 class="p-4 rounded-[16px] border w-full relative overflow-hidden"
                 :class="darkMode ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-gray-50 border-gray-100 text-gray-700'">
-                <div v-if="venue.membership_description" class="text-[14px] font-[400] leading-relaxed description-html"
+                <div v-if="canSeeSpecialOffer && venue.membership_description"
+                  class="text-[14px] font-[400] leading-relaxed description-html"
                   :class="darkMode ? 'text-gray-200' : 'text-gray-800'"
-                  :style="!canSeeSpecialOffer ? 'filter: blur(6px); user-select: none; pointer-events: none;' : ''"
                   v-html="sanitizeDescription(venue.membership_description)"></div>
+                <div v-else-if="venue.membership_description" class="space-y-2 select-none pointer-events-none"
+                  aria-hidden="true">
+                  <div class="h-4 rounded blur-[1.5px]"
+                    :class="darkMode ? 'bg-gray-600/70' : 'bg-gray-300/70'"></div>
+                  <div class="h-4 w-5/6 rounded blur-[1.5px]"
+                    :class="darkMode ? 'bg-gray-600/70' : 'bg-gray-300/70'"></div>
+                  <div class="h-4 w-2/3 rounded blur-[1.5px]"
+                    :class="darkMode ? 'bg-gray-600/70' : 'bg-gray-300/70'"></div>
+                </div>
                 <div v-if="!canSeeSpecialOffer" class="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4">
                   <button type="button" :id="`${venue.name}-login-to-view-button`"
                     class="px-4 py-2 rounded-xl font-black shadow-xl bg-[#007a67] text-white hover:brightness-110"
@@ -604,7 +613,7 @@ watch(
         <!-- Desktop: right sidebar -->
         <div class="hidden lg:block lg:col-span-1">
           <div v-if="venue.address && venue.address.trim() !== ''"
-            class="sticky top-24 space-y-6 p-8 rounded-[16px] shadow-2xl border"
+            class="sticky top-24 space-y-6 p-8 rounded-[16px] shadow-lg border"
             :class="darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'">
             <div class="flex items-center justify-between gap-4 max-w-lg mx-auto mb-4">
               <span class="uppercase tracking-widest font-bold opacity-90 whitespace-nowrap"
@@ -678,10 +687,19 @@ watch(
               </h3>
               <div class="p-4 rounded-[16px] border w-full relative overflow-hidden"
                 :class="darkMode ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-gray-50 border-gray-100 text-gray-700'">
-                <div v-if="venue.membership_description" class="text-[14px] font-[400] leading-relaxed description-html"
+                <div v-if="canSeeSpecialOffer && venue.membership_description"
+                  class="text-[14px] font-[400] leading-relaxed description-html"
                   :class="darkMode ? 'text-gray-200' : 'text-gray-800'"
-                  :style="!canSeeSpecialOffer ? 'filter: blur(6px); user-select: none; pointer-events: none;' : ''"
                   v-html="sanitizeDescription(venue.membership_description)" />
+                <div v-else-if="venue.membership_description" class="space-y-2 select-none pointer-events-none"
+                  aria-hidden="true">
+                  <div class="h-4 rounded blur-[1.5px]"
+                    :class="darkMode ? 'bg-gray-600/70' : 'bg-gray-300/70'"></div>
+                  <div class="h-4 w-5/6 rounded blur-[1.5px]"
+                    :class="darkMode ? 'bg-gray-600/70' : 'bg-gray-300/70'"></div>
+                  <div class="h-4 w-2/3 rounded blur-[1.5px]"
+                    :class="darkMode ? 'bg-gray-600/70' : 'bg-gray-300/70'"></div>
+                </div>
                 <div v-if="!canSeeSpecialOffer" class="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4">
                   <button type="button" :id="`${venue.name}-login-to-view-button`"
                     class="px-4 py-2 rounded-xl font-black shadow-xl bg-[#007a67] text-white hover:brightness-110"

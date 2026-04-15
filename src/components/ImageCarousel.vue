@@ -32,7 +32,7 @@ const imageAlt = computed(() =>
     class="relative group"
   >
     <div
-      class="relative aspect-[16/9] rounded-2xl overflow-hidden shadow-xl bg-gray-100 dark:bg-gray-800"
+      class="relative aspect-[16/9] rounded-2xl overflow-hidden shadow-lg bg-gray-100 dark:bg-gray-800"
       :class="onImageClick ? 'cursor-pointer' : ''"
       @click="onImageClick?.(images[index])"
     >
