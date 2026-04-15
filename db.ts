@@ -79,6 +79,17 @@ function rowToVenue(row: any): Venue {
   if (Array.isArray(sport_data) && sport_data.length > 0) {
     sport_types = sport_data.map((d: any) => d.name || '').filter(Boolean);
   }
+  let operating_hours = row.operating_hours;
+  if (typeof operating_hours === 'string') {
+    try {
+      operating_hours = JSON.parse(operating_hours);
+    } catch {
+      operating_hours = null;
+    }
+  }
+  if (!operating_hours || typeof operating_hours !== 'object') {
+    operating_hours = null;
+  }
   const sport_orders: Record<string, number> = {};
   if (Array.isArray(sport_data)) {
     sport_data.forEach((d: any) => {
@@ -102,6 +113,9 @@ function rowToVenue(row: any): Venue {
     membership_description: row.membership_description ?? null,
     membership_join_link: row.membership_join_link ?? null,
     court_count: row.court_count != null ? Number(row.court_count) : null,
+    booking_url: row.booking_url ?? null,
+    operating_hours,
+    operating_hours_enabled: row.operating_hours_enabled == null ? true : Boolean(row.operating_hours_enabled),
   } as Venue;
 }
 
@@ -111,6 +125,7 @@ const VENUE_COLUMNS = new Set([
   'socialLink', 'orgIcon', 'coordinates', 'sort_order', 'admin_password',
   'membership_enabled', 'membership_description', 'membership_join_link',
   'court_count',
+  'booking_url', 'operating_hours', 'operating_hours_enabled',
 ]);
 
 function venueToRow(venue: Record<string, any>): Record<string, any> {
@@ -121,6 +136,14 @@ function venueToRow(venue: Record<string, any>): Record<string, any> {
     if (key === 'court_count') {
       const n = value === null || value === '' || value === undefined ? null : Number(value);
       result[key] = (n != null && !Number.isNaN(n) && n >= 0) ? n : null;
+      return;
+    }
+    if (key === 'operating_hours') {
+      result[key] = value == null ? null : JSON.stringify(value);
+      return;
+    }
+    if (key === 'operating_hours_enabled' && typeof value === 'boolean') {
+      result[key] = value ? 1 : 0;
       return;
     }
     if (value === undefined) return;
