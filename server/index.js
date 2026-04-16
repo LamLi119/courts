@@ -366,15 +366,22 @@ function sanitizeRow(body) {
     'socialLink', 'orgIcon', 'coordinates', 'sort_order', 'admin_password',
     'membership_enabled', 'membership_description', 'membership_join_link',
     'court_count',
+    'booking_url', 'operating_hours', 'operating_hours_enabled',
   ]);
   const row = {};
   for (const [k, v] of Object.entries(body || {})) {
     if (allowed.has(k)) {
       if (k === 'membership_enabled' && typeof v === 'boolean') {
         row[k] = v ? 1 : 0;
+      } else if (k === 'operating_hours_enabled' && typeof v === 'boolean') {
+        row[k] = v ? 1 : 0;
       } else if (k === 'court_count') {
         const n = v === undefined || v === null || v === '' ? null : parseInt(v, 10);
         row[k] = (Number.isNaN(n) || n < 0) ? null : n;
+      } else if (k === 'operating_hours') {
+        if (v == null || v === '') row[k] = null;
+        else if (typeof v === 'string') row[k] = v;
+        else row[k] = JSON.stringify(v);
       } else {
         row[k] = (v === undefined) ? null : v;
       }

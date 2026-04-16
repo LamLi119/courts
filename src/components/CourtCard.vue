@@ -133,7 +133,7 @@ const toggleExpand = (e: MouseEvent) => {
 
   <div
     v-else
-    class="group cursor-pointer rounded-[16px] overflow-hidden border transition-all duration-300 hover:shadow-2xl"
+    class="group cursor-pointer rounded-[16px] overflow-hidden border transition-all duration-300 shadow-sm hover:shadow-lg"
     :class="darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'"
     @click="onClick"
     role="button"

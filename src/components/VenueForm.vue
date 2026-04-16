@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue';
-import type { Venue, Language, Sport } from '../../types';
+import type { Venue, Language, Sport, OperatingHours, OperatingDayKey } from '../../types';
 
 declare const google: any;
 
@@ -53,6 +53,72 @@ function buildSocialLinkJson(links: Record<string, string>): string {
   });
 }
 
+const OPERATING_DAY_KEYS: OperatingDayKey[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+const OPERATING_DAY_LABELS: Record<OperatingDayKey, { en: string; zh: string }> = {
+  mon: { en: 'Mon', zh: '週一' },
+  tue: { en: 'Tue', zh: '週二' },
+  wed: { en: 'Wed', zh: '週三' },
+  thu: { en: 'Thu', zh: '週四' },
+  fri: { en: 'Fri', zh: '週五' },
+  sat: { en: 'Sat', zh: '週六' },
+  sun: { en: 'Sun', zh: '週日' },
+};
+
+function createDefaultOperatingHours(): OperatingHours {
+  return {
+    timezone: 'Asia/Hong_Kong',
+    weekly: {
+      mon: { closed: false, slots: [['09:00', '22:00']] },
+      tue: { closed: false, slots: [['09:00', '22:00']] },
+      wed: { closed: false, slots: [['09:00', '22:00']] },
+      thu: { closed: false, slots: [['09:00', '22:00']] },
+      fri: { closed: false, slots: [['09:00', '22:00']] },
+      sat: { closed: false, slots: [['09:00', '22:00']] },
+      sun: { closed: false, slots: [['09:00', '22:00']] },
+    },
+    public_holiday: { mode: 'same_as_sunday', closed: false, slots: [] },
+    note: '',
+  };
+}
+
+function normalizeOperatingHours(value: unknown): OperatingHours {
+  const fallback = createDefaultOperatingHours();
+  if (!value || typeof value !== 'object') return fallback;
+  const source = value as any;
+  const weekly: OperatingHours['weekly'] = { ...fallback.weekly };
+  OPERATING_DAY_KEYS.forEach((day) => {
+    const d = source?.weekly?.[day];
+    if (!d || typeof d !== 'object') return;
+    const slots = Array.isArray(d.slots)
+      ? d.slots
+          .map((slot: any) => [String(slot?.[0] ?? ''), String(slot?.[1] ?? '')] as [string, string])
+          .filter((slot: [string, string]) => slot[0] || slot[1])
+      : [];
+    weekly[day] = {
+      closed: Boolean(d.closed),
+      slots: slots.length ? slots : [['09:00', '22:00']],
+    };
+  });
+  const holidayMode = source?.public_holiday?.mode;
+  const public_holiday = {
+    mode: (holidayMode === 'same_as_sunday' || holidayMode === 'same_as_weekday' || holidayMode === 'custom' || holidayMode === 'closed')
+      ? holidayMode
+      : 'same_as_sunday',
+    closed: Boolean(source?.public_holiday?.closed),
+    slots: Array.isArray(source?.public_holiday?.slots)
+      ? source.public_holiday.slots
+          .map((slot: any) => [String(slot?.[0] ?? ''), String(slot?.[1] ?? '')] as [string, string])
+          .filter((slot: [string, string]) => slot[0] || slot[1])
+      : [],
+  } as OperatingHours['public_holiday'];
+  return {
+    timezone: typeof source.timezone === 'string' && source.timezone.trim() ? source.timezone.trim() : 'Asia/Hong_Kong',
+    weekly,
+    public_holiday,
+    note: typeof source.note === 'string' ? source.note : '',
+  };
+}
+
 const defaultForm = {
   name: '',
   description: '',
@@ -75,7 +141,9 @@ const defaultForm = {
   membership_enabled: false,
   membership_description: '' as string | null,
   membership_join_link: '' as string | null,
-  court_count: null as number | null
+  court_count: null as number | null,
+  operating_hours: createDefaultOperatingHours() as OperatingHours,
+  operating_hours_enabled: false,
 };
 
 const formData = reactive<any>(
@@ -89,6 +157,8 @@ if (formData.membership_enabled === undefined) formData.membership_enabled = fal
 if (formData.membership_description === undefined) formData.membership_description = null;
 if (formData.membership_join_link === undefined) formData.membership_join_link = null;
 if (formData.court_count === undefined) formData.court_count = null;
+if (formData.operating_hours_enabled === undefined) formData.operating_hours_enabled = true;
+formData.operating_hours = normalizeOperatingHours(formData.operating_hours);
 
 const placesApiError = ref(false);
 const isUploading = ref(false);
@@ -531,6 +601,45 @@ const selectedSportIds = () =>
       .filter((n: number) => !Number.isNaN(n))
   );
 const sortedSportData = () => (formData.sport_data || []).slice().sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+const operatingDayKeys = OPERATING_DAY_KEYS;
+const operatingDayLabel = (day: OperatingDayKey) => props.language === 'zh' ? OPERATING_DAY_LABELS[day].zh : OPERATING_DAY_LABELS[day].en;
+const operatingHoursData = computed(() => formData.operating_hours as OperatingHours);
+
+function addOperatingSlot(day: OperatingDayKey) {
+  const weekly = operatingHoursData.value.weekly;
+  if (!Array.isArray(weekly[day].slots)) weekly[day].slots = [];
+  weekly[day].slots.push(['09:00', '22:00']);
+}
+
+function removeOperatingSlot(day: OperatingDayKey, index: number) {
+  const weekly = operatingHoursData.value.weekly;
+  weekly[day].slots = (weekly[day].slots || []).filter((_: [string, string], i: number) => i !== index);
+  if (!weekly[day].slots.length) weekly[day].slots = [['09:00', '22:00']];
+}
+
+function toggleOperatingClosed(day: OperatingDayKey) {
+  const weekly = operatingHoursData.value.weekly;
+  weekly[day].closed = !weekly[day].closed;
+}
+
+function addHolidaySlot() {
+  const oh = operatingHoursData.value;
+  const slots = Array.isArray(oh.public_holiday?.slots) ? oh.public_holiday?.slots.slice() : [];
+  slots.push(['10:00', '18:00']);
+  formData.operating_hours = normalizeOperatingHours({
+    ...oh,
+    public_holiday: { ...(oh.public_holiday || { mode: 'custom' }), mode: 'custom', closed: false, slots },
+  });
+}
+
+function removeHolidaySlot(index: number) {
+  const oh = operatingHoursData.value;
+  const slots = (oh.public_holiday?.slots || []).filter((_: [string, string], i: number) => i !== index);
+  formData.operating_hours = normalizeOperatingHours({
+    ...oh,
+    public_holiday: { ...(oh.public_holiday || { mode: 'custom' }), mode: 'custom', closed: false, slots },
+  });
+}
 
 const sportsOptions = computed(() => (props.sports ?? []) as { id: number; name: string; name_zh?: string | null; slug: string }[]);
 const selectedSportIdForDropdown = ref<string | number>('');
@@ -586,6 +695,7 @@ const handleSubmit = async (e?: Event) => {
   if (formData.membership_enabled && membershipDescriptionEditorRef.value) {
     formData.membership_description = getMembershipDescriptionHtml() || null;
   }
+  formData.operating_hours = normalizeOperatingHours(formData.operating_hours);
   isSaving.value = true;
   saveError.value = null;
   try {
@@ -922,6 +1032,116 @@ const inputClass =
               min="0"
               :class="inputClass"
               :placeholder="t('optional')"
+            />
+          </div>
+        </div>
+
+        <div class="rounded-xl p-4 border space-y-4" :class="darkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-200'">
+          <div>
+            <label :class="labelClass">{{ language === 'en' ? 'Operating hours' : '營業時間' }}</label>
+            <p class="text-[11px] opacity-60">
+              {{ language === 'en' ? 'Set weekly opening hours. Add more slots for lunch breaks.' : '設定每週營業時段。如有午休可新增多個時段。' }}
+            </p>
+            <div class="flex items-center gap-3 mt-2">
+              <span class="text-sm font-bold">{{ language === 'en' ? 'Show on venue detail page' : '在場地詳情頁顯示' }}</span>
+              <button
+                type="button"
+                role="switch"
+                :aria-checked="formData.operating_hours_enabled"
+                class="relative inline-flex h-7 w-12 shrink-0 rounded-full border-2 transition-colors focus:outline-none"
+                :class="formData.operating_hours_enabled ? 'bg-[#007a67] border-[#007a67]' : (darkMode ? 'bg-gray-600 border-gray-500' : 'bg-gray-200 border-gray-300')"
+                @click="formData.operating_hours_enabled = !formData.operating_hours_enabled"
+              >
+                <span
+                  class="pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition-transform"
+                  :class="formData.operating_hours_enabled ? 'translate-x-5' : 'translate-x-0.5'"
+                />
+              </button>
+            </div>
+          </div>
+          <div class="space-y-3">
+            <div
+              v-for="day in operatingDayKeys"
+              :key="day"
+              class="rounded-lg border p-3"
+              :class="darkMode ? 'border-gray-600 bg-gray-700/30' : 'border-gray-200 bg-white'"
+            >
+              <div class="flex items-center justify-between gap-3 mb-2">
+                <div class="font-bold text-sm">{{ operatingDayLabel(day) }}</div>
+                <button
+                  type="button"
+                  class="text-xs font-bold px-3 py-1 rounded-full border"
+                  :class="operatingHoursData.weekly[day].closed ? 'bg-red-500/10 border-red-400 text-red-500' : (darkMode ? 'border-gray-500 text-gray-300' : 'border-gray-300 text-gray-600')"
+                  @click="toggleOperatingClosed(day)"
+                >
+                  {{ operatingHoursData.weekly[day].closed ? (language === 'en' ? 'Closed' : '休息') : (language === 'en' ? 'Open' : '營業中') }}
+                </button>
+              </div>
+              <div v-if="!operatingHoursData.weekly[day].closed" class="space-y-2">
+                <div
+                  v-for="(slot, idx) in operatingHoursData.weekly[day].slots"
+                  :key="`${day}-${idx}`"
+                  class="flex items-center gap-2"
+                >
+                  <input v-model="slot[0]" type="time" :class="inputClass" class="!py-2" />
+                  <span class="text-xs opacity-60">-</span>
+                  <input v-model="slot[1]" type="time" :class="inputClass" class="!py-2" />
+                  <button
+                    type="button"
+                    class="text-red-500 text-xs font-bold px-2 py-1 rounded border border-red-300"
+                    @click="removeOperatingSlot(day, idx)"
+                  >
+                    {{ language === 'en' ? 'Remove' : '移除' }}
+                  </button>
+                </div>
+                <button type="button" class="text-xs font-bold text-[#007a67]" @click="addOperatingSlot(day)">
+                  + {{ language === 'en' ? 'Add slot' : '新增時段' }}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="pt-2 border-t" :class="darkMode ? 'border-gray-700' : 'border-gray-200'">
+            <label :class="labelClass">{{ language === 'en' ? 'Public holiday' : '公眾假期' }}</label>
+            <select
+              v-model="operatingHoursData.public_holiday.mode"
+              :class="inputClass"
+            >
+              <option value="same_as_sunday">{{ language === 'en' ? 'Same as Sunday' : '跟隨星期日' }}</option>
+              <option value="same_as_weekday">{{ language === 'en' ? 'Same as Weekday' : '跟隨平日' }}</option>
+              <option value="custom">{{ language === 'en' ? 'Custom hours' : '自訂時間' }}</option>
+              <option value="closed">{{ language === 'en' ? 'Closed' : '休息' }}</option>
+            </select>
+            <div v-if="operatingHoursData.public_holiday.mode === 'custom'" class="space-y-2 mt-2">
+              <div
+                v-for="(slot, idx) in (operatingHoursData.public_holiday.slots || [])"
+                :key="`holiday-${idx}`"
+                class="flex items-center gap-2"
+              >
+                <input v-model="slot[0]" type="time" :class="inputClass" class="!py-2" />
+                <span class="text-xs opacity-60">-</span>
+                <input v-model="slot[1]" type="time" :class="inputClass" class="!py-2" />
+                <button
+                  type="button"
+                  class="text-red-500 text-xs font-bold px-2 py-1 rounded border border-red-300"
+                  @click="removeHolidaySlot(idx)"
+                >
+                  {{ language === 'en' ? 'Remove' : '移除' }}
+                </button>
+              </div>
+              <button type="button" class="text-xs font-bold text-[#007a67]" @click="addHolidaySlot">
+                + {{ language === 'en' ? 'Add holiday slot' : '新增假期時段' }}
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label :class="labelClass">{{ language === 'en' ? 'Hours note' : '營業時間備註' }}</label>
+            <textarea
+              v-model="operatingHoursData.note"
+              rows="2"
+              :class="inputClass"
+              :placeholder="language === 'en' ? 'Example: Public holiday hours may vary.' : '例如：公眾假期時間或會有更改。'"
             />
           </div>
         </div>
