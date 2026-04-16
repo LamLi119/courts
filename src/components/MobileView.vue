@@ -153,7 +153,7 @@ const goNextVenue = () => {
   if (target) props.onSelectVenue(target);
 };
 
-const goPrevVenueFromDetail = () => {
+const goPrevVenueFromDetail = async () => {
   const n = displayListVenues.value.length;
   const idx = currentIndex.value;
   if (n === 0 || idx < 0) return;
@@ -162,9 +162,13 @@ const goPrevVenueFromDetail = () => {
   if (!target) return;
   props.onSelectVenue(target);
   props.onOpenDetail?.(target);
+  await nextTick();
+  if (typeof window !== 'undefined') {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
 };
 
-const goNextVenueFromDetail = () => {
+const goNextVenueFromDetail = async () => {
   const n = displayListVenues.value.length;
   const idx = currentIndex.value;
   if (n === 0 || idx < 0) return;
@@ -173,6 +177,10 @@ const goNextVenueFromDetail = () => {
   if (!target) return;
   props.onSelectVenue(target);
   props.onOpenDetail?.(target);
+  await nextTick();
+  if (typeof window !== 'undefined') {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
 };
 </script>
 
