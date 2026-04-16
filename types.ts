@@ -19,6 +19,26 @@ export interface Pricing {
   imageUrl?: string;
 }
 
+export type OperatingDayKey = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
+
+export interface OperatingDay {
+  closed: boolean;
+  slots: [string, string][];
+}
+
+export interface OperatingHoliday {
+  mode: 'same_as_sunday' | 'same_as_weekday' | 'custom' | 'closed';
+  closed?: boolean;
+  slots?: [string, string][];
+}
+
+export interface OperatingHours {
+  timezone?: string;
+  weekly: Record<OperatingDayKey, OperatingDay>;
+  public_holiday?: OperatingHoliday;
+  note?: string | null;
+}
+
 export interface Venue {
   id: number;
   name: string;
@@ -53,6 +73,9 @@ export interface Venue {
   membership_join_link?: string | null;
   /** Number of courts at this venue (shown as a tag on detail). */
   court_count?: number | null;
+  booking_url?: string | null;
+  operating_hours?: OperatingHours | null;
+  operating_hours_enabled?: boolean;
 }
 
 export type Language = 'en' | 'zh';

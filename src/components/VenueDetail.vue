@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import type { Venue, Language } from '../../types';
+import type { Venue, Language, OperatingHours, OperatingDayKey } from '../../types';
 import { getStationDisplayName } from '../utils/mtrStations';
 import { applyVenueSeo, resetSeoToDefault, getSportTypeLabel, getVenueImageAlt } from '../utils/seo';
 import { slugify } from '../utils/slugify';
@@ -242,7 +242,87 @@ onUnmounted(() => {
 
 const venueImageAlt = computed(() => getVenueImageAlt(props.venue, props.language));
 
-/** Description + pricing share one panel with tabs when both exist. */
+const OPERATING_DAY_KEYS: OperatingDayKey[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+const OPERATING_DAY_LABELS: Record<OperatingDayKey, { en: string; zh: string }> = {
+  mon: { en: 'Mon', zh: '週一' },
+  tue: { en: 'Tue', zh: '週二' },
+  wed: { en: 'Wed', zh: '週三' },
+  thu: { en: 'Thu', zh: '週四' },
+  fri: { en: 'Fri', zh: '週五' },
+  sat: { en: 'Sat', zh: '週六' },
+  sun: { en: 'Sun', zh: '週日' },
+};
+const WEEKDAY_MAP: OperatingDayKey[] = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+
+function normalizeOperatingHours(value: unknown): OperatingHours | null {
+  if (!value || typeof value !== 'object') return null;
+  const source = value as any;
+  const weekly = {} as OperatingHours['weekly'];
+  let hasAnyDay = false;
+  OPERATING_DAY_KEYS.forEach((day) => {
+    const d = source?.weekly?.[day];
+    if (!d || typeof d !== 'object') {
+      weekly[day] = { closed: true, slots: [] };
+      return;
+    }
+    const slots = Array.isArray(d.slots)
+      ? d.slots
+          .map((slot: any) => [String(slot?.[0] ?? ''), String(slot?.[1] ?? '')] as [string, string])
+          .filter((slot: [string, string]) => slot[0] && slot[1])
+      : [];
+    weekly[day] = { closed: Boolean(d.closed), slots };
+    if (!weekly[day].closed || weekly[day].slots.length > 0) hasAnyDay = true;
+  });
+  if (!hasAnyDay) return null;
+  const holidayMode = source?.public_holiday?.mode;
+  return {
+    timezone: typeof source.timezone === 'string' ? source.timezone : 'Asia/Hong_Kong',
+    weekly,
+    public_holiday: {
+      mode: (holidayMode === 'same_as_sunday' || holidayMode === 'same_as_weekday' || holidayMode === 'custom' || holidayMode === 'closed')
+        ? holidayMode
+        : 'same_as_sunday',
+      closed: Boolean(source?.public_holiday?.closed),
+      slots: Array.isArray(source?.public_holiday?.slots)
+        ? source.public_holiday.slots
+            .map((slot: any) => [String(slot?.[0] ?? ''), String(slot?.[1] ?? '')] as [string, string])
+            .filter((slot: [string, string]) => slot[0] && slot[1])
+        : [],
+    },
+    note: typeof source.note === 'string' ? source.note : null,
+  };
+}
+
+function formatSlots(slots: [string, string][], closed?: boolean): string {
+  if (closed) return props.language === 'en' ? 'Closed' : '休息';
+  if (!slots || slots.length === 0) return props.language === 'en' ? 'Not provided' : '未提供';
+  return slots.map((slot) => `${slot[0]} - ${slot[1]}`).join(' / ');
+}
+
+const operatingHours = computed(() => normalizeOperatingHours(props.venue.operating_hours));
+const showOperatingHours = computed(() => (props.venue.operating_hours_enabled ?? true) && !!operatingHours.value);
+const operatingHoursRows = computed(() => {
+  const oh = operatingHours.value;
+  if (!oh) return [];
+  const today = WEEKDAY_MAP[new Date().getDay()];
+  return OPERATING_DAY_KEYS.map((day) => ({
+    day,
+    label: props.language === 'zh' ? OPERATING_DAY_LABELS[day].zh : OPERATING_DAY_LABELS[day].en,
+    value: formatSlots(oh.weekly[day].slots, oh.weekly[day].closed),
+    isToday: day === today,
+  }));
+});
+const publicHolidayDisplay = computed(() => {
+  const oh = operatingHours.value;
+  if (!oh || !oh.public_holiday) return '';
+  const mode = oh.public_holiday.mode;
+  if (mode === 'same_as_sunday') return props.language === 'en' ? 'Same as Sunday' : '跟隨星期日';
+  if (mode === 'same_as_weekday') return props.language === 'en' ? 'Same as Weekday' : '跟隨平日';
+  if (mode === 'closed') return props.language === 'en' ? 'Closed' : '休息';
+  return formatSlots(oh.public_holiday.slots || [], false);
+});
+
+/** Description + pricing + operating hours share one panel with tabs when needed. */
 const hasDescriptionText = computed(() => !!props.venue.description?.trim());
 
 const hasPricingDetail = computed(() => {
@@ -252,15 +332,29 @@ const hasPricingDetail = computed(() => {
   return !!p.imageUrl?.trim();
 });
 
-const showDetailTabs = computed(() => hasDescriptionText.value && hasPricingDetail.value);
+const hasOperatingDetail = computed(() => showOperatingHours.value);
+const availableDetailTabs = computed(() => {
+  const tabs: Array<'description' | 'pricing' | 'operating'> = [];
+  if (hasDescriptionText.value) tabs.push('description');
+  if (hasPricingDetail.value) tabs.push('pricing');
+  if (hasOperatingDetail.value) tabs.push('operating');
+  return tabs;
+});
+const showDetailTabs = computed(() => availableDetailTabs.value.length > 1);
+const singleDetailLabel = computed(() => {
+  const only = availableDetailTabs.value[0];
+  if (only === 'pricing') return props.t('pricing');
+  if (only === 'operating') return props.language === 'en' ? 'Operating hours' : '營業時間';
+  return props.t('description');
+});
 
-const detailTab = ref<'description' | 'pricing'>('description');
+const detailTab = ref<'description' | 'pricing' | 'operating'>('description');
 
 watch(
-  () => [props.venue.id, hasDescriptionText.value, hasPricingDetail.value] as const,
+  () => [props.venue.id, hasDescriptionText.value, hasPricingDetail.value, hasOperatingDetail.value] as const,
   () => {
-    if (hasDescriptionText.value) detailTab.value = 'description';
-    else if (hasPricingDetail.value) detailTab.value = 'pricing';
+    if (availableDetailTabs.value.includes(detailTab.value)) return;
+    detailTab.value = availableDetailTabs.value[0] || 'description';
   },
   { immediate: true }
 );
@@ -389,7 +483,7 @@ watch(
                 🥅 {{ venue.court_count }} {{ venue.court_count === 1 ? t('court') : t('courts') }}
               </span>
             </div>
-            <div v-if="hasDescriptionText || hasPricingDetail" class="rounded-[12px] border overflow-hidden"
+            <div v-if="hasDescriptionText || hasPricingDetail || hasOperatingDetail" class="rounded-[12px] border overflow-hidden"
               :class="darkMode ? 'border-gray-700 bg-gray-800/40' : 'border-gray-200 bg-gray-50/80'">
               <div v-if="showDetailTabs" class="flex border-b" :class="darkMode ? 'border-gray-700' : 'border-gray-200'"
                 role="tablist" :aria-label="language === 'en' ? 'Venue details' : '場地資訊'">
@@ -409,10 +503,18 @@ watch(
                   @click="detailTab = 'pricing'">
                   {{ t('pricing') }}
                 </button>
+                <button v-if="hasOperatingDetail" type="button" role="tab" :aria-selected="detailTab === 'operating'"
+                  class="flex-1 py-3 px-3 text-[12px] md:text-[13px] font-bold uppercase tracking-wider transition-colors"
+                  :class="detailTab === 'operating'
+                    ? (darkMode ? 'bg-gray-800 text-white shadow-[inset_0_-2px_0_0_#007a67]' : 'bg-white text-gray-900 shadow-[inset_0_-2px_0_0_#007a67]')
+                    : (darkMode ? 'text-gray-400 hover:bg-gray-800/80' : 'text-gray-500 hover:bg-gray-100')"
+                  @click="detailTab = 'operating'">
+                  {{ language === 'en' ? 'Operating hours' : '營業時間' }}
+                </button>
               </div>
               <div v-else class="px-4 pt-3 pb-1 border-b" :class="darkMode ? 'border-gray-700' : 'border-gray-200'">
                 <h3 class="text-[11px] uppercase tracking-widest font-bold opacity-70 m-0">
-                  {{ hasDescriptionText ? t('description') : t('pricing') }}
+                  {{ singleDetailLabel }}
                 </h3>
               </div>
               <div class="p-4">
@@ -431,6 +533,24 @@ watch(
                     @click="openFullscreen(venue.pricing.imageUrl!)">
                     <img :src="venue.pricing.imageUrl" class="w-full" alt="Pricing" />
                   </button>
+                </div>
+                <div v-show="hasOperatingDetail && (!showDetailTabs || detailTab === 'operating')" class="space-y-2 lg:space-y-3">
+                  <div class="space-y-1">
+                    <div v-for="row in operatingHoursRows" :key="row.day" class="px-2 lg:px-20 flex items-start justify-between gap-3 lg:gap-4 text-[13px] lg:text-[15px]">
+                      <span :class="row.isToday ? (darkMode ? 'text-[#79d8c7] font-semibold text-[14px] lg:text-[18px] pl-2' : 'text-[#007a67] font-semibold text-[14px] lg:text-[18px] pl-2') : (darkMode ? 'text-gray-300' : 'text-gray-700')">{{ row.label }}</span>
+                      <span class="text-right" :class="row.isToday ? (darkMode ? 'text-[#79d8c7] font-semibold text-[14px] lg:text-[17px] pr-2' : 'text-[#007a67] font-semibold text-[14px] lg:text-[17px] pr-2') : (darkMode ? 'text-gray-400' : 'text-gray-600')">{{ row.value }}</span>
+                    </div>
+                  </div>
+                  <div class="pt-2 px-2 lg:px-20 flex items-start justify-between gap-3 lg:gap-4 text-[13px] lg:text-[15px]"
+                    :class="darkMode ? 'border-gray-700' : 'border-gray-200'">
+                    <span :class="darkMode ? 'text-gray-300' : 'text-gray-700'">{{ language === 'en' ? 'Public holiday' : '公眾假期' }}</span>
+                    <span class="text-right" :class="darkMode ? 'text-gray-400' : 'text-gray-600'">{{ publicHolidayDisplay }}</span>
+                  </div>
+                  <p v-if="operatingHours?.note && operatingHours.note.trim()"
+                    class="text-[12px] lg:text-[14px] border-t pt-2 px-2 lg:pl-10 lg:pr-10"
+                    :class="darkMode ? 'text-gray-400 border-gray-700' : 'text-gray-500 border-gray-200'">
+                    {{ operatingHours.note }}
+                  </p>
                 </div>
               </div>
             </div>
