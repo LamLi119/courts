@@ -433,18 +433,24 @@ const nextVenue = computed(() => {
   return filteredVenues.value[nextIndex] || null;
 });
 
-function goToPrevVenue() {
+async function goToPrevVenue() {
   if (!prevVenue.value) return;
   selectedVenue.value = prevVenue.value;
   showDesktopDetail.value = true;
-  router.push('/venues/' + useVenueSlug(prevVenue.value));
+  await router.push('/venues/' + useVenueSlug(prevVenue.value));
+  if (typeof window !== 'undefined') {
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  }
 }
 
-function goToNextVenue() {
+async function goToNextVenue() {
   if (!nextVenue.value) return;
   selectedVenue.value = nextVenue.value;
   showDesktopDetail.value = true;
-  router.push('/venues/' + useVenueSlug(nextVenue.value));
+  await router.push('/venues/' + useVenueSlug(nextVenue.value));
+  if (typeof window !== 'undefined') {
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  }
 }
 
 /** List for left/filter side: when a pin is clicked, only venues at that location; otherwise all filtered. */
