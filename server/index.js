@@ -593,12 +593,9 @@ app.post('/api/user/auth/complete-phone', async (req, res) => {
     const updateBody = {
       ...(currentUser && typeof currentUser === 'object' ? currentUser : {}),
       id: userId,
-      phoneNo,
-      phone_no: phoneNo,
-      countryCode,
       country_code: countryCode,
+      phone_no: phoneNo,
     };
-
     try {
       await grindFetch(`/usersNonOdoo/${userId}`, {
         method: 'PATCH',
@@ -608,10 +605,10 @@ app.post('/api/user/auth/complete-phone', async (req, res) => {
     } catch (e) {
       const code = e?.statusCode || 500;
       return res.status(code).json({
-        error: e?.message || 'Failed to update phone number',
+        error: e?.message || 'Failed to update phone info',
         debug: {
           endpoint: '/api/user/auth/complete-phone',
-          step: 'patch-user',
+          step: 'patch-phone-and-country',
           path: `/usersNonOdoo/${userId}`,
           payloadKeys: Object.keys(updateBody),
         },
