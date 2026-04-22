@@ -145,7 +145,7 @@ const toggleExpand = (e: MouseEvent) => {
         class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
         loading="lazy"
       />
-      <span v-if="venue.membership_enabled" class="absolute top-2 left-2 rounded-md px-2 py-1 text-[11px] font-bold text-white bg-[#007a67] shadow-md z-10" :title="t('specialOffer')">
+      <span v-if="venue.membership_enabled" class="absolute top-2 left-2 rounded-md px-2 py-1 text-[11px] font-bold text-white bg-[#007a67] shadow-md z-0" :title="t('specialOffer')">
         {{ t('specialOffer') }}
       </span>
       <div class="absolute top-2 right-12">

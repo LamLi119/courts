@@ -84,6 +84,38 @@ async function uploadToImgBB(base64String) {
   }
 }
 
+/** Helper: ensure pricing image is an ImgBB URL (not base64) before DB write. */
+async function normalizePricingForStorage(rawPricing) {
+  if (rawPricing == null || rawPricing === '') return rawPricing;
+
+  let parsed = rawPricing;
+  let fromString = false;
+  if (typeof rawPricing === 'string') {
+    try {
+      parsed = JSON.parse(rawPricing);
+      fromString = true;
+    } catch (_) {
+      return rawPricing;
+    }
+  }
+
+  if (!parsed || typeof parsed !== 'object') return rawPricing;
+
+  const pricing = { ...parsed };
+  const imageUrl = typeof pricing.imageUrl === 'string' ? pricing.imageUrl : '';
+  if (pricing.type === 'image' && imageUrl.startsWith('data:')) {
+    const uploadedUrl = await uploadToImgBB(imageUrl);
+    // Keep only remote URLs in DB; never keep large base64 pricing images.
+    if (typeof uploadedUrl === 'string' && /^https?:\/\//i.test(uploadedUrl)) {
+      pricing.imageUrl = uploadedUrl;
+    } else {
+      pricing.imageUrl = '';
+    }
+  }
+
+  return fromString ? JSON.stringify(pricing) : pricing;
+}
+
 /** User-friendly message when DB connection fails (e.g. MySQL not running or wrong MYSQL_HOST). */
 function dbErrorMessage(err) {
   if (err && (err.code === 'ECONNREFUSED' || (err.message && err.message.includes('ECONNREFUSED')))) {
@@ -593,7 +625,10 @@ app.post('/api/user/auth/complete-phone', async (req, res) => {
     const updateBody = {
       ...(currentUser && typeof currentUser === 'object' ? currentUser : {}),
       id: userId,
+      // Send both key styles for backend compatibility across deployments.
+      countryCode,
       country_code: countryCode,
+      phoneNo,
       phone_no: phoneNo,
     };
     try {
@@ -930,6 +965,11 @@ app.post('/api/venues', async (req, res) => {
       if (row.orgIcon && row.orgIcon.length > 2048) row.orgIcon = row.orgIcon.slice(0, 2048);
     }
 
+    // 3. Process pricing image: upload base64 imageUrl to ImgBB when pricing.type === 'image'
+    if (row.pricing != null && row.pricing !== '') {
+      row.pricing = await normalizePricingForStorage(row.pricing);
+    }
+
     if (row.coordinates) row.coordinates = JSON.stringify(row.coordinates);
 
     const keys = Object.keys(row);
@@ -981,6 +1021,9 @@ app.put('/api/venues/:id', async (req, res) => {
           row.orgIcon = uploadedUrl || null;
         }
         if (row.orgIcon && row.orgIcon.length > 2048) row.orgIcon = row.orgIcon.slice(0, 2048);
+      }
+      if (row.pricing != null && row.pricing !== '') {
+        row.pricing = await normalizePricingForStorage(row.pricing);
       }
       if (row.coordinates) row.coordinates = JSON.stringify(row.coordinates);
 
