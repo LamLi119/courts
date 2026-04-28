@@ -53,6 +53,30 @@ const filteredStations = computed(() => {
   });
 });
 
+const selectedSport = computed(() => {
+  const slug = props.sportFilter[0];
+  if (!slug) return null;
+  return props.sports.find((s) => s.slug === slug) ?? null;
+});
+
+const selectedSportLabel = computed(() => {
+  const s = selectedSport.value;
+  if (!s) return null;
+  return props.language === 'zh' && s.name_zh ? s.name_zh : s.name;
+});
+
+const selectSport = (slug: string) => {
+  props.setSportFilter([slug]);
+  draftSportFilter.value = [slug];
+  showSportDropdown.value = false;
+};
+
+const clearSportSelection = () => {
+  props.setSportFilter([]);
+  draftSportFilter.value = [];
+  showSportDropdown.value = false;
+};
+
 const props = defineProps<{
   mode: 'map' | 'list';
   setMode: (m: 'map' | 'list') => void;
@@ -254,6 +278,46 @@ const goNextVenueFromDetail = async () => {
         </div>
       </div>
       <div class="flex flex-wrap gap-2 pb-2 pointer-events-auto items-center">
+        <div class="relative">
+          <button
+            type="button"
+            class="inline-flex items-center gap-1.5 rounded-[999px] px-3 py-2 text-[11px] font-bold transition-all shadow-md"
+            :class="selectedSport ? 'bg-[#007a67] text-white' : (darkMode ? 'bg-gray-800 text-gray-300' : 'bg-white/90 text-gray-700')"
+            @click="showSportDropdown = !showSportDropdown"
+          >
+            <span>{{ selectedSportLabel || t('sportType') }}</span>
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 opacity-80 transition-transform" :class="showSportDropdown ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          <div
+            v-if="showSportDropdown"
+            class="absolute top-full left-0 mt-1 p-2 rounded-[8px] border shadow-lg z-20 min-w-[220px] max-h-[220px] flex flex-col"
+            :class="darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'"
+          >
+            <div class="max-h-[160px] overflow-y-auto space-y-1 custom-scrollbar pr-1 flex-1 min-h-0">
+              <button
+                v-for="s in sports"
+                :key="s.id"
+                type="button"
+                class="w-full flex items-center gap-2 px-2.5 py-2 rounded-[8px] text-left text-[11px] font-bold transition-all"
+                :class="sportFilter.includes(s.slug)
+                  ? 'bg-[#007a67] text-white'
+                  : (darkMode ? 'bg-gray-900/60 text-gray-200 hover:bg-gray-800' : 'bg-gray-100 text-gray-700 hover:bg-gray-200')"
+                @click.stop="selectSport(s.slug)"
+              >
+                <div class="w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0"
+                  :class="sportFilter.includes(s.slug) ? 'bg-white border-white' : (darkMode ? 'border-gray-500' : 'border-gray-300')"
+                >
+                  <svg v-if="sportFilter.includes(s.slug)" xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-[#007a67]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <span class="flex-1">{{ language === 'zh' && s.name_zh ? s.name_zh : s.name }}</span>
+              </button>
+            </div>
+          </div>
+        </div>
         <button
           type="button"
           class="inline-flex items-center rounded-[999px] px-3 py-2 text-[11px] font-bold transition-all shadow-md"
@@ -577,10 +641,56 @@ const goNextVenueFromDetail = async () => {
         </div>
       </div>
       <div class="flex flex-wrap gap-2 items-center">
-        
+        <div class="relative">
+          <button
+            type="button"
+            class="inline-flex items-center gap-1.5 rounded-[999px] px-3 py-2 text-[12px] font-bold transition-all"
+            :class="selectedSport ? 'bg-[#007a67] text-white shadow-sm' : (darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200')"
+            @click="showSportDropdown = !showSportDropdown"
+          >
+            <span>{{ selectedSportLabel || t('sportType') }}</span>
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 opacity-80 transition-transform" :class="showSportDropdown ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          <div
+            v-if="showSportDropdown"
+            class="absolute top-full left-0 mt-1 p-2 rounded-[8px] border shadow-lg z-20 min-w-[220px] max-h-[220px] flex flex-col"
+            :class="darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'"
+          >
+            <div class="max-h-[160px] overflow-y-auto space-y-1 custom-scrollbar pr-1 flex-1 min-h-0">
+              <button
+                v-for="s in sports"
+                :key="s.id"
+                type="button"
+                class="w-full flex items-center gap-2 px-2.5 py-2 rounded-[8px] text-left text-[11px] font-bold transition-all"
+                :class="sportFilter.includes(s.slug)
+                  ? 'bg-[#007a67] text-white'
+                  : (darkMode ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200')"
+                @click.stop="selectSport(s.slug)"
+              >
+                <div class="w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0"
+                  :class="sportFilter.includes(s.slug) ? 'bg-white border-white' : (darkMode ? 'border-gray-500' : 'border-gray-300')"
+                >
+                  <svg v-if="sportFilter.includes(s.slug)" xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-[#007a67]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <span class="flex-1">{{ language === 'zh' && s.name_zh ? s.name_zh : s.name }}</span>
+              </button>
+            </div>
+            <button
+              type="button"
+              class="flex-shrink-0 mt-2 w-full px-3 py-2 text-[11px] font-bold rounded-[8px]"
+              :class="darkMode ? 'text-gray-300 bg-gray-800 hover:bg-gray-700' : 'text-gray-600 bg-gray-200 hover:bg-gray-300'"
+              @click.stop="clearSportSelection"
+            >
+              {{ t('clearAll') }}
+            </button>
+          </div>
         <button
           type="button"
-          class="inline-flex items-center rounded-[999px] px-3 py-2 text-[12px] font-bold transition-all"
+          class="inline-flex items-center rounded-[999px] px-3 py-2 text-[12px] font-bold transition-all ml-2"
           :class="distanceFilter === '5' ? 'bg-[#007a67] text-white shadow-sm' : (darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700')"
           @click="setDistanceFilter(distanceFilter === '5' ? '' : '5')"
         >
@@ -588,7 +698,7 @@ const goNextVenueFromDetail = async () => {
         </button>
         <button
           type="button"
-          class="inline-flex items-center rounded-[999px] px-3 py-2 text-[12px] font-bold transition-all"
+          class="inline-flex items-center rounded-[999px] px-3 py-2 text-[12px] font-bold transition-all ml-2"
           :class="distanceFilter === '10' ? 'bg-[#007a67] text-white shadow-sm' : (darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700')"
           @click="setDistanceFilter(distanceFilter === '10' ? '' : '10')"
         >
@@ -596,12 +706,13 @@ const goNextVenueFromDetail = async () => {
         </button>
         <button
           type="button"
-          class="inline-flex items-center gap-1.5 rounded-[999px] px-3 py-2 text-[12px] font-bold transition-all"
+          class="inline-flex items-center gap-1.5 rounded-[999px] px-3 py-2 text-[12px] font-bold transition-all mt-2"
           :class="filterSpecialOffer ? 'bg-[#007a67] text-white shadow-sm' : (darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200')"
           @click="setFilterSpecialOffer(!filterSpecialOffer)"
         >
           {{ t('specialOffer') }}
         </button>
+        </div>
         <template v-for="station in mtrFilter" :key="station">
           <span
             class="inline-flex items-center gap-1 rounded-[999px] pl-3 pr-1.5 py-2 text-[12px] font-bold bg-[#007a67] text-white"

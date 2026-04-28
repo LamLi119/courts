@@ -3,8 +3,6 @@ import { onMounted, onBeforeUnmount, ref, watch, computed } from 'vue';
 import type { Venue, Language } from '../../types';
 declare const google: any;
 
-const courtIconUrl = `${import.meta.env.BASE_URL}green-G.svg`;
-
 const props = defineProps<{
   venues: Venue[];
   selectedVenue: Venue | null;
@@ -20,6 +18,9 @@ const mapRef = ref<HTMLDivElement | null>(null);
 const googleMap = ref<any>(null);
  /** Markers keyed by location key (lat,lng rounded) so one pin per same building. */
 const markers = ref<Record<string, any>>({});
+const selectedVenueByLocation = ref<Record<string, Venue>>({});
+const venueCountByLocation = ref<Record<string, number>>({});
+const embeddedIconCache = ref<Record<string, string>>({});
 const infoWindow = ref<any>(null);
 const mapError = ref<string | null>(null);
 
@@ -56,6 +57,9 @@ function initMap() {
       streetViewControl: props.isMobile ? true : false,
       fullscreenControl: props.isMobile ? true : false,
       styles: props.darkMode ? DARK_MODE_STYLE : MAP_STYLES
+    });
+    googleMap.value.addListener('zoom_changed', () => {
+      refreshMarkerIconsByZoom();
     });
   } catch (err) {
     console.error('Error initializing map:', err);
@@ -238,6 +242,138 @@ const markerIconUrl = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
     </g>
   </svg>
 `)}`;
+const MARKER_NORMAL_SIZE = 40;
+const MARKER_SELECTED_SIZE = 56;
+const MARKER_ZOOM_BASE = 11;
+const MARKER_MIN_SCALE = 1.5;
+const MARKER_MAX_SCALE = 2.2;
+
+function escapeXml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll('\'', '&apos;');
+}
+
+function toAbsoluteAssetUrl(rawUrl: string): string {
+  const input = (rawUrl || '').toString().trim();
+  if (!input) return '';
+  try {
+    // Resolve relative URLs (e.g. /uploads/xxx.png) against current site origin.
+    return new URL(input, window.location.origin).toString();
+  } catch {
+    return input;
+  }
+}
+
+function buildMarkerIconUrl(venue?: Venue, isSelected = false, venueCount = 1): string {
+  const rawIcon = (venue?.org_icon || venue?.images?.[0] || '').toString().trim();
+  const iconUrl = toAbsoluteAssetUrl(rawIcon);
+  const embeddedIcon = iconUrl ? embeddedIconCache.value[iconUrl] : '';
+  const safeIcon = embeddedIcon ? escapeXml(embeddedIcon) : '';
+  const clampedCount = Math.max(1, Math.floor(venueCount || 1));
+  const countLabel = clampedCount > 99 ? '99+' : String(clampedCount);
+  const isMultiVenuePin = clampedCount > 1;
+  const svgWidth = isSelected ? 40 : 24;
+  const iconRadius = isSelected ? 4.2 : 3.8;
+  const pinCountFontSize = clampedCount >= 10 ? 5 : 6.2;
+  const pinCountY = 11.2;
+  const iconSize = isSelected ? 10.5 : 9.5;
+  const iconX = 12 - iconSize / 2;
+  const iconY = 9.5 - iconSize / 2;
+  const popupSize = 30;
+  const popupX = 15.2;
+  const popupY = 1.2;
+  const popupInnerSize = popupSize - 1.6;
+  const popupInnerX = popupX + 0.8;
+  const popupInnerY = popupY + 0.8;
+  const selectedPopup = (isSelected && safeIcon) ? `
+      <g>
+        <rect x="${popupX}" y="${popupY}" width="${popupSize}" height="${popupSize}" rx="1.6" ry="1.6" fill="#ffffff" stroke="#007a67" stroke-width="0.7" />
+        <clipPath id="selectedVenueIconClip">
+          <rect x="${popupInnerX}" y="${popupInnerY}" width="${popupInnerSize}" height="${popupInnerSize}" rx="1.2" ry="1.2" />
+        </clipPath>
+        <image href="${safeIcon}" xlink:href="${safeIcon}" x="${popupInnerX}" y="${popupInnerY}" width="${popupInnerSize}" height="${popupInnerSize}" preserveAspectRatio="xMidYMid slice" clip-path="url(#selectedVenueIconClip)" />
+      </g>
+    ` : '';
+  const centerContent = isMultiVenuePin
+    ? `<text x="12" y="${pinCountY}" text-anchor="middle" font-size="${pinCountFontSize}" font-weight="700" fill="#ffffff" font-family="Arial, sans-serif">${countLabel}</text>`
+    : (safeIcon
+      ? `<image href="${safeIcon}" xlink:href="${safeIcon}" x="${iconX}" y="${iconY}" width="${iconSize}" height="${iconSize}" preserveAspectRatio="xMidYMid slice" clip-path="url(#venueIconClip)" />`
+      : `<text x="12" y="${pinCountY}" text-anchor="middle" font-size="${pinCountFontSize}" font-weight="700" fill="#ffffff" font-family="Arial, sans-serif">1</text>`);
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
+    <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${svgWidth}" height="34" viewBox="0 0 ${svgWidth} 34">
+      <defs>
+        <clipPath id="venueIconClip">
+          <circle cx="12" cy="9.5" r="${iconRadius}" />
+        </clipPath>
+      </defs>
+      <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"
+            fill="#007a67"
+            stroke="#ffffff"
+            stroke-width="1" />
+      ${centerContent}
+      <circle cx="12" cy="9.5" r="${iconRadius}" fill="none" stroke="#ffffff" stroke-width="0.6" />
+      ${selectedPopup}
+    </svg>
+  `)}`;
+}
+
+function markerIconConfig(venue: Venue | undefined, isSelected = false, venueCount = 1) {
+  const zoom = googleMap.value?.getZoom?.() ?? (props.isMobile ? 10 : 11);
+  const delta = zoom - MARKER_ZOOM_BASE;
+  const scale = Math.min(MARKER_MAX_SCALE, Math.max(MARKER_MIN_SCALE, 1 + (delta * 0.12)));
+  const baseSize = isSelected ? MARKER_SELECTED_SIZE : MARKER_NORMAL_SIZE;
+  const size = Math.round(baseSize * scale);
+  const width = isSelected ? Math.round((size * 40) / 24) : size;
+  return {
+    url: buildMarkerIconUrl(venue, isSelected, venueCount),
+    scaledSize: new google.maps.Size(width, size),
+    anchor: new google.maps.Point(size / 2, size),
+  };
+}
+
+function refreshMarkerIconsByZoom() {
+  if (!googleMap.value || typeof google === 'undefined') return;
+  const selectedPos = props.selectedVenue ? normalizeLatLng((props.selectedVenue as any).coordinates) : null;
+  const selectedLocationKey = selectedPos ? getLocationKey(selectedPos) : null;
+  Object.keys(markers.value).forEach((key) => {
+    const marker = markers.value[key];
+    const venue = selectedVenueByLocation.value[key];
+    const venueCount = venueCountByLocation.value[key] ?? 1;
+    if (!marker || !venue) return;
+    const isSelected = selectedLocationKey === key;
+    marker.setIcon(markerIconConfig(venue, isSelected, venueCount));
+  });
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve((reader.result || '').toString());
+    reader.onerror = () => reject(new Error('Failed to read image blob'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function ensureEmbeddedIcon(venue?: Venue): Promise<void> {
+  const rawIcon = (venue?.org_icon || venue?.images?.[0] || '').toString().trim();
+  const iconUrl = toAbsoluteAssetUrl(rawIcon);
+  if (!iconUrl) return;
+  if (embeddedIconCache.value[iconUrl]) return;
+  try {
+    const res = await fetch(iconUrl, { method: 'GET', mode: 'cors', credentials: 'omit' });
+    if (!res.ok) return;
+    const blob = await res.blob();
+    const dataUrl = await blobToDataUrl(blob);
+    if (!dataUrl) return;
+    embeddedIconCache.value[iconUrl] = dataUrl;
+  } catch {
+    // If image fetch/convert fails (CORS or remote host restriction), fallback to default marker icon.
+  }
+}
 
 // Valid ranges: lat -90..90, lng -180..180 (Hong Kong ~22.3, 114.1)
 const isValidLat = (n: number) => typeof n === 'number' && !Number.isNaN(n) && n >= -90 && n <= 90;
@@ -301,9 +437,11 @@ const clearAllMarkers = () => {
     }
   });
   markers.value = {};
+  selectedVenueByLocation.value = {};
+  venueCountByLocation.value = {};
 };
 
-const syncMarkers = () => {
+const syncMarkers = async () => {
   if (!googleMap.value || typeof google === 'undefined') return;
   clearAllMarkers();
 
@@ -317,25 +455,28 @@ const syncMarkers = () => {
     groups.get(key)!.push(venue);
   });
 
-  groups.forEach((venueList, locationKey) => {
-    const venue = venueList[0];
-    const coords = normalizeLatLng((venue as any).coordinates);
+  for (const [locationKey, venueList] of groups.entries()) {
+    const selectedVenue = selectedVenueByLocation.value[locationKey];
+    const initialVenue =
+      selectedVenue && venueList.some((v) => v.id === selectedVenue.id)
+        ? selectedVenue
+        : venueList[0];
+    const coords = normalizeLatLng((initialVenue as any).coordinates);
     if (!coords) return;
+    selectedVenueByLocation.value[locationKey] = initialVenue;
+    venueCountByLocation.value[locationKey] = venueList.length;
 
     const title =
       venueList.length > 1
         ? venueList.map((v) => v.name).join(', ')
-        : venue.name;
+        : initialVenue.name;
 
+    await ensureEmbeddedIcon(initialVenue);
     const marker = new google.maps.Marker({
       position: coords,
       map: googleMap.value,
       title,
-      icon: {
-        url: markerIconUrl,
-        scaledSize: new google.maps.Size(48, 48),
-        anchor: new google.maps.Point(24, 48)
-      },
+      icon: markerIconConfig(initialVenue, false, venueList.length),
       animation: google.maps.Animation.DROP
     });
 
@@ -358,7 +499,10 @@ const syncMarkers = () => {
           btn.type = 'button';
           btn.textContent = v.name;
           btn.style.cssText = 'display:block;width:100%;text-align:left;padding:8px 12px;font-size:14px;font-weight:700;border:none;background:transparent;cursor:pointer;border-radius:8px;';
-          btn.addEventListener('click', () => {
+          btn.addEventListener('click', async () => {
+            selectedVenueByLocation.value[locationKey] = v;
+            await ensureEmbeddedIcon(v);
+            marker.setIcon(markerIconConfig(v, true, venueList.length));
             props.onSelectVenue(v);
             if (infoWindow.value) infoWindow.value.close();
           });
@@ -373,7 +517,7 @@ const syncMarkers = () => {
       }
     });
     markers.value[locationKey] = marker;
-  });
+  }
 };
 
 const fitToAllVenues = () => {
@@ -469,7 +613,16 @@ watch(
       Object.values(markers.value).forEach((m) => m.setAnimation(null));
       const locationKey = pos ? getLocationKey(pos) : null;
       const selectedMarker = locationKey ? markers.value[locationKey] : null;
+      Object.keys(markers.value).forEach((key) => {
+        const mk = markers.value[key];
+        const v = selectedVenueByLocation.value[key];
+        const venueCount = venueCountByLocation.value[key] ?? 1;
+        if (mk && v && mk !== selectedMarker) {
+          mk.setIcon(markerIconConfig(v, false, venueCount));
+        }
+      });
       if (selectedMarker) {
+        selectedMarker.setIcon(markerIconConfig(selected, true, venueCountByLocation.value[locationKey || ''] ?? 1));
         selectedMarker.setAnimation(google.maps.Animation.BOUNCE);
         setTimeout(() => selectedMarker.setAnimation(null), 1500);
       }
