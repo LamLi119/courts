@@ -244,6 +244,8 @@ const markerIconUrl = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
 `)}`;
 const MARKER_NORMAL_SIZE = 40;
 const MARKER_SELECTED_SIZE = 56;
+const SELECTED_MARKER_SVG_WIDTH = 48;
+const NORMAL_MARKER_SVG_WIDTH = 24;
 const MARKER_ZOOM_BASE = 11;
 const MARKER_MIN_SCALE = 1.5;
 const MARKER_MAX_SCALE = 2.2;
@@ -354,7 +356,8 @@ function buildMarkerIconUrl(venue?: Venue, isSelected = false, venueCount = 1): 
   const clampedCount = Math.max(1, Math.floor(venueCount || 1));
   const countLabel = clampedCount > 99 ? '99+' : String(clampedCount);
   const isMultiVenuePin = clampedCount > 1;
-  const svgWidth = isSelected ? 40 : 24;
+  // Ensure selected popup (x + width) stays inside viewBox to avoid clipping.
+  const svgWidth = isSelected ? SELECTED_MARKER_SVG_WIDTH : NORMAL_MARKER_SVG_WIDTH;
   const iconRadius = isSelected ? 4.2 : 3.8;
   const pinCountFontSize = clampedCount >= 10 ? 5 : 6.2;
   const pinCountY = 11.2;
@@ -362,7 +365,7 @@ function buildMarkerIconUrl(venue?: Venue, isSelected = false, venueCount = 1): 
   const iconX = 12 - iconSize / 2;
   const iconY = 9.5 - iconSize / 2;
   const popupSize = 30;
-  const popupX = 15.2;
+  const popupX = 16.2;
   const popupY = 1.2;
   const popupInnerSize = popupSize - 1.6;
   const popupInnerX = popupX + 0.8;
@@ -408,7 +411,7 @@ function markerIconConfig(venue: Venue | undefined, isSelected = false, venueCou
   const scale = Math.min(MARKER_MAX_SCALE, Math.max(MARKER_MIN_SCALE, 1 + (delta * 0.12)));
   const baseSize = isSelected ? MARKER_SELECTED_SIZE : MARKER_NORMAL_SIZE;
   const size = Math.round(baseSize * scale);
-  const width = isSelected ? Math.round((size * 40) / 24) : size;
+  const width = isSelected ? Math.round((size * SELECTED_MARKER_SVG_WIDTH) / NORMAL_MARKER_SVG_WIDTH) : size;
   return {
     url: buildMarkerIconUrl(venue, isSelected, venueCount),
     scaledSize: new google.maps.Size(width, size),
