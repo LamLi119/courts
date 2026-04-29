@@ -2,12 +2,13 @@ import path from 'path';
 import fs from 'fs';
 import express from 'express';
 import mysql from 'mysql2/promise';
-import axios from 'axios';
-import FormData from 'form-data';
 import crypto from 'crypto';
+import axios from 'axios';
+import { Storage } from '@google-cloud/storage';
 
 const app = express();
-app.use(express.json({ limit: '5mb' })); // Increased limit for Base64
+// Venue form sends base64 images; keep payload limit high enough for multi-image saves.
+app.use(express.json({ limit: '25mb' }));
 
 let pool;
 const THE_GRIND_BACKEND_URL = (process.env.THE_GRIND_BACKEND_URL || process.env.THEGRIND_BACKEND_URL || '').replace(/\/$/, '');
@@ -63,25 +64,123 @@ const getPool = () => {
   return pool;
 };
 
-const IMGBB_API_KEY = process.env.IMGBB_API_KEY || '';
+const GCS_BUCKET_NAME = (process.env.GCS_BUCKET_NAME || '').trim();
+let gcsBucket = null;
 
-/** Helper: Upload to ImgBB */
-async function uploadToImgBB(base64String) {
-  if (!IMGBB_API_KEY || !base64String || !base64String.startsWith('data:')) return base64String;
+function getGcsBucket() {
+  if (!GCS_BUCKET_NAME) return null;
+  if (!gcsBucket) {
+    const storage = new Storage();
+    gcsBucket = storage.bucket(GCS_BUCKET_NAME);
+  }
+  return gcsBucket;
+}
+
+function parseImageDataUrl(input) {
+  if (typeof input !== 'string') return null;
+  const m = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(input);
+  if (!m) return null;
+  return { mimeType: m[1], base64Data: m[2] };
+}
+
+function extFromMimeType(mimeType) {
+  if (mimeType === 'image/jpeg') return 'jpg';
+  if (mimeType === 'image/png') return 'png';
+  if (mimeType === 'image/webp') return 'webp';
+  if (mimeType === 'image/gif') return 'gif';
+  if (mimeType === 'image/avif') return 'avif';
+  return 'bin';
+}
+
+function looksLikeImgbbUrl(input) {
+  if (typeof input !== 'string') return false;
   try {
-    const base64Data = base64String.replace(/^data:image\/\w+;base64,/, '');
-    const formData = new FormData();
-    formData.append('image', base64Data);
-    const response = await axios.post(
-      `https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`,
-      formData,
-      { headers: formData.getHeaders() }
-    );
-    return response.data.data?.url ?? null;
-  } catch (err) {
-    console.error('ImgBB Upload Error:', err.message);
+    const u = new URL(input);
+    const host = (u.hostname || '').toLowerCase();
+    return host.includes('imgbb.com') || host.includes('ibb.co');
+  } catch (_) {
+    return false;
+  }
+}
+
+async function readRemoteImage(remoteUrl) {
+  const response = await axios.get(remoteUrl, {
+    responseType: 'arraybuffer',
+    timeout: 15000,
+    maxRedirects: 5,
+    validateStatus: (status) => status >= 200 && status < 300
+  });
+  const contentTypeRaw = String(response.headers?.['content-type'] || '').split(';')[0].trim().toLowerCase();
+  const mimeType = contentTypeRaw.startsWith('image/') ? contentTypeRaw : 'image/jpeg';
+  return { mimeType, buffer: Buffer.from(response.data) };
+}
+
+/** Helper: Upload image input (data URL / ImgBB URL) to Google Cloud Storage. */
+async function uploadToGCS(imageInput, folder = 'venues') {
+  const parsed = parseImageDataUrl(imageInput);
+  const shouldCopyImgbb = !parsed && looksLikeImgbbUrl(imageInput);
+  // Keep other remote URLs unchanged.
+  if (!parsed && !shouldCopyImgbb) return imageInput;
+
+  const bucket = getGcsBucket();
+  if (!bucket) {
+    console.error('GCS upload skipped: GCS_BUCKET_NAME is not set');
     return null;
   }
+
+  try {
+    const imageData = parsed
+      ? { mimeType: parsed.mimeType, buffer: Buffer.from(parsed.base64Data, 'base64') }
+      : await readRemoteImage(imageInput);
+    const { mimeType, buffer } = imageData;
+    const ext = extFromMimeType(mimeType);
+    const random = crypto.randomBytes(6).toString('hex');
+    const objectPath = `${folder}/${Date.now()}-${random}.${ext}`;
+    const file = bucket.file(objectPath);
+    await file.save(buffer, {
+      contentType: mimeType,
+      resumable: false,
+      metadata: {
+        cacheControl: 'public, max-age=31536000, immutable'
+      }
+    });
+    return `https://storage.googleapis.com/${GCS_BUCKET_NAME}/${encodeURIComponent(objectPath).replace(/%2F/g, '/')}`;
+  } catch (err) {
+    console.error('GCS upload error:', err?.message || err);
+    return null;
+  }
+}
+
+/** Helper: ensure pricing image is a GCS URL (not base64) before DB write. */
+async function normalizePricingForStorage(rawPricing) {
+  if (rawPricing == null || rawPricing === '') return rawPricing;
+
+  let parsed = rawPricing;
+  let fromString = false;
+  if (typeof rawPricing === 'string') {
+    try {
+      parsed = JSON.parse(rawPricing);
+      fromString = true;
+    } catch (_) {
+      return rawPricing;
+    }
+  }
+
+  if (!parsed || typeof parsed !== 'object') return rawPricing;
+
+  const pricing = { ...parsed };
+  const imageUrl = typeof pricing.imageUrl === 'string' ? pricing.imageUrl : '';
+  if (pricing.type === 'image' && imageUrl.startsWith('data:')) {
+    const uploadedUrl = await uploadToGCS(imageUrl, 'pricing');
+    // Keep only remote URLs in DB; never keep large base64 pricing images.
+    if (typeof uploadedUrl === 'string' && /^https?:\/\//i.test(uploadedUrl)) {
+      pricing.imageUrl = uploadedUrl;
+    } else {
+      pricing.imageUrl = '';
+    }
+  }
+
+  return fromString ? JSON.stringify(pricing) : pricing;
 }
 
 /** User-friendly message when DB connection fails (e.g. MySQL not running or wrong MYSQL_HOST). */
@@ -412,12 +511,54 @@ const PROXY_SECRET = process.env.PROXY_SECRET || '';
 app.use('/api', (req, res, next) => {
   if (!PROXY_SECRET) return next();
   if (req.method === 'OPTIONS') return next();
+  // Public, allowlisted image proxy used by the frontend to avoid GCS CORS.
+  // Safe because `/api/image-proxy` only allows storage.googleapis.com URLs.
+  if (req.path === '/image-proxy') return next();
   const incoming = req.get('x-proxy-secret') || '';
   if (incoming !== PROXY_SECRET) return res.status(401).json({ error: 'Unauthorized' });
   return next();
 });
 
 // --- ROUTES ---
+
+function isAllowedImageProxyUrl(rawUrl) {
+  if (!rawUrl) return false;
+  try {
+    const u = new URL(String(rawUrl));
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return false;
+    const host = (u.hostname || '').toLowerCase();
+    // Allow GCS public object URLs only (prevents SSRF).
+    if (host === 'storage.googleapis.com') return true;
+    if (host.endsWith('.storage.googleapis.com')) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+app.get('/api/image-proxy', async (req, res) => {
+  try {
+    const raw = (req.query?.url || '').toString().trim();
+    if (!raw) return res.status(400).json({ error: 'Missing url' });
+    if (!isAllowedImageProxyUrl(raw)) return res.status(400).json({ error: 'Invalid image url' });
+
+    const response = await axios.get(raw, {
+      responseType: 'arraybuffer',
+      timeout: 15000,
+      maxRedirects: 3,
+      validateStatus: (status) => status >= 200 && status < 300
+    });
+
+    const contentType = String(response.headers?.['content-type'] || 'application/octet-stream');
+    // Keep cache-friendly defaults; the underlying GCS objects are immutable in this app.
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    return res.status(200).send(Buffer.from(response.data));
+  } catch (err) {
+    const msg = err?.message || 'Proxy failed';
+    return res.status(502).json({ error: msg });
+  }
+});
 
 // --- USER AUTH (proxy to TheGround backend) ---
 app.post('/api/user/auth/login', async (req, res) => {
@@ -593,7 +734,10 @@ app.post('/api/user/auth/complete-phone', async (req, res) => {
     const updateBody = {
       ...(currentUser && typeof currentUser === 'object' ? currentUser : {}),
       id: userId,
+      // Send both key styles for backend compatibility across deployments.
+      countryCode,
       country_code: countryCode,
+      phoneNo,
       phone_no: phoneNo,
     };
     try {
@@ -916,18 +1060,23 @@ app.post('/api/venues', async (req, res) => {
     // 1. Process Main Images
     if (row.images && Array.isArray(row.images)) {
       const imageUrls = await Promise.all(
-        row.images.map(img => uploadToImgBB(img))
+        row.images.map((img) => uploadToGCS(img, 'venues'))
       );
       row.images = JSON.stringify(imageUrls.filter(url => url !== null));
     }
 
-    // 2. Process orgIcon: upload data URLs to ImgBB, cap length for DB
+    // 2. Process orgIcon: upload data URLs to GCS, cap length for DB
     if (row.orgIcon != null && row.orgIcon !== '') {
       if (row.orgIcon.startsWith('data:')) {
-        const uploadedUrl = await uploadToImgBB(row.orgIcon);
+        const uploadedUrl = await uploadToGCS(row.orgIcon, 'org-icons');
         row.orgIcon = uploadedUrl || null;
       }
       if (row.orgIcon && row.orgIcon.length > 2048) row.orgIcon = row.orgIcon.slice(0, 2048);
+    }
+
+    // 3. Process pricing image: upload base64 imageUrl to GCS when pricing.type === 'image'
+    if (row.pricing != null && row.pricing !== '') {
+      row.pricing = await normalizePricingForStorage(row.pricing);
     }
 
     if (row.coordinates) row.coordinates = JSON.stringify(row.coordinates);
@@ -972,15 +1121,18 @@ app.put('/api/venues/:id', async (req, res) => {
       }
 
       if (row.images && Array.isArray(row.images)) {
-        const imageUrls = await Promise.all(row.images.map(img => uploadToImgBB(img)));
+        const imageUrls = await Promise.all(row.images.map((img) => uploadToGCS(img, 'venues')));
         row.images = JSON.stringify(imageUrls.filter(u => u !== null));
       }
       if (row.orgIcon != null && row.orgIcon !== '') {
         if (row.orgIcon.startsWith('data:')) {
-          const uploadedUrl = await uploadToImgBB(row.orgIcon);
+          const uploadedUrl = await uploadToGCS(row.orgIcon, 'org-icons');
           row.orgIcon = uploadedUrl || null;
         }
         if (row.orgIcon && row.orgIcon.length > 2048) row.orgIcon = row.orgIcon.slice(0, 2048);
+      }
+      if (row.pricing != null && row.pricing !== '') {
+        row.pricing = await normalizePricingForStorage(row.pricing);
       }
       if (row.coordinates) row.coordinates = JSON.stringify(row.coordinates);
 
