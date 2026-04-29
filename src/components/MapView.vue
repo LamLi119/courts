@@ -614,13 +614,18 @@ const syncMarkers = async () => {
       } else {
         // Multiple venues at this location:
         // - do NOT auto-select
-        // - show a popup list anchored to the clicked pin
+        // - on desktop, use list-side filtering only
+        // - on mobile, show popup list anchored to the clicked pin
         if (!props.isMobile) {
           // Desktop still uses list-side filtering.
           props.onShowVenuesAtLocation?.(venueList);
         }
         props.onSelectVenue(null);
-        openVenuesInfoWindow(marker, venueList, locationKey);
+        if (props.isMobile) {
+          openVenuesInfoWindow(marker, venueList, locationKey);
+        } else {
+          try { infoWindow.value?.close?.(); } catch { /* ignore */ }
+        }
       }
     });
     markers.value[locationKey] = marker;
