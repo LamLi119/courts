@@ -34,6 +34,8 @@ const props = defineProps<{
   setTab: (t: AppTab) => void;
   setFilterSpecialOffer?: (v: boolean) => void;
   filterSpecialOffer?: boolean;
+  filterSavedOnly?: boolean;
+  setFilterSavedOnly?: (v: boolean) => void;
   /** When set (e.g. after clicking a pin), list shows only these venues. */
   listVenues?: Venue[] | null;
   onShowVenuesAtLocation?: (venues: Venue[]) => void;
@@ -48,6 +50,7 @@ const MapView = defineAsyncComponent(() => import('./MapView.vue'));
 const showFilterPanel = ref(false);
 const showMtrDropdown = ref(false);
 const showSportDropdown = ref(false);
+const showDistanceDropdown = ref(false);
 const mtrSearchQuery = ref('');
 const draftMtrFilter = ref<string[]>([]);
 const draftSportFilter = ref<string[]>([]);
@@ -91,6 +94,7 @@ watch(
       mtrSearchQuery.value = '';
       showMtrDropdown.value = false;
       showSportDropdown.value = false;
+      showDistanceDropdown.value = false;
     }
   }
 );
@@ -124,6 +128,12 @@ const selectedSportLabel = computed(() => {
   return props.language === 'zh' && s.name_zh ? s.name_zh : s.name;
 });
 
+const selectedDistanceLabel = computed(() => {
+  if (props.distanceFilter === '5') return props.t('mtrUnder5Min');
+  if (props.distanceFilter === '10') return props.t('mtrUnder10Min');
+  return null;
+});
+
 const selectSport = (slug: string) => {
   props.setSportFilter([slug]);
   draftSportFilter.value = [slug];
@@ -134,6 +144,16 @@ const clearSportSelection = () => {
   props.setSportFilter([]);
   draftSportFilter.value = [];
   showSportDropdown.value = false;
+};
+
+const selectDistance = (value: '5' | '10') => {
+  props.setDistanceFilter(value);
+  showDistanceDropdown.value = false;
+};
+
+const clearDistanceSelection = () => {
+  props.setDistanceFilter('');
+  showDistanceDropdown.value = false;
 };
 
 const leftListVenues = computed(() =>
@@ -182,7 +202,7 @@ const leftListVenues = computed(() =>
             <button type="button"
               class="inline-flex items-center gap-1.5 rounded-[999px] px-3 py-2 text-[12px] font-bold transition-all"
               :class="selectedSport ? 'bg-[#007a67] text-white shadow-sm' : (darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200')"
-              @click="showSportDropdown = !showSportDropdown">
+              @click="showSportDropdown = !showSportDropdown; showDistanceDropdown = false">
               <span>{{ selectedSportLabel || t('sportType') }}</span>
               <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 opacity-80 transition-transform"
                 :class="showSportDropdown ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -222,25 +242,73 @@ const leftListVenues = computed(() =>
               </button>
             </span>
           </template>
-          <button type="button"
-            class="inline-flex items-center gap-1.5 rounded-[999px] px-3 py-2 text-[12px] font-bold transition-all"
-            :class="distanceFilter === '5' ? 'bg-[#007a67] text-white shadow-sm' : (darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200')"
-            @click="setDistanceFilter(distanceFilter === '5' ? '' : '5')">
-            {{ t('mtrUnder5Min') }}
-          </button>
-          <button type="button"
-            class="inline-flex items-center gap-1.5 rounded-[999px] px-3 py-2 text-[12px] font-bold transition-all"
-            :class="distanceFilter === '10' ? 'bg-[#007a67] text-white shadow-sm' : (darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200')"
-            @click="setDistanceFilter(distanceFilter === '10' ? '' : '10')">
-            {{ t('mtrUnder10Min') }}
-          </button>
+          <div class="relative">
+            <button type="button"
+              class="inline-flex items-center gap-1.5 rounded-[999px] px-3 py-2 text-[12px] font-bold transition-all"
+              :class="distanceFilter ? 'bg-[#007a67] text-white shadow-sm' : (darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200')"
+              @click="showDistanceDropdown = !showDistanceDropdown; showSportDropdown = false">
+              <span>{{ selectedDistanceLabel || t('walkingDistance') }}</span>
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 opacity-80 transition-transform"
+                :class="showDistanceDropdown ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            <div v-if="showDistanceDropdown"
+              class="absolute top-full left-0 mt-1 p-2 rounded-[8px] border shadow-lg z-20 min-w-[200px] flex flex-col"
+              :class="darkMode ? 'bg-gray-800 border-gray-600' : 'bg-white border-gray-200'">
+              <div class="space-y-1">
+                <button type="button"
+                  class="w-full flex items-center gap-2 px-3 py-2 rounded-[8px] text-left text-[12px] font-bold transition-all"
+                  :class="distanceFilter === '5'
+                    ? 'bg-[#007a67] text-white'
+                    : (darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200')"
+                  @click.stop="selectDistance('5')">
+                  <div class="w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0"
+                    :class="distanceFilter === '5' ? 'bg-white border-white' : (darkMode ? 'border-gray-500' : 'border-gray-300')">
+                    <svg v-if="distanceFilter === '5'" xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-[#007a67]"
+                      fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <span class="flex-1">{{ t('mtrUnder5Min') }}</span>
+                </button>
+                <button type="button"
+                  class="w-full flex items-center gap-2 px-3 py-2 rounded-[8px] text-left text-[12px] font-bold transition-all"
+                  :class="distanceFilter === '10'
+                    ? 'bg-[#007a67] text-white'
+                    : (darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200')"
+                  @click.stop="selectDistance('10')">
+                  <div class="w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0"
+                    :class="distanceFilter === '10' ? 'bg-white border-white' : (darkMode ? 'border-gray-500' : 'border-gray-300')">
+                    <svg v-if="distanceFilter === '10'" xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-[#007a67]"
+                      fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <span class="flex-1">{{ t('mtrUnder10Min') }}</span>
+                </button>
+              </div>
+              <button type="button"
+                class="flex-shrink-0 mt-2 w-full px-3 py-2 text-[11px] font-bold rounded-[8px]"
+                :class="darkMode ? 'text-gray-300 bg-gray-800 hover:bg-gray-700' : 'text-gray-600 bg-gray-200 hover:bg-gray-300'"
+                @click.stop="clearDistanceSelection">
+                {{ t('clearAll') }}
+              </button>
+            </div>
+          </div>
           <button v-if="setFilterSpecialOffer" type="button"
             class="inline-flex items-center gap-1.5 rounded-[999px] px-3 py-2 text-[12px] font-bold transition-all"
             :class="filterSpecialOffer ? 'bg-[#007a67] text-white shadow-sm' : (darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200')"
             :title="t('specialOffer')" @click="setFilterSpecialOffer(!filterSpecialOffer)">
             {{ t('specialOffer') }}
           </button>
-          </div>
+          <button type="button"
+            class="inline-flex items-center gap-1.5 rounded-[999px] px-3 py-2 text-[12px] font-bold transition-all"
+            :class="filterSavedOnly ? 'bg-[#007a67] text-white shadow-sm' : (darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200')"
+            :title="t('saved')" @click="setFilterSavedOnly(!filterSavedOnly)">
+            {{ t('saved') }}
+          </button>
+        </div>
         <!-- Filter Panel -->
         <div v-if="showFilterPanel"
           class="mt-4 p-4 rounded-[12px] border space-y-3 animate-in slide-in-from-top duration-200"
@@ -345,7 +413,7 @@ const leftListVenues = computed(() =>
         </template>
       </div>
 
-      <div class="flex-shrink-0 p-4 border-t"
+      <!-- <div class="flex-shrink-0 p-4 border-t"
         :class="darkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'">
         <button type="button"
           class="w-full flex items-center justify-center gap-2 py-3 rounded-[8px] text-[14px] font-bold transition-all"
@@ -356,7 +424,7 @@ const leftListVenues = computed(() =>
           <span>❤️</span>
           <span>{{ t('saved') }}</span>
         </button>
-      </div>
+      </div> -->
     </div>
 
     <div class="flex-1 relative">
