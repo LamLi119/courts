@@ -27,11 +27,18 @@ export default async function handler(req: any, res: any) {
   if (!isSupportedProtocol(target)) return sendJson(res, 400, { error: 'Only http/https URLs are allowed' });
 
   try {
+    const targetUrl = new URL(target);
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), 12000);
-    const upstream = await fetch(target, {
+    const upstream = await fetch(targetUrl.toString(), {
       method: 'GET',
       redirect: 'follow',
+      headers: {
+        accept: 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+        // Some hosts reject requests without browser-like headers.
+        'user-agent': 'Mozilla/5.0 (compatible; CourtsFinderBot/1.0; +https://vercel.com)',
+        referer: `${targetUrl.origin}/`
+      },
       signal: ac.signal
     }).finally(() => clearTimeout(timer));
 

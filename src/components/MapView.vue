@@ -322,6 +322,21 @@ function openVenuesInfoWindow(marker: any, venueList: Venue[], locationKey: stri
 function toAbsoluteAssetUrl(rawUrl: string): string {
   const input = (rawUrl || '').toString().trim();
   if (!input) return '';
+  // Already absolute.
+  if (/^https?:\/\//i.test(input)) return input;
+
+  // In production, venue icon paths may be relative (/uploads/...) but served by API host.
+  const apiBase = (import.meta.env.VITE_API_URL as string | undefined)?.trim();
+  const baseCandidates = [apiBase, (typeof window !== 'undefined' ? window.location.origin : '')]
+    .filter((v): v is string => !!v);
+
+  for (const base of baseCandidates) {
+    try {
+      return new URL(input, base).toString();
+    } catch {
+      // try next base candidate
+    }
+  }
   try {
     // Resolve relative URLs (e.g. /uploads/xxx.png) against current site origin.
     return new URL(input, window.location.origin).toString();
