@@ -244,6 +244,8 @@ const markerIconUrl = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
 `)}`;
 const MARKER_NORMAL_SIZE = 40;
 const MARKER_SELECTED_SIZE = 56;
+const SELECTED_MARKER_SVG_WIDTH = 48;
+const NORMAL_MARKER_SVG_WIDTH = 24;
 const MARKER_ZOOM_BASE = 11;
 const MARKER_MIN_SCALE = 1.5;
 const MARKER_MAX_SCALE = 2.2;
@@ -271,7 +273,20 @@ function openVenuesInfoWindow(marker: any, venueList: Venue[], locationKey: stri
   const listHtml = venueList
     .map((v) => {
       const name = escapeXml((v?.name || '').toString());
-      return `<button type="button" data-venue-id="${String(v.id)}" style="display:block;width:100%;text-align:left;padding:8px 10px;border:0;background:transparent;font-weight:700;cursor:pointer;border-radius:8px;">${name}</button>`;
+      const rawIcon = (v?.org_icon || v?.images?.[0] || '/placeholder.svg').toString().trim();
+      const iconUrl = escapeXml(toAbsoluteAssetUrl(rawIcon));
+      return `
+        <button
+          type="button"
+          data-venue-id="${String(v.id)}"
+          style="display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:8px 10px;border:0;background:transparent;font-weight:700;cursor:pointer;border-radius:8px;"
+        >
+          <span style="width:30px;height:30px;border-radius:8px;overflow:hidden;flex-shrink:0;background:#f3f4f6;display:inline-flex;align-items:center;justify-content:center;">
+            <img src="${iconUrl}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block;" />
+          </span>
+          <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${name}</span>
+        </button>
+      `;
     })
     .join('');
 
@@ -322,6 +337,21 @@ function openVenuesInfoWindow(marker: any, venueList: Venue[], locationKey: stri
 function toAbsoluteAssetUrl(rawUrl: string): string {
   const input = (rawUrl || '').toString().trim();
   if (!input) return '';
+  // Already absolute.
+  if (/^https?:\/\//i.test(input)) return input;
+
+  // In production, venue icon paths may be relative (/uploads/...) but served by API host.
+  const apiBase = (import.meta.env.VITE_API_URL as string | undefined)?.trim();
+  const baseCandidates = [apiBase, (typeof window !== 'undefined' ? window.location.origin : '')]
+    .filter((v): v is string => !!v);
+
+  for (const base of baseCandidates) {
+    try {
+      return new URL(input, base).toString();
+    } catch {
+      // try next base candidate
+    }
+  }
   try {
     // Resolve relative URLs (e.g. /uploads/xxx.png) against current site origin.
     return new URL(input, window.location.origin).toString();
@@ -339,7 +369,8 @@ function buildMarkerIconUrl(venue?: Venue, isSelected = false, venueCount = 1): 
   const clampedCount = Math.max(1, Math.floor(venueCount || 1));
   const countLabel = clampedCount > 99 ? '99+' : String(clampedCount);
   const isMultiVenuePin = clampedCount > 1;
-  const svgWidth = isSelected ? 40 : 24;
+  // Ensure selected popup (x + width) stays inside viewBox to avoid clipping.
+  const svgWidth = isSelected ? SELECTED_MARKER_SVG_WIDTH : NORMAL_MARKER_SVG_WIDTH;
   const iconRadius = isSelected ? 4.2 : 3.8;
   const pinCountFontSize = clampedCount >= 10 ? 5 : 6.2;
   const pinCountY = 11.2;
@@ -347,7 +378,7 @@ function buildMarkerIconUrl(venue?: Venue, isSelected = false, venueCount = 1): 
   const iconX = 12 - iconSize / 2;
   const iconY = 9.5 - iconSize / 2;
   const popupSize = 30;
-  const popupX = 15.2;
+  const popupX = 16.2;
   const popupY = 1.2;
   const popupInnerSize = popupSize - 1.6;
   const popupInnerX = popupX + 0.8;
@@ -393,7 +424,7 @@ function markerIconConfig(venue: Venue | undefined, isSelected = false, venueCou
   const scale = Math.min(MARKER_MAX_SCALE, Math.max(MARKER_MIN_SCALE, 1 + (delta * 0.12)));
   const baseSize = isSelected ? MARKER_SELECTED_SIZE : MARKER_NORMAL_SIZE;
   const size = Math.round(baseSize * scale);
-  const width = isSelected ? Math.round((size * 40) / 24) : size;
+  const width = isSelected ? Math.round((size * SELECTED_MARKER_SVG_WIDTH) / NORMAL_MARKER_SVG_WIDTH) : size;
   return {
     url: buildMarkerIconUrl(venue, isSelected, venueCount),
     scaledSize: new google.maps.Size(width, size),
@@ -473,7 +504,8 @@ async function ensureEmbeddedIcon(venue?: Venue): Promise<void> {
   try {
     // Use same-origin proxy to avoid bucket CORS issues (e.g. GCS public objects without CORS).
     const proxiedUrl = `/api/image-proxy?url=${encodeURIComponent(iconUrl)}`;
-    const res = await fetch(proxiedUrl, { method: 'GET', credentials: 'omit' });
+    // Include same-origin cookies so Vercel preview protection doesn't 401 this API route.
+    const res = await fetch(proxiedUrl, { method: 'GET', credentials: 'same-origin' });
     if (!res.ok) return;
     const blob = await res.blob();
     // Rasterize to PNG so it's safe to embed inside our SVG marker icon.
