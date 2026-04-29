@@ -480,20 +480,22 @@ const nextVenue = computed(() => {
 });
 
 async function goToPrevVenue() {
-  if (!prevVenue.value) return;
-  selectedVenue.value = prevVenue.value;
+  const target = prevVenue.value;
+  if (!target) return;
+  selectedVenue.value = target;
   showDesktopDetail.value = true;
-  await router.push('/venues/' + useVenueSlug(prevVenue.value));
+  await router.push('/venues/' + useVenueSlug(target));
   if (typeof window !== 'undefined') {
     window.scrollTo({ top: 0, behavior: 'auto' });
   }
 }
 
 async function goToNextVenue() {
-  if (!nextVenue.value) return;
-  selectedVenue.value = nextVenue.value;
+  const target = nextVenue.value;
+  if (!target) return;
+  selectedVenue.value = target;
   showDesktopDetail.value = true;
-  await router.push('/venues/' + useVenueSlug(nextVenue.value));
+  await router.push('/venues/' + useVenueSlug(target));
   if (typeof window !== 'undefined') {
     window.scrollTo({ top: 0, behavior: 'auto' });
   }

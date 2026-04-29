@@ -4,6 +4,45 @@ import type { Venue, Language, AppTab } from '../../types';
 import { getStationDisplayName } from '../utils/mtrStations';
 import CourtCard from './CourtCard.vue';
 
+const props = defineProps<{
+  venues: Venue[];
+  selectedVenue: Venue | null;
+  onSelectVenue: (v: Venue | null) => void;
+  onViewDetail: (v: Venue) => void;
+  searchQuery: string;
+  setSearchQuery: (s: string) => void;
+  mtrFilter: string[];
+  setMtrFilter: (arr: string[]) => void;
+  distanceFilter: string;
+  setDistanceFilter: (s: string) => void;
+  language: Language;
+  t: (key: string) => string;
+  darkMode: boolean;
+  savedVenues: number[];
+  toggleSave: (id: number) => void;
+  isAdmin: boolean;
+  canEditVenue: (venueId: number) => boolean;
+  onAddVenue: () => void;
+  onEditVenue: (id: number, v: any) => void;
+  onDeleteVenue: (id: number) => void;
+  availableStations: string[];
+  onClearFilters?: () => void;
+  sportFilter: string[];
+  setSportFilter: (arr: string[]) => void;
+  sports: { id: number; name: string; name_zh?: string | null; slug: string }[];
+  currentTab: AppTab;
+  setTab: (t: AppTab) => void;
+  setFilterSpecialOffer?: (v: boolean) => void;
+  filterSpecialOffer?: boolean;
+  /** When set (e.g. after clicking a pin), list shows only these venues. */
+  listVenues?: Venue[] | null;
+  onShowVenuesAtLocation?: (venues: Venue[]) => void;
+  /** True when list is currently filtered to a single location (after clicking a pin). */
+  hasLocationFilter?: boolean;
+  /** Clears the location filter so the full list can show again. */
+  onClearLocationFilter?: () => void;
+}>();
+
 const MapView = defineAsyncComponent(() => import('./MapView.vue'));
 
 const showFilterPanel = ref(false);
@@ -13,6 +52,35 @@ const mtrSearchQuery = ref('');
 const draftMtrFilter = ref<string[]>([]);
 const draftSportFilter = ref<string[]>([]);
 const mapViewRef = ref<{ clearPins?: () => void; syncPins?: () => void; resetView?: () => void } | null>(null);
+const locationVenues = ref<Venue[] | null>(null);
+
+const showLocationPicker = computed(() =>
+  Array.isArray(locationVenues.value)
+  && locationVenues.value.length > 1
+  && !props.selectedVenue
+);
+
+const locationVenueIconSrc = (venue: Venue) => {
+  const v: any = venue as any;
+  return v.org_icon || v.orgIcon || venue.images?.[0] || '/placeholder.svg';
+};
+
+const handleShowVenuesAtLocation = (venues: Venue[]) => {
+  locationVenues.value = Array.isArray(venues) ? venues : null;
+  props.onShowVenuesAtLocation?.(venues);
+};
+
+const pickVenueFromLocation = (v: Venue) => {
+  locationVenues.value = null;
+  props.onSelectVenue(v);
+};
+
+watch(
+  () => props.selectedVenue?.id ?? null,
+  (id) => {
+    if (id != null) locationVenues.value = null;
+  }
+);
 
 watch(
   () => showFilterPanel.value,
@@ -67,45 +135,6 @@ const clearSportSelection = () => {
   draftSportFilter.value = [];
   showSportDropdown.value = false;
 };
-
-const props = defineProps<{
-  venues: Venue[];
-  selectedVenue: Venue | null;
-  onSelectVenue: (v: Venue | null) => void;
-  onViewDetail: (v: Venue) => void;
-  searchQuery: string;
-  setSearchQuery: (s: string) => void;
-  mtrFilter: string[];
-  setMtrFilter: (arr: string[]) => void;
-  distanceFilter: string;
-  setDistanceFilter: (s: string) => void;
-  language: Language;
-  t: (key: string) => string;
-  darkMode: boolean;
-  savedVenues: number[];
-  toggleSave: (id: number) => void;
-  isAdmin: boolean;
-  canEditVenue: (venueId: number) => boolean;
-  onAddVenue: () => void;
-  onEditVenue: (id: number, v: any) => void;
-  onDeleteVenue: (id: number) => void;
-  availableStations: string[];
-  onClearFilters?: () => void;
-  sportFilter: string[];
-  setSportFilter: (arr: string[]) => void;
-  sports: { id: number; name: string; name_zh?: string | null; slug: string }[];
-  currentTab: AppTab;
-  setTab: (t: AppTab) => void;
-  setFilterSpecialOffer?: (v: boolean) => void;
-  filterSpecialOffer?: boolean;
-  /** When set (e.g. after clicking a pin), list shows only these venues. */
-  listVenues?: Venue[] | null;
-  onShowVenuesAtLocation?: (venues: Venue[]) => void;
-  /** True when list is currently filtered to a single location (after clicking a pin). */
-  hasLocationFilter?: boolean;
-  /** Clears the location filter so the full list can show again. */
-  onClearLocationFilter?: () => void;
-}>();
 
 const leftListVenues = computed(() =>
   props.selectedVenue ? [props.selectedVenue] : (props.listVenues ?? props.venues)
@@ -332,8 +361,53 @@ const leftListVenues = computed(() =>
 
     <div class="flex-1 relative">
       <MapView ref="mapViewRef" :venues="props.venues" :selectedVenue="selectedVenue"
-        :onSelectVenue="(v: Venue) => onSelectVenue(v)" :onShowVenuesAtLocation="onShowVenuesAtLocation"
+        :onSelectVenue="(v: Venue | null) => onSelectVenue(v)" :onShowVenuesAtLocation="handleShowVenuesAtLocation"
         :language="language" :darkMode="darkMode" :isMobile="false" />
+
+      <!-- Map pin list (desktop): when a multi-venue pin is clicked, show a chooser panel on top of the map -->
+      <div v-if="showLocationPicker" class="absolute top-5 left-5 right-5 z-30 pointer-events-none">
+        <div
+          class="max-w-[420px] pointer-events-auto rounded-[16px] border shadow-xl overflow-hidden"
+          :class="darkMode ? 'bg-gray-900/95 border-gray-800 text-white backdrop-blur' : 'bg-white/95 border-gray-200 text-gray-900 backdrop-blur'"
+        >
+          <div class="flex items-center justify-between px-4 py-3 border-b"
+            :class="darkMode ? 'border-gray-800' : 'border-gray-200'">
+            <p class="text-[12px] font-black tracking-wider uppercase opacity-70">
+              {{ language === 'en' ? `Venues here (${locationVenues!.length})` : `此位置場地（${locationVenues!.length}）` }}
+            </p>
+            <button
+              type="button"
+              class="w-8 h-8 rounded-full flex items-center justify-center text-[18px]"
+              :class="darkMode ? 'bg-gray-800 text-gray-200' : 'bg-gray-100 text-gray-700'"
+              @click="locationVenues = null"
+              aria-label="Close"
+            >
+              ×
+            </button>
+          </div>
+          <div class="max-h-[280px] overflow-y-auto">
+            <button
+              v-for="v in locationVenues"
+              :key="v.id"
+              type="button"
+              class="w-full flex items-center gap-3 text-left px-4 py-3 font-bold text-[14px] transition-colors"
+              :class="darkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-50'"
+              @click="pickVenueFromLocation(v)"
+            >
+              <span class="w-10 h-10 rounded-[12px] overflow-hidden flex-shrink-0"
+                :class="darkMode ? 'bg-gray-800' : 'bg-gray-100'">
+                <img :src="locationVenueIconSrc(v)" alt="" class="w-full h-full object-cover" loading="lazy" />
+              </span>
+              <span class="min-w-0 flex-1">
+                <span class="block truncate">{{ v.name }}</span>
+                <span v-if="v.mtrStation" class="block text-[11px] font-semibold opacity-70 truncate">
+                  🚇 {{ getStationDisplayName(v.mtrStation, language) }}
+                </span>
+              </span>
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>

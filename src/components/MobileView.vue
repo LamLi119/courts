@@ -118,6 +118,43 @@ const props = defineProps<{
 const displayListVenues = computed(() => (props.listVenues != null ? props.listVenues : props.venues));
 
 const showDetailPage = ref(false);
+const locationVenues = ref<Venue[] | null>(null);
+
+const showLocationPicker = computed(() =>
+  props.mode === 'map'
+  && Array.isArray(locationVenues.value)
+  && locationVenues.value.length > 1
+  && !props.selectedVenue
+);
+
+const handleShowVenuesAtLocation = (venues: Venue[]) => {
+  locationVenues.value = Array.isArray(venues) ? venues : null;
+  props.onShowVenuesAtLocation?.(venues);
+};
+
+const pickVenueFromLocation = (v: Venue) => {
+  locationVenues.value = null;
+  props.onSelectVenue(v);
+};
+
+const locationVenueIconSrc = (venue: Venue) => {
+  const v: any = venue as any;
+  return v.org_icon || v.orgIcon || venue.images?.[0] || '/placeholder.svg';
+};
+
+watch(
+  () => props.mode,
+  (m) => {
+    if (m !== 'map') locationVenues.value = null;
+  }
+);
+
+watch(
+  () => props.selectedVenue?.id ?? null,
+  (id) => {
+    if (id != null) locationVenues.value = null;
+  }
+);
 
 watch(
   // When landing on /venues/:slug, selectedVenue can be null initially (data loads async).
@@ -512,16 +549,63 @@ const goNextVenueFromDetail = async () => {
       ref="mapViewRef"
       :venues="props.venues"
       :selectedVenue="selectedVenue"
-      :onSelectVenue="(v: Venue) => onSelectVenue(v)"
-      :onShowVenuesAtLocation="onShowVenuesAtLocation"
+      :onSelectVenue="(v: Venue | null) => onSelectVenue(v)"
+      :onShowVenuesAtLocation="handleShowVenuesAtLocation"
       :language="language"
       :darkMode="darkMode"
       :isMobile="true"
     />
 
     <div
+      v-if="showLocationPicker"
+      class="absolute left-4 right-4 top-24 z-30 pointer-events-auto"
+    >
+      <div
+        class="rounded-[16px] border shadow-xl overflow-hidden"
+        :class="darkMode ? 'bg-gray-900/95 border-gray-800 text-white backdrop-blur' : 'bg-white/95 border-gray-200 text-gray-900 backdrop-blur'"
+      >
+        <div class="flex items-center justify-between px-4 py-3 border-b"
+          :class="darkMode ? 'border-gray-800' : 'border-gray-200'">
+          <p class="text-[12px] font-black tracking-wider uppercase opacity-70">
+            {{ language === 'en' ? `Venues here (${locationVenues!.length})` : `此位置場地（${locationVenues!.length}）` }}
+          </p>
+          <button
+            type="button"
+            class="w-8 h-8 rounded-full flex items-center justify-center text-[18px]"
+            :class="darkMode ? 'bg-gray-800 text-gray-200' : 'bg-gray-100 text-gray-700'"
+            @click="locationVenues = null"
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+        <div class="max-h-[240px] overflow-y-auto">
+          <button
+            v-for="v in locationVenues"
+            :key="v.id"
+            type="button"
+            class="w-full flex items-center gap-3 text-left px-4 py-3 font-bold text-[14px] transition-colors"
+            :class="darkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-50'"
+            @click="pickVenueFromLocation(v)"
+          >
+            <span class="w-10 h-10 rounded-[12px] overflow-hidden flex-shrink-0"
+              :class="darkMode ? 'bg-gray-800' : 'bg-gray-100'">
+              <img :src="locationVenueIconSrc(v)" alt="" class="w-full h-full object-cover" loading="lazy" />
+            </span>
+            <span class="min-w-0 flex-1">
+              <span class="block truncate">{{ v.name }}</span>
+              <span v-if="v.mtrStation" class="block text-[11px] font-semibold opacity-70 truncate">
+                🚇 {{ getStationDisplayName(v.mtrStation, language) }}
+              </span>
+            </span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div
       v-if="showStickyCard && selectedVenue"
-      class="fixed inset-x-0 bottom-20 z-40 pb-safe px-3"
+      class="fixed inset-x-0 bottom-5 z-40 pb-safe px-3"
     >
       <div
         class="rounded-[16px] shadow-[0_-10px_30px_rgba(0,0,0,0.25)] border mb-3"

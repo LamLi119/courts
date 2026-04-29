@@ -6,7 +6,7 @@ declare const google: any;
 const props = defineProps<{
   venues: Venue[];
   selectedVenue: Venue | null;
-  onSelectVenue: (v: Venue) => void;
+  onSelectVenue: (v: Venue | null) => void;
   /** When pin is clicked, call with all venues at that location so the list can show only them. */
   onShowVenuesAtLocation?: (venues: Venue[]) => void;
   language: Language;
@@ -257,6 +257,68 @@ function escapeXml(value: string): string {
     .replaceAll('\'', '&apos;');
 }
 
+function openVenuesInfoWindow(marker: any, venueList: Venue[], locationKey: string): void {
+  if (!googleMap.value || typeof google === 'undefined' || !marker || !Array.isArray(venueList) || venueList.length <= 1) return;
+
+  if (!infoWindow.value) {
+    infoWindow.value = new google.maps.InfoWindow();
+  }
+
+  const title = props.language === 'en'
+    ? `Venues here (${venueList.length})`
+    : `此位置場地（${venueList.length}）`;
+
+  const listHtml = venueList
+    .map((v) => {
+      const name = escapeXml((v?.name || '').toString());
+      return `<button type="button" data-venue-id="${String(v.id)}" style="display:block;width:100%;text-align:left;padding:8px 10px;border:0;background:transparent;font-weight:700;cursor:pointer;border-radius:8px;">${name}</button>`;
+    })
+    .join('');
+
+  const html = `
+    <div style="min-width:180px;max-width:260px;">
+      <div style="font-size:12px;font-weight:800;letter-spacing:0.04em;text-transform:uppercase;opacity:0.75;padding:2px 2px 8px 2px;">
+        ${title}
+      </div>
+      <div style="max-height:190px;overflow:auto;display:flex;flex-direction:column;gap:2px;">
+        ${listHtml}
+      </div>
+    </div>
+  `;
+
+  infoWindow.value.setContent(html);
+  infoWindow.value.open({
+    map: googleMap.value,
+    anchor: marker
+  });
+
+  google.maps.event.addListenerOnce(infoWindow.value, 'domready', () => {
+    const container = document.querySelector('.gm-style-iw');
+    if (!container) return;
+    const buttons = container.querySelectorAll<HTMLButtonElement>('button[data-venue-id]');
+    buttons.forEach((btn) => {
+      btn.onclick = async () => {
+        const id = Number(btn.dataset.venueId || '');
+        if (!Number.isFinite(id)) return;
+        const chosen = venueList.find((v) => v.id === id);
+        if (!chosen) return;
+        await ensureEmbeddedIcon(chosen);
+        selectedVenueByLocation.value[locationKey] = chosen;
+        props.onSelectVenue(chosen);
+        try {
+          const mk = markers.value[locationKey];
+          if (mk) {
+            mk.setIcon(markerIconConfig(chosen, true, venueCountByLocation.value[locationKey] ?? 1));
+          }
+        } catch {
+          // ignore marker update errors
+        }
+        try { infoWindow.value?.close?.(); } catch { /* ignore */ }
+      };
+    });
+  });
+}
+
 function toAbsoluteAssetUrl(rawUrl: string): string {
   const input = (rawUrl || '').toString().trim();
   if (!input) return '';
@@ -272,6 +334,7 @@ function buildMarkerIconUrl(venue?: Venue, isSelected = false, venueCount = 1): 
   const rawIcon = (venue?.org_icon || venue?.images?.[0] || '').toString().trim();
   const iconUrl = toAbsoluteAssetUrl(rawIcon);
   const embeddedIcon = iconUrl ? embeddedIconCache.value[iconUrl] : '';
+  // Use embedded PNG data URLs only. (External URLs inside a data:svg marker are flaky on iOS/Safari.)
   const safeIcon = embeddedIcon ? escapeXml(embeddedIcon) : '';
   const clampedCount = Math.max(1, Math.floor(venueCount || 1));
   const countLabel = clampedCount > 99 ? '99+' : String(clampedCount);
@@ -298,6 +361,9 @@ function buildMarkerIconUrl(venue?: Venue, isSelected = false, venueCount = 1): 
         <image href="${safeIcon}" xlink:href="${safeIcon}" x="${popupInnerX}" y="${popupInnerY}" width="${popupInnerSize}" height="${popupInnerSize}" preserveAspectRatio="xMidYMid slice" clip-path="url(#selectedVenueIconClip)" />
       </g>
     ` : '';
+  // UX:
+  // - Multi-venue same location: show count
+  // - Single venue: show venue icon (or fallback to "1" if icon unavailable)
   const centerContent = isMultiVenuePin
     ? `<text x="12" y="${pinCountY}" text-anchor="middle" font-size="${pinCountFontSize}" font-weight="700" fill="#ffffff" font-family="Arial, sans-serif">${countLabel}</text>`
     : (safeIcon
@@ -358,16 +424,61 @@ function blobToDataUrl(blob: Blob): Promise<string> {
   });
 }
 
+async function blobToPngDataUrl(blob: Blob, size = 96): Promise<string> {
+  // Rasterize any image blob (png/jpg/webp/svg/...) into a PNG data URL.
+  // This avoids Safari/Google Maps issues with nested <image> in data:svg markers.
+  if (typeof document === 'undefined') return '';
+  try {
+    const objectUrl = URL.createObjectURL(blob);
+    try {
+      const img = new Image();
+      // Use anonymous to avoid sending credentials; image source is an object URL anyway.
+      img.crossOrigin = 'anonymous';
+      const loaded = new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error('Failed to load icon image'));
+      });
+      img.src = objectUrl;
+      await loaded;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return '';
+      ctx.clearRect(0, 0, size, size);
+      // cover fit
+      const iw = img.naturalWidth || size;
+      const ih = img.naturalHeight || size;
+      const scale = Math.max(size / iw, size / ih);
+      const dw = iw * scale;
+      const dh = ih * scale;
+      const dx = (size - dw) / 2;
+      const dy = (size - dh) / 2;
+      ctx.drawImage(img, dx, dy, dw, dh);
+      return canvas.toDataURL('image/png');
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
+  } catch {
+    return '';
+  }
+}
+
 async function ensureEmbeddedIcon(venue?: Venue): Promise<void> {
   const rawIcon = (venue?.org_icon || venue?.images?.[0] || '').toString().trim();
   const iconUrl = toAbsoluteAssetUrl(rawIcon);
   if (!iconUrl) return;
   if (embeddedIconCache.value[iconUrl]) return;
   try {
-    const res = await fetch(iconUrl, { method: 'GET', mode: 'cors', credentials: 'omit' });
+    // Use same-origin proxy to avoid bucket CORS issues (e.g. GCS public objects without CORS).
+    const proxiedUrl = `/api/image-proxy?url=${encodeURIComponent(iconUrl)}`;
+    const res = await fetch(proxiedUrl, { method: 'GET', credentials: 'omit' });
     if (!res.ok) return;
     const blob = await res.blob();
-    const dataUrl = await blobToDataUrl(blob);
+    // Rasterize to PNG so it's safe to embed inside our SVG marker icon.
+    let dataUrl = await blobToPngDataUrl(blob, 96);
+    if (!dataUrl) dataUrl = await blobToDataUrl(blob);
     if (!dataUrl) return;
     embeddedIconCache.value[iconUrl] = dataUrl;
   } catch {
@@ -456,13 +567,9 @@ const syncMarkers = async () => {
   });
 
   for (const [locationKey, venueList] of groups.entries()) {
-    const selectedVenue = selectedVenueByLocation.value[locationKey];
-    const initialVenue =
-      selectedVenue && venueList.some((v) => v.id === selectedVenue.id)
-        ? selectedVenue
-        : venueList[0];
+    const initialVenue = venueList[0];
     const coords = normalizeLatLng((initialVenue as any).coordinates);
-    if (!coords) return;
+    if (!coords) continue;
     selectedVenueByLocation.value[locationKey] = initialVenue;
     venueCountByLocation.value[locationKey] = venueList.length;
 
@@ -471,49 +578,49 @@ const syncMarkers = async () => {
         ? venueList.map((v) => v.name).join(', ')
         : initialVenue.name;
 
-    await ensureEmbeddedIcon(initialVenue);
     const marker = new google.maps.Marker({
       position: coords,
       map: googleMap.value,
       title,
       icon: markerIconConfig(initialVenue, false, venueList.length),
-      animation: google.maps.Animation.DROP
+      // Faster first paint: render pins immediately; upgrade to icon pins asynchronously.
+      // animation: google.maps.Animation.DROP
     });
 
+    // Async: fetch + rasterize icon then update this marker.
+    // Do not await here — otherwise initial pins appear very slowly.
+    ensureEmbeddedIcon(initialVenue)
+      .then(() => {
+        try {
+          const currentVenue = selectedVenueByLocation.value[locationKey] || initialVenue;
+          const selectedPos = props.selectedVenue ? normalizeLatLng((props.selectedVenue as any).coordinates) : null;
+          const selectedLocationKey = selectedPos ? getLocationKey(selectedPos) : null;
+          const isSelected = selectedLocationKey === locationKey;
+          marker.setIcon(markerIconConfig(currentVenue, isSelected, venueList.length));
+        } catch {
+          // ignore marker update errors (e.g. marker cleared during re-sync)
+        }
+      })
+      .catch(() => null);
+
     marker.addListener('click', () => {
-      // Always tell parent to show these venues on the list (filter side).
-      props.onShowVenuesAtLocation?.(venueList);
-      if (venueList.length > 1) {
-        // Same building: show InfoWindow with all venues on one line (X venues here) and list to pick one.
-        if (infoWindow.value) infoWindow.value.close();
-        infoWindow.value = new google.maps.InfoWindow();
-        const div = document.createElement('div');
-        div.className = 'map-info-window';
-        div.style.cssText = 'padding:4px 0;min-width:140px;max-width:260px;';
-        const title = document.createElement('div');
-        title.style.cssText = 'font-weight:700;font-size:12px;color:#4b5563;margin-bottom:8px;white-space:nowrap;';
-        title.textContent = props.language === 'zh' ? `此位置 ${venueList.length} 個場地` : `${venueList.length} venues here`;
-        div.appendChild(title);
-        venueList.forEach((v: Venue) => {
-          const btn = document.createElement('button');
-          btn.type = 'button';
-          btn.textContent = v.name;
-          btn.style.cssText = 'display:block;width:100%;text-align:left;padding:8px 12px;font-size:14px;font-weight:700;border:none;background:transparent;cursor:pointer;border-radius:8px;';
-          btn.addEventListener('click', async () => {
-            selectedVenueByLocation.value[locationKey] = v;
-            await ensureEmbeddedIcon(v);
-            marker.setIcon(markerIconConfig(v, true, venueList.length));
-            props.onSelectVenue(v);
-            if (infoWindow.value) infoWindow.value.close();
-          });
-          btn.addEventListener('mouseenter', () => { btn.style.background = '#007a67'; btn.style.color = '#fff'; });
-          btn.addEventListener('mouseleave', () => { btn.style.background = 'transparent'; btn.style.color = ''; });
-          div.appendChild(btn);
-        });
-        infoWindow.value.setContent(div);
-        infoWindow.value.open(googleMap.value, marker);
+      if (venueList.length <= 1) {
+        // Keep existing behavior for single-venue pins.
+        props.onShowVenuesAtLocation?.(venueList);
+        // Single venue at this location: select it directly.
+        const chosen = venueList[0];
+        selectedVenueByLocation.value[locationKey] = chosen;
+        props.onSelectVenue(chosen);
       } else {
-        props.onSelectVenue(venueList[0]);
+        // Multiple venues at this location:
+        // - do NOT auto-select
+        // - show a popup list anchored to the clicked pin
+        if (!props.isMobile) {
+          // Desktop still uses list-side filtering.
+          props.onShowVenuesAtLocation?.(venueList);
+        }
+        props.onSelectVenue(null);
+        openVenuesInfoWindow(marker, venueList, locationKey);
       }
     });
     markers.value[locationKey] = marker;
@@ -575,19 +682,11 @@ watch(
   }
 );
 
-// Create a computed that generates a unique key for the venues array
-const venuesKey = computed(() => {
-  if (!props.venues || props.venues.length === 0) return 'empty';
-  return props.venues.map(v => v.id).sort((a, b) => a - b).join(',');
-});
-
+// Sync markers whenever the parent-provided venue list changes (e.g. sport filter).
 watch(
-  venuesKey,
+  () => props.venues,
   () => {
-    if (googleMap.value) {
-      // Always sync markers when venues change (by ID list)
-      syncMarkers();
-    }
+    if (googleMap.value) syncMarkers();
   },
   { immediate: true }
 );
@@ -603,8 +702,9 @@ watch(
 
 watch(
   () => props.selectedVenue,
-  (selected) => {
+  async (selected) => {
     if (selected && googleMap.value && typeof google !== 'undefined') {
+      await ensureEmbeddedIcon(selected);
       const pos = normalizeLatLng((selected as any).coordinates);
       if (pos) {
         googleMap.value.panTo(pos);
