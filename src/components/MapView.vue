@@ -491,7 +491,8 @@ async function ensureEmbeddedIcon(venue?: Venue): Promise<void> {
   try {
     // Use same-origin proxy to avoid bucket CORS issues (e.g. GCS public objects without CORS).
     const proxiedUrl = `/api/image-proxy?url=${encodeURIComponent(iconUrl)}`;
-    const res = await fetch(proxiedUrl, { method: 'GET', credentials: 'omit' });
+    // Include same-origin cookies so Vercel preview protection doesn't 401 this API route.
+    const res = await fetch(proxiedUrl, { method: 'GET', credentials: 'same-origin' });
     if (!res.ok) return;
     const blob = await res.blob();
     // Rasterize to PNG so it's safe to embed inside our SVG marker icon.
