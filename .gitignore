@@ -17,6 +17,8 @@ dist-ssr
 client-cert.pem
 client-key.pem
 server-ca.pem
+n8n-self-hosting-461810-8c5cc166890b.json
+config/*.json
 
 # Editor directories and files
 .vscode/*

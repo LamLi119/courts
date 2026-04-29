@@ -73,6 +73,7 @@ const mtrFilter = ref<string[]>([]);
 const distanceFilter = ref('');
 const sportFilter = ref<string[]>([]); // sport slugs (multi-select)
 const filterSpecialOffer = ref(false); // when true, only show venues with membership_enabled
+const filterSavedOnly = ref(false); // explore tab: when true, only show saved venues
 /** When set (after clicking a pin), list shows only venues at that location. */
 const locationVenueIds = ref<number[] | null>(null);
 const darkMode = ref(localStorage.getItem('pickleball_darkmode') === 'true');
@@ -190,7 +191,7 @@ watch(
       applySearchPageSeo(route.params.sport);
     } else if (route.name === 'home' || route.name === 'admin') {
       if (route.name === 'home') {
-        sportFilter.value = [];
+        applyDefaultSportFilter();
         if (prev?.name === 'venue') resetSeoToDefault();
         selectedVenue.value = null;
         showDesktopDetail.value = false;
@@ -210,6 +211,25 @@ watch(
         showDesktopDetail.value = true;
       }
     }
+  }
+);
+
+watch(
+  () => sports.value,
+  () => {
+    if (route.name === 'search') return;
+    if (sportFilter.value.length > 0) return;
+    applyDefaultSportFilter();
+  },
+  { immediate: true, deep: true }
+);
+
+watch(
+  () => venues.value.length,
+  () => {
+    if (route.name === 'search') return;
+    if (sportFilter.value.length > 0) return;
+    applyDefaultSportFilter();
   }
 );
 
@@ -284,12 +304,40 @@ watch(darkMode, (value) => {
 
 const t = (key: string) => translate(language.value, key);
 
+function getDefaultSportSlug(): string | null {
+  const defaultSport = sports.value.find((s) => s.id === 1);
+  return defaultSport?.slug ?? null;
+}
+
+function venueMatchesSportSlug(venue: Venue, sportSlug: string): boolean {
+  const slug = (sportSlug || '').toLowerCase().trim();
+  if (!slug) return false;
+  const types = venue.sport_types;
+  const data = venue.sport_data;
+  const name = ((venue as any).name ?? '').toString().toLowerCase();
+  const desc = ((venue as any).description ?? '').toString().toLowerCase();
+  const hasSportBySlug = Array.isArray(data) && data.some((d: any) => String(d.slug || '').toLowerCase().trim() === slug);
+  const hasSportByName = Array.isArray(types) && types.some((t: string) => String(t).toLowerCase().trim() === slug);
+  return hasSportBySlug || hasSportByName || name.includes(slug) || desc.includes(slug);
+}
+
+function applyDefaultSportFilter() {
+  const defaultSlug = getDefaultSportSlug();
+  if (!defaultSlug) {
+    sportFilter.value = [];
+    return;
+  }
+  const hasMatchingVenue = venues.value.some((v) => venueMatchesSportSlug(v, defaultSlug));
+  sportFilter.value = hasMatchingVenue ? [defaultSlug] : [];
+}
+
 const clearFilters = () => {
   searchQuery.value = '';
   mtrFilter.value = [];
   distanceFilter.value = '';
-  sportFilter.value = [];
+  applyDefaultSportFilter();
   filterSpecialOffer.value = false;
+  filterSavedOnly.value = false;
   locationVenueIds.value = null;
 };
 
@@ -374,6 +422,8 @@ const filteredVenues = computed(() => {
   let source = venues.value;
   if (currentTab.value === 'saved') {
     source = venues.value.filter(v => savedVenues.value.includes(v.id));
+  } else if (filterSavedOnly.value) {
+    source = venues.value.filter(v => savedVenues.value.includes(v.id));
   }
 
   const mtrCanonicalSet =
@@ -434,20 +484,22 @@ const nextVenue = computed(() => {
 });
 
 async function goToPrevVenue() {
-  if (!prevVenue.value) return;
-  selectedVenue.value = prevVenue.value;
+  const target = prevVenue.value;
+  if (!target) return;
+  selectedVenue.value = target;
   showDesktopDetail.value = true;
-  await router.push('/venues/' + useVenueSlug(prevVenue.value));
+  await router.push('/venues/' + useVenueSlug(target));
   if (typeof window !== 'undefined') {
     window.scrollTo({ top: 0, behavior: 'auto' });
   }
 }
 
 async function goToNextVenue() {
-  if (!nextVenue.value) return;
-  selectedVenue.value = nextVenue.value;
+  const target = nextVenue.value;
+  if (!target) return;
+  selectedVenue.value = target;
   showDesktopDetail.value = true;
-  await router.push('/venues/' + useVenueSlug(nextVenue.value));
+  await router.push('/venues/' + useVenueSlug(target));
   if (typeof window !== 'undefined') {
     window.scrollTo({ top: 0, behavior: 'auto' });
   }
@@ -1071,6 +1123,9 @@ const deleteSportApiCall = async (sportId: number) => {
           :sports="sports"
           :filterSpecialOffer="filterSpecialOffer"
           :setFilterSpecialOffer="(v: boolean) => { filterSpecialOffer = v; }"
+          :filterSavedOnly="filterSavedOnly"
+          :setFilterSavedOnly="(v: boolean) => { filterSavedOnly = v; }"
+          :currentTab="currentTab"
           :onOpenDetail="(v: Venue) => { router.push('/venues/' + useVenueSlug(v)); }"
           :onBackFromDetail="() => { resetSeoToDefault(); router.push('/'); }"
           :force-show-detail="route.name === 'venue' && !!selectedVenue"
@@ -1130,6 +1185,8 @@ const deleteSportApiCall = async (sportId: number) => {
           :sports="sports"
           :filterSpecialOffer="filterSpecialOffer"
           :setFilterSpecialOffer="(v: boolean) => { filterSpecialOffer = v; }"
+          :filterSavedOnly="filterSavedOnly"
+          :setFilterSavedOnly="(v: boolean) => { filterSavedOnly = v; }"
           :currentTab="currentTab"
           :setTab="(t: AppTab) => { currentTab = t; }"
         />
