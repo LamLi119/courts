@@ -273,7 +273,20 @@ function openVenuesInfoWindow(marker: any, venueList: Venue[], locationKey: stri
   const listHtml = venueList
     .map((v) => {
       const name = escapeXml((v?.name || '').toString());
-      return `<button type="button" data-venue-id="${String(v.id)}" style="display:block;width:100%;text-align:left;padding:8px 10px;border:0;background:transparent;font-weight:700;cursor:pointer;border-radius:8px;">${name}</button>`;
+      const rawIcon = (v?.org_icon || v?.images?.[0] || '/placeholder.svg').toString().trim();
+      const iconUrl = escapeXml(toAbsoluteAssetUrl(rawIcon));
+      return `
+        <button
+          type="button"
+          data-venue-id="${String(v.id)}"
+          style="display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:8px 10px;border:0;background:transparent;font-weight:700;cursor:pointer;border-radius:8px;"
+        >
+          <span style="width:30px;height:30px;border-radius:8px;overflow:hidden;flex-shrink:0;background:#f3f4f6;display:inline-flex;align-items:center;justify-content:center;">
+            <img src="${iconUrl}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block;" />
+          </span>
+          <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${name}</span>
+        </button>
+      `;
     })
     .join('');
 
