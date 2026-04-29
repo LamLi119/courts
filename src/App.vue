@@ -73,6 +73,7 @@ const mtrFilter = ref<string[]>([]);
 const distanceFilter = ref('');
 const sportFilter = ref<string[]>([]); // sport slugs (multi-select)
 const filterSpecialOffer = ref(false); // when true, only show venues with membership_enabled
+const filterSavedOnly = ref(false); // explore tab: when true, only show saved venues
 /** When set (after clicking a pin), list shows only venues at that location. */
 const locationVenueIds = ref<number[] | null>(null);
 const darkMode = ref(localStorage.getItem('pickleball_darkmode') === 'true');
@@ -336,6 +337,7 @@ const clearFilters = () => {
   distanceFilter.value = '';
   applyDefaultSportFilter();
   filterSpecialOffer.value = false;
+  filterSavedOnly.value = false;
   locationVenueIds.value = null;
 };
 
@@ -419,6 +421,8 @@ const handleAdminLogout = async () => {
 const filteredVenues = computed(() => {
   let source = venues.value;
   if (currentTab.value === 'saved') {
+    source = venues.value.filter(v => savedVenues.value.includes(v.id));
+  } else if (filterSavedOnly.value) {
     source = venues.value.filter(v => savedVenues.value.includes(v.id));
   }
 
@@ -1119,6 +1123,9 @@ const deleteSportApiCall = async (sportId: number) => {
           :sports="sports"
           :filterSpecialOffer="filterSpecialOffer"
           :setFilterSpecialOffer="(v: boolean) => { filterSpecialOffer = v; }"
+          :filterSavedOnly="filterSavedOnly"
+          :setFilterSavedOnly="(v: boolean) => { filterSavedOnly = v; }"
+          :currentTab="currentTab"
           :onOpenDetail="(v: Venue) => { router.push('/venues/' + useVenueSlug(v)); }"
           :onBackFromDetail="() => { resetSeoToDefault(); router.push('/'); }"
           :force-show-detail="route.name === 'venue' && !!selectedVenue"
@@ -1178,6 +1185,8 @@ const deleteSportApiCall = async (sportId: number) => {
           :sports="sports"
           :filterSpecialOffer="filterSpecialOffer"
           :setFilterSpecialOffer="(v: boolean) => { filterSpecialOffer = v; }"
+          :filterSavedOnly="filterSavedOnly"
+          :setFilterSavedOnly="(v: boolean) => { filterSavedOnly = v; }"
           :currentTab="currentTab"
           :setTab="(t: AppTab) => { currentTab = t; }"
         />

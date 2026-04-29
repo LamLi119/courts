@@ -51,11 +51,11 @@ function initMap() {
     googleMap.value = new google.maps.Map(mapRef.value, {
       center: props.isMobile ? { lat: 22.2499, lng: 114.1194 } : { lat: 22.3499, lng: 114.1194 },
       zoom: props.isMobile ? 10 : 11,
-      disableDefaultUI: props.isMobile ? true : false,
-      zoomControl: props.isMobile ? true : false,
-      mapTypeControl: props.isMobile ? true : false,
-      streetViewControl: props.isMobile ? true : false,
-      fullscreenControl: props.isMobile ? true : false,
+      disableDefaultUI: props.isMobile ? false : false,
+      zoomControl: props.isMobile ? false : false,
+      mapTypeControl: props.isMobile ? false : false,
+      streetViewControl: props.isMobile ? false : false,
+      fullscreenControl: props.isMobile ? false : false,
       styles: props.darkMode ? DARK_MODE_STYLE : MAP_STYLES
     });
     googleMap.value.addListener('zoom_changed', () => {
