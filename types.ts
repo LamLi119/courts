@@ -76,6 +76,8 @@ export interface Venue {
   booking_url?: string | null;
   operating_hours?: OperatingHours | null;
   operating_hours_enabled?: boolean;
+  /** The Grind / backend organization id for public upcoming events (companysNonOdoo web v2). */
+  grind_company_id?: number | null;
 }
 
 export type Language = 'en' | 'zh';
