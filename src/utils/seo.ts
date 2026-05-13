@@ -50,7 +50,7 @@ export function getSportTypeLabel(venue: Venue, lang: 'en' | 'zh' = 'en'): strin
   return 'Court';
 }
 
-/** SEO title: {Venue Name} | {Sport Type} Court in {MTR} | Courts Finder */
+/** SEO title: {Venue Name} | {Sport Type} Court in {MTR} | Courts */
 export function getVenueTitle(venue: Venue, lang: 'en' | 'zh' = 'en'): string {
   const sport = getSportTypeLabel(venue, lang);
   const mtr = cleanText(venue.mtrStation);
@@ -148,7 +148,7 @@ function getReadableCurrentUrl(): string {
   }
 }
 
-const DEFAULT_TITLE = `Courts Finder | Find Sports Courts in Hong Kong`;
+const DEFAULT_TITLE = `Courts | Find Sports Courts in Hong Kong`;
 const DEFAULT_DESCRIPTION = `Find and book sports courts near MTR stations. Compare prices, amenities, and walking distance.`;
 /** Default share preview image (home page). Use absolute URL so crawlers see it when sharing site URL. */
 const DEFAULT_OG_IMAGE_PATH = '/gray-G.png';

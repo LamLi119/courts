@@ -20,8 +20,13 @@ import MobileNav from './components/MobileNav.vue';
 import VenueDetail from './components/VenueDetail.vue';
 import VenueForm from './components/VenueForm.vue';
 import { useAuth } from './composables/auth';
+import { useGrindUpcomingEvents } from './composables/useGrindUpcomingEvents';
 
 const route = useRoute();
+const { refresh: refreshGrindUpcomingEvents } = useGrindUpcomingEvents();
+
+const HOME_GRIND_POLL_MS = 120_000;
+let grindUpcomingPollTimer: ReturnType<typeof setInterval> | null = null;
 const router = useRouter();
 
 const { user: authUser, logout: userLogout, session: restoreSession, isAuthenticated } = useAuth();
@@ -233,6 +238,23 @@ watch(
   }
 );
 
+watch(
+  () => route.name,
+  (name) => {
+    if (grindUpcomingPollTimer) {
+      clearInterval(grindUpcomingPollTimer);
+      grindUpcomingPollTimer = null;
+    }
+    if (name === 'home') {
+      void refreshGrindUpcomingEvents();
+      grindUpcomingPollTimer = setInterval(() => {
+        void refreshGrindUpcomingEvents();
+      }, HOME_GRIND_POLL_MS);
+    }
+  },
+  { immediate: true },
+);
+
 onMounted(() => {
   if (isAdminPath()) showAdminLogin.value = true;
   const onPopState = () => { showAdminLogin.value = isAdminPath(); };
@@ -272,6 +294,10 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  if (grindUpcomingPollTimer) {
+    clearInterval(grindUpcomingPollTimer);
+    grindUpcomingPollTimer = null;
+  }
   window.removeEventListener('resize', handleResize);
   const onPopState = (window as any).__adminPopState;
   if (onPopState) window.removeEventListener('popstate', onPopState);

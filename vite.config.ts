@@ -3,6 +3,7 @@ import fs from 'fs';
 import { defineConfig, loadEnv } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import tailwindcss from '@tailwindcss/vite';
+import { VitePWA } from 'vite-plugin-pwa';
 import { buildVenueOgMeta, injectVenueOgIntoHtml } from './lib/venueOgMeta.js';
 
 export default defineConfig(({ mode }) => {
@@ -31,6 +32,60 @@ export default defineConfig(({ mode }) => {
     plugins: [
       vue(),
       tailwindcss(),
+      VitePWA({
+        registerType: 'autoUpdate',
+        includeAssets: ['green-G.svg', 'placeholder.svg'],
+        manifest: {
+          name: 'Courts | Find Sports Courts in Hong Kong',
+          short_name: 'Courts',
+          description:
+            'Find and book Hong Kong sports courts near MTR stations. Compare venues, fees, and walking distance.',
+          theme_color: '#007a67',
+          background_color: '#ffffff',
+          display: 'standalone',
+          orientation: 'portrait-primary',
+          scope: '/',
+          start_url: '/',
+          lang: 'en',
+          icons: [
+            {
+              src: '/green-G.svg',
+              sizes: 'any',
+              type: 'image/svg+xml',
+              purpose: 'any',
+            },
+          ],
+        },
+        workbox: {
+          globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,webp}'],
+          navigateFallback: '/index.html',
+          navigateFallbackDenylist: [/^\/api/],
+          runtimeCaching: [
+            {
+              urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'google-fonts-stylesheets',
+                expiration: {
+                  maxEntries: 10,
+                  maxAgeSeconds: 60 * 60 * 24 * 365,
+                },
+              },
+            },
+            {
+              urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'google-fonts-webfonts',
+                expiration: {
+                  maxEntries: 10,
+                  maxAgeSeconds: 60 * 60 * 24 * 365,
+                },
+              },
+            },
+          ],
+        },
+      }),
       {
         name: 'spa-fallback-admin',
         configureServer(server) {

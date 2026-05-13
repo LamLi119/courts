@@ -3,7 +3,7 @@ import type { App } from 'vue';
 import { slugify } from '../utils/slugify';
 
 export const routes = [
-  { path: '/', name: 'home', meta: { title: 'Courts Finder' } },
+  { path: '/', name: 'home', meta: { title: 'Courts' } },
   { path: '/venues/:slug', name: 'venue', meta: { title: 'Venue' } },
   { path: '/search/:sport', name: 'search', meta: { title: 'Search' } },
   { path: '/admin', name: 'admin', meta: { title: 'Admin' } },

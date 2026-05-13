@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onBeforeUnmount, ref, watch, computed } from 'vue';
 import type { Venue, Language } from '../../types';
+import { loadGoogleMapsScript } from '../utils/googleMapsScript';
 declare const google: any;
 
 const props = defineProps<{
@@ -67,40 +68,15 @@ function initMap() {
   }
 }
 
-/** Load Google Maps script only when this component is mounted (deferred from main.ts for faster initial load). */
-function loadGoogleMapsScript() {
-  const apiKey = (import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string)?.trim();
-  if (!apiKey) {
-    console.error('VITE_GOOGLE_MAPS_API_KEY is not defined in .env');
-    window.dispatchEvent(new Event('google-maps-auth-error'));
-    return;
-  }
-  if (document.querySelector('script[src*="maps.googleapis.com"]')) return;
-
-  (window as any).__onGoogleMapsLoaded = () => {
-    window.dispatchEvent(new Event('google-maps-ready'));
-  };
-  const script = document.createElement('script');
-  script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&libraries=places&callback=__onGoogleMapsLoaded`;
-  script.async = true;
-  script.defer = true;
-  script.onerror = () => {
-    console.error('Failed to load Google Maps API');
-    window.dispatchEvent(new Event('google-maps-auth-error'));
-  };
-  document.head.appendChild(script);
-}
+const onGoogleMapsAuthError = () => {
+  mapError.value =
+    "API Restricted: Please enable 'Maps JavaScript API' and 'Places API' for this key in Google Cloud Console.";
+};
+const onGoogleMapsReady = () => initMap();
 
 onMounted(() => {
-  const handleAuthError = () => {
-    mapError.value =
-      "API Restricted: Please enable 'Maps JavaScript API' and 'Places API' for this key in Google Cloud Console.";
-  };
-
-  const onReady = () => initMap();
-
-  window.addEventListener('google-maps-auth-error', handleAuthError as EventListener);
-  window.addEventListener('google-maps-ready', onReady);
+  window.addEventListener('google-maps-auth-error', onGoogleMapsAuthError as EventListener);
+  window.addEventListener('google-maps-ready', onGoogleMapsReady as EventListener);
 
   if (typeof google !== 'undefined' && google.maps) {
     initMap();
@@ -108,11 +84,11 @@ onMounted(() => {
     mapError.value = null;
     loadGoogleMapsScript();
   }
+});
 
-  onBeforeUnmount(() => {
-    window.removeEventListener('google-maps-auth-error', handleAuthError as EventListener);
-    window.removeEventListener('google-maps-ready', onReady);
-  });
+onBeforeUnmount(() => {
+  window.removeEventListener('google-maps-auth-error', onGoogleMapsAuthError as EventListener);
+  window.removeEventListener('google-maps-ready', onGoogleMapsReady as EventListener);
 });
 
 const retryLoading = () => {

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue';
 import type { Venue, Language, Sport, OperatingHours, OperatingDayKey } from '../../types';
+import { loadGoogleMapsScript } from '../utils/googleMapsScript';
 
 declare const google: any;
 
@@ -142,6 +143,7 @@ const defaultForm = {
   membership_description: '' as string | null,
   membership_join_link: '' as string | null,
   court_count: null as number | null,
+  grind_company_id: null as number | null,
   operating_hours: createDefaultOperatingHours() as OperatingHours,
   operating_hours_enabled: false,
 };
@@ -157,6 +159,7 @@ if (formData.membership_enabled === undefined) formData.membership_enabled = fal
 if (formData.membership_description === undefined) formData.membership_description = null;
 if (formData.membership_join_link === undefined) formData.membership_join_link = null;
 if (formData.court_count === undefined) formData.court_count = null;
+if (formData.grind_company_id === undefined) formData.grind_company_id = null;
 if (formData.operating_hours_enabled === undefined) formData.operating_hours_enabled = true;
 formData.operating_hours = normalizeOperatingHours(formData.operating_hours);
 
@@ -177,6 +180,71 @@ let savedEditorRange: Range | null = null;
 let savedPricingRange: Range | null = null;
 let savedMembershipDescriptionRange: Range | null = null;
 let membershipDescriptionSelectionHandler: (() => void) | null = null;
+let placesMapsReadyCleanup: (() => void) | null = null;
+
+function initPlacesAutocomplete() {
+  const input = addressInputRef.value;
+  if (!input || autocompleteRef.value) return;
+
+  if (typeof google === 'undefined' || !google.maps || !google.maps.places) {
+    placesApiError.value = true;
+    return;
+  }
+
+  try {
+    placesApiError.value = false;
+    autocompleteRef.value = new google.maps.places.Autocomplete(input, {
+      componentRestrictions: { country: 'hk' },
+      fields: ['geometry', 'formatted_address'],
+      types: ['establishment', 'geocode'],
+    });
+
+    autocompleteRef.value.addListener('place_changed', () => {
+      const ac = autocompleteRef.value;
+      if (!ac) return;
+      const place = ac.getPlace();
+      if (!place.geometry || !place.geometry.location) return;
+
+      const latLng = {
+        lat: place.geometry.location.lat(),
+        lng: place.geometry.location.lng(),
+      };
+
+      formData.address = place.formatted_address;
+      formData.coordinates = latLng;
+    });
+  } catch (err) {
+    console.error('Failed to initialize Autocomplete:', err);
+    placesApiError.value = true;
+  }
+}
+
+function setupPlacesAutocomplete() {
+  const onReady = () => {
+    nextTick(() => initPlacesAutocomplete());
+  };
+  const onAuthFail = () => {
+    placesApiError.value = true;
+  };
+
+  nextTick(() => {
+    if (!addressInputRef.value) return;
+
+    if (typeof google !== 'undefined' && google.maps?.places) {
+      initPlacesAutocomplete();
+      return;
+    }
+
+    window.addEventListener('google-maps-ready', onReady, { once: true });
+    window.addEventListener('google-maps-auth-error', onAuthFail, { once: true });
+    placesMapsReadyCleanup = () => {
+      window.removeEventListener('google-maps-ready', onReady);
+      window.removeEventListener('google-maps-auth-error', onAuthFail);
+    };
+
+    loadGoogleMapsScript();
+  });
+}
 
 onMounted(() => {
   nextTick(() => {
@@ -221,10 +289,25 @@ onMounted(() => {
     if (formData.membership_enabled) {
       nextTick(() => initMembershipDescriptionEditor());
     }
+
+    setupPlacesAutocomplete();
   });
 });
 
 onBeforeUnmount(() => {
+  if (placesMapsReadyCleanup) {
+    placesMapsReadyCleanup();
+    placesMapsReadyCleanup = null;
+  }
+  if (typeof google !== 'undefined' && google.maps?.event && autocompleteRef.value) {
+    try {
+      google.maps.event.clearInstanceListeners(autocompleteRef.value);
+    } catch {
+      // ignore
+    }
+    autocompleteRef.value = null;
+  }
+
   const el = descriptionEditorRef.value;
   if (el && (el as any).__selectionChangeHandler) {
     document.removeEventListener('selectionchange', (el as any).__selectionChangeHandler);
@@ -449,43 +532,6 @@ function toolbarClass(dark: boolean) {
   return dark ? 'bg-gray-700 border-gray-600 text-gray-200 hover:bg-gray-600' : 'bg-gray-100 border-gray-200 text-gray-700 hover:bg-gray-200';
 }
 
-// Init Places autocomplete if available
-if (typeof window !== 'undefined') {
-  setTimeout(() => {
-    if (!addressInputRef.value) return;
-
-    if (typeof google === 'undefined' || !google.maps || !google.maps.places) {
-      console.warn('Places API not available. Autocomplete disabled.');
-      placesApiError.value = true;
-      return;
-    }
-
-    try {
-      autocompleteRef.value = new google.maps.places.Autocomplete(addressInputRef.value, {
-        componentRestrictions: { country: 'hk' },
-        fields: ['geometry', 'formatted_address'],
-        types: ['establishment', 'geocode']
-      });
-
-      autocompleteRef.value.addListener('place_changed', () => {
-        const place = autocompleteRef.value.getPlace();
-        if (!place.geometry || !place.geometry.location) return;
-
-        const latLng = {
-          lat: place.geometry.location.lat(),
-          lng: place.geometry.location.lng()
-        };
-
-        formData.address = place.formatted_address;
-        formData.coordinates = latLng;
-      });
-    } catch (err) {
-      console.error('Failed to initialize Autocomplete:', err);
-      placesApiError.value = true;
-    }
-  }, 0);
-}
-
 const handleImageUpload = async (e: Event) => {
   const input = e.target as HTMLInputElement;
   const files = Array.from(input.files || []) as File[];
@@ -696,6 +742,10 @@ const handleSubmit = async (e?: Event) => {
     formData.membership_description = getMembershipDescriptionHtml() || null;
   }
   formData.operating_hours = normalizeOperatingHours(formData.operating_hours);
+  if (formData.grind_company_id != null) {
+    const g = Number(formData.grind_company_id);
+    formData.grind_company_id = Number.isFinite(g) && g >= 1 ? Math.floor(g) : null;
+  }
   isSaving.value = true;
   saveError.value = null;
   try {
@@ -1030,6 +1080,20 @@ const inputClass =
               v-model.number="formData.court_count"
               type="number"
               min="0"
+              :class="inputClass"
+              :placeholder="t('optional')"
+            />
+          </div>
+          <div class="col-span-2">
+            <label :class="labelClass">{{ t('grindCompanyId') }}</label>
+            <p class="text-[11px] opacity-70 mb-1">
+              {{ t('grindCompanyIdHint') }}
+            </p>
+            <input
+              v-model.number="formData.grind_company_id"
+              type="number"
+              min="1"
+              step="1"
               :class="inputClass"
               :placeholder="t('optional')"
             />

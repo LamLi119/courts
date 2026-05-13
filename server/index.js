@@ -16,6 +16,12 @@ const SUPER_ADMIN_PASSWORD = process.env.SUPER_ADMIN_PASSWORD || 'abc321A!';
 const ADMIN_SESSION_COOKIE = 'courts_admin_session';
 const ADMIN_SESSION_TTL_MS = 1000 * 60 * 60 * 12; // 12 hours
 const adminSessions = new Map();
+const PUBLIC_EVENTS_CACHE_TTL_MS = 1000 * 90; // 90s short cache
+const publicEventsCache = new Map();
+const publicEventsInflight = new Map();
+const PUBLIC_EVENTS_PREWARM_QS = [
+  'order=ASC&tab=upcoming&page=1&pageSize=8',
+];
 
 /** SSL only when cert files exist (e.g. Cloud SQL); otherwise connect without SSL for local MySQL. */
 function getSslOptions() {
@@ -425,6 +431,98 @@ async function grindFetch(pathname, options) {
   throw err;
 }
 
+function cleanupPublicEventsCache(now = Date.now()) {
+  for (const [k, v] of publicEventsCache.entries()) {
+    if (!v || v.expiresAt <= now) publicEventsCache.delete(k);
+  }
+}
+
+/**
+ * The Grind `/events/getExploreEvents` response shape has varied across deployments
+ * (top-level array, `data`, `events`, nested `data.items`, etc.). Normalize so the
+ * Courts frontend always receives `{ data: [...], meta?: {...} }`.
+ */
+function normalizeExploreEventsBody(raw) {
+  if (raw == null) return { data: [], meta: {} };
+  if (Array.isArray(raw)) return { data: raw, meta: {} };
+  if (typeof raw !== 'object') return { data: [], meta: {} };
+
+  const topMeta = raw.meta || raw.pagination || raw.pageInfo || {};
+
+  const arrayKeys = ['data', 'events', 'items', 'records', 'list', 'rows', 'content', 'results'];
+  for (const k of arrayKeys) {
+    const v = raw[k];
+    if (Array.isArray(v)) {
+      return { data: v, meta: typeof topMeta === 'object' && topMeta ? { ...topMeta } : {} };
+    }
+  }
+
+  if (raw.data && typeof raw.data === 'object' && !Array.isArray(raw.data)) {
+    const inner = raw.data;
+    const innerMeta = inner.meta || inner.pagination || {};
+    for (const k of arrayKeys) {
+      const v = inner[k];
+      if (Array.isArray(v)) {
+        return {
+          data: v,
+          meta: { ...topMeta, ...innerMeta },
+        };
+      }
+    }
+  }
+
+  return { data: [], meta: typeof topMeta === 'object' && topMeta ? { ...topMeta } : {} };
+}
+
+async function fetchPublicEventsWithCache(qs) {
+  const cacheKey = `events-public:${qs}`;
+  const now = Date.now();
+  const cached = publicEventsCache.get(cacheKey);
+  if (cached && cached.expiresAt > now) {
+    return { data: cached.data, cacheStatus: 'HIT' };
+  }
+
+  const existingInflight = publicEventsInflight.get(cacheKey);
+  if (existingInflight) {
+    const data = await existingInflight;
+    return { data, cacheStatus: 'WAIT' };
+  }
+
+  const request = grindFetch(`/events/getExploreEvents?${qs}`)
+    .then((raw) => {
+      const normalized = normalizeExploreEventsBody(raw);
+      const t = Date.now();
+      publicEventsCache.set(cacheKey, {
+        data: normalized,
+        expiresAt: t + PUBLIC_EVENTS_CACHE_TTL_MS,
+      });
+      cleanupPublicEventsCache(t);
+      return normalized;
+    })
+    .finally(() => {
+      publicEventsInflight.delete(cacheKey);
+    });
+  publicEventsInflight.set(cacheKey, request);
+
+  const data = await request;
+  return { data, cacheStatus: 'MISS' };
+}
+
+async function prewarmPublicEventsCache() {
+  await Promise.all(PUBLIC_EVENTS_PREWARM_QS.map(async (qs) => {
+    try {
+      await fetchPublicEventsWithCache(qs);
+    } catch (_) {
+      // ignore prewarm failures; request path still works.
+    }
+  }));
+}
+
+void prewarmPublicEventsCache();
+setInterval(() => {
+  void prewarmPublicEventsCache();
+}, 60 * 1000);
+
 /** Fetch a single venue by id with sport_data populated (name, name_zh, slug, sort_order). Strips admin_password. */
 async function getVenueWithSports(db, venueId) {
   const [rows] = await db.execute('SELECT * FROM venues WHERE id = ?', [venueId]);
@@ -466,6 +564,7 @@ function sanitizeRow(body) {
     'membership_enabled', 'membership_description', 'membership_join_link',
     'court_count',
     'booking_url', 'operating_hours', 'operating_hours_enabled',
+    'grind_company_id',
   ]);
   const row = {};
   for (const [k, v] of Object.entries(body || {})) {
@@ -477,6 +576,9 @@ function sanitizeRow(body) {
       } else if (k === 'court_count') {
         const n = v === undefined || v === null || v === '' ? null : parseInt(v, 10);
         row[k] = (Number.isNaN(n) || n < 0) ? null : n;
+      } else if (k === 'grind_company_id') {
+        const n = v === undefined || v === null || v === '' ? null : parseInt(v, 10);
+        row[k] = (Number.isNaN(n) || n < 1) ? null : n;
       } else if (k === 'operating_hours') {
         if (v == null || v === '') row[k] = null;
         else if (typeof v === 'string') row[k] = v;
@@ -514,6 +616,17 @@ app.use('/api', (req, res, next) => {
   // Public, allowlisted image proxy used by the frontend to avoid GCS CORS.
   // Safe because `/api/image-proxy` only allows storage.googleapis.com URLs.
   if (req.path === '/image-proxy') return next();
+  // Public read-only proxy for venue detail "upcoming events" (browser-facing).
+  if (
+    req.method === 'GET'
+    && /^\/companies\/\d+\/upcoming-events\/public$/.test(req.path)
+  ) {
+    return next();
+  }
+  // Public aggregated events for explore-style upcoming list.
+  if (req.method === 'GET' && req.path === '/events/public') {
+    return next();
+  }
   const incoming = req.get('x-proxy-secret') || '';
   if (incoming !== PROXY_SECRET) return res.status(401).json({ error: 'Unauthorized' });
   return next();
@@ -1011,6 +1124,35 @@ app.delete('/api/sports/:id', async (req, res) => {
     return res.status(204).send();
   } catch (err) {
     res.status(500).json({ error: dbErrorMessage(err) });
+  }
+});
+
+/** Public proxy: aggregated explore events (matches The Grind explore flow). */
+app.get('/api/events/public', async (req, res) => {
+  try {
+    const order = req.query.order === 'ASC' ? 'ASC' : 'DESC';
+    const tab = ['all', 'upcoming', 'past'].includes(String(req.query.tab || '').toLowerCase())
+      ? String(req.query.tab).toLowerCase()
+      : 'all';
+    const page = Math.max(1, parseInt(String(req.query.page || '1'), 10) || 1);
+    const rawSize = parseInt(String(req.query.pageSize || '10'), 10) || 10;
+    const pageSize = Math.min(50, Math.max(1, rawSize));
+    const qs = new URLSearchParams({
+      order,
+      tab,
+      page: String(page),
+      pageSize: String(pageSize),
+    }).toString();
+
+    const { data, cacheStatus } = await fetchPublicEventsWithCache(qs);
+    res.setHeader('X-Cache', cacheStatus);
+    res.json(data);
+  } catch (err) {
+    const status =
+      err.statusCode && err.statusCode >= 400 && err.statusCode < 600
+        ? err.statusCode
+        : 502;
+    res.status(status).json({ error: err.message || 'Failed to fetch public events' });
   }
 });
 

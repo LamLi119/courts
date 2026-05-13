@@ -6,7 +6,9 @@ import { getStationDisplayName } from '../utils/mtrStations';
 import { applyVenueSeo, resetSeoToDefault, getSportTypeLabel, getVenueImageAlt } from '../utils/seo';
 import { slugify } from '../utils/slugify';
 import ImageCarousel from './ImageCarousel.vue';
+import VenueUpcomingEvents from './VenueUpcomingEvents.vue';
 import { useAuth } from '../composables/auth';
+import { useGrindUpcomingEvents } from '../composables/useGrindUpcomingEvents';
 
 const ALLOWED_TAGS = new Set([
   'b', 'i', 'u', 's', 'strong', 'em', 'br', 'p', 'span', 'div',
@@ -350,6 +352,17 @@ const singleDetailLabel = computed(() => {
 
 const detailTab = ref<'description' | 'pricing' | 'operating'>('description');
 
+const {
+  loading: upcomingLoading,
+  error: upcomingError,
+  events: upcomingEvents,
+  refresh: refreshUpcoming,
+} = useGrindUpcomingEvents();
+
+onMounted(() => {
+  void refreshUpcoming();
+});
+
 watch(
   () => [props.venue.id, hasDescriptionText.value, hasPricingDetail.value, hasOperatingDetail.value] as const,
   () => {
@@ -554,6 +567,19 @@ watch(
                 </div>
               </div>
             </div>
+
+            <div class="hidden lg:block mt-8">
+              <VenueUpcomingEvents
+                :events="upcomingEvents"
+                :loading="upcomingLoading"
+                :error="upcomingError"
+                :dark-mode="darkMode"
+                :language="language"
+                :t="t"
+                @retry="refreshUpcoming"
+              />
+            </div>
+
             <!-- Mobile view -->
             <div class="lg:hidden space-y-4 mt-4">
               <!-- Mobile: Contact button -->
@@ -601,6 +627,17 @@ watch(
                   </p>
 
                 </div>
+              </div>
+              <div class="lg:hidden mt-6">
+                <VenueUpcomingEvents
+                  :events="upcomingEvents"
+                  :loading="upcomingLoading"
+                  :error="upcomingError"
+                  :dark-mode="darkMode"
+                  :language="language"
+                  :t="t"
+                  @retry="refreshUpcoming"
+                />
               </div>
               <div v-if="venue.membership_enabled && (venue.membership_description || venue.membership_join_link)"
                 class="flex justify-between w-full pt-4 mt-2 mb-4 border-t border-gray-300">

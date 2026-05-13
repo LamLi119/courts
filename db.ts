@@ -116,6 +116,10 @@ function rowToVenue(row: any): Venue {
     booking_url: row.booking_url ?? null,
     operating_hours,
     operating_hours_enabled: row.operating_hours_enabled == null ? true : Boolean(row.operating_hours_enabled),
+    grind_company_id:
+      row.grind_company_id != null && row.grind_company_id !== ''
+        ? Number(row.grind_company_id)
+        : null,
   } as Venue;
 }
 
@@ -126,6 +130,7 @@ const VENUE_COLUMNS = new Set([
   'membership_enabled', 'membership_description', 'membership_join_link',
   'court_count',
   'booking_url', 'operating_hours', 'operating_hours_enabled',
+  'grind_company_id',
 ]);
 
 function venueToRow(venue: Record<string, any>): Record<string, any> {
@@ -136,6 +141,11 @@ function venueToRow(venue: Record<string, any>): Record<string, any> {
     if (key === 'court_count') {
       const n = value === null || value === '' || value === undefined ? null : Number(value);
       result[key] = (n != null && !Number.isNaN(n) && n >= 0) ? n : null;
+      return;
+    }
+    if (key === 'grind_company_id') {
+      const n = value === null || value === '' || value === undefined ? null : Number(value);
+      result[key] = (n != null && !Number.isNaN(n) && n >= 1) ? Math.floor(n) : null;
       return;
     }
     if (key === 'operating_hours') {
