@@ -19,7 +19,7 @@ const error = ref<string | null>(null);
 const events = ref<GrindEventRow[]>([]);
 let activeRequestId = 0;
 
-const LOCAL_CACHE_KEY = 'venue_upcoming_events_cache_v1';
+const LOCAL_CACHE_KEY = 'venue_upcoming_events_cache_v2';
 const LOCAL_CACHE_TTL_MS = 1000 * 60 * 5; // 5 minutes
 
 function isNotFinished(ev: GrindEventRow): boolean {
@@ -29,8 +29,21 @@ function isNotFinished(ev: GrindEventRow): boolean {
 }
 
 function readItems(payload: GrindUpcomingEventsPayload): GrindEventRow[] {
+  if (Array.isArray(payload)) return payload as GrindEventRow[];
   if (Array.isArray(payload.data)) return payload.data;
   if (Array.isArray(payload.events)) return payload.events;
+  const any = payload as Record<string, unknown>;
+  for (const k of ['items', 'records', 'list', 'rows', 'results', 'content'] as const) {
+    const v = any[k];
+    if (Array.isArray(v)) return v as GrindEventRow[];
+  }
+  if (any.data && typeof any.data === 'object' && !Array.isArray(any.data)) {
+    const inner = any.data as Record<string, unknown>;
+    for (const k of ['data', 'events', 'items', 'records', 'list', 'rows'] as const) {
+      const v = inner[k];
+      if (Array.isArray(v)) return v as GrindEventRow[];
+    }
+  }
   return [];
 }
 

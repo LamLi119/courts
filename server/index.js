@@ -437,6 +437,43 @@ function cleanupPublicEventsCache(now = Date.now()) {
   }
 }
 
+/**
+ * The Grind `/events/getExploreEvents` response shape has varied across deployments
+ * (top-level array, `data`, `events`, nested `data.items`, etc.). Normalize so the
+ * Courts frontend always receives `{ data: [...], meta?: {...} }`.
+ */
+function normalizeExploreEventsBody(raw) {
+  if (raw == null) return { data: [], meta: {} };
+  if (Array.isArray(raw)) return { data: raw, meta: {} };
+  if (typeof raw !== 'object') return { data: [], meta: {} };
+
+  const topMeta = raw.meta || raw.pagination || raw.pageInfo || {};
+
+  const arrayKeys = ['data', 'events', 'items', 'records', 'list', 'rows', 'content', 'results'];
+  for (const k of arrayKeys) {
+    const v = raw[k];
+    if (Array.isArray(v)) {
+      return { data: v, meta: typeof topMeta === 'object' && topMeta ? { ...topMeta } : {} };
+    }
+  }
+
+  if (raw.data && typeof raw.data === 'object' && !Array.isArray(raw.data)) {
+    const inner = raw.data;
+    const innerMeta = inner.meta || inner.pagination || {};
+    for (const k of arrayKeys) {
+      const v = inner[k];
+      if (Array.isArray(v)) {
+        return {
+          data: v,
+          meta: { ...topMeta, ...innerMeta },
+        };
+      }
+    }
+  }
+
+  return { data: [], meta: typeof topMeta === 'object' && topMeta ? { ...topMeta } : {} };
+}
+
 async function fetchPublicEventsWithCache(qs) {
   const cacheKey = `events-public:${qs}`;
   const now = Date.now();
@@ -452,14 +489,15 @@ async function fetchPublicEventsWithCache(qs) {
   }
 
   const request = grindFetch(`/events/getExploreEvents?${qs}`)
-    .then((data) => {
+    .then((raw) => {
+      const normalized = normalizeExploreEventsBody(raw);
       const t = Date.now();
       publicEventsCache.set(cacheKey, {
-        data,
+        data: normalized,
         expiresAt: t + PUBLIC_EVENTS_CACHE_TTL_MS,
       });
       cleanupPublicEventsCache(t);
-      return data;
+      return normalized;
     })
     .finally(() => {
       publicEventsInflight.delete(cacheKey);
