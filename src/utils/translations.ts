@@ -99,8 +99,6 @@ export const translations = {
         tryAgain: "Try again",
         noUpcomingEvents: "No upcoming events.",
         attendeesGoing: "{{n}} going",
-        grindCompanyId: "The Grind company ID",
-        grindCompanyIdHint: "Optional. Shows this organization’s upcoming public events on the venue page.",
     },
     zh: {
         title: "場地搜尋",
@@ -198,8 +196,6 @@ export const translations = {
         tryAgain: "重試",
         noUpcomingEvents: "暫無即將舉行的活動。",
         attendeesGoing: "{{n}} 人參加",
-        grindCompanyId: "The Grind 公司 ID",
-        grindCompanyIdHint: "選填。在場地頁顯示該組織的公開即將活動。",
     }
 };
 

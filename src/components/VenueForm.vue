@@ -143,7 +143,6 @@ const defaultForm = {
   membership_description: '' as string | null,
   membership_join_link: '' as string | null,
   court_count: null as number | null,
-  grind_company_id: null as number | null,
   operating_hours: createDefaultOperatingHours() as OperatingHours,
   operating_hours_enabled: false,
 };
@@ -159,7 +158,6 @@ if (formData.membership_enabled === undefined) formData.membership_enabled = fal
 if (formData.membership_description === undefined) formData.membership_description = null;
 if (formData.membership_join_link === undefined) formData.membership_join_link = null;
 if (formData.court_count === undefined) formData.court_count = null;
-if (formData.grind_company_id === undefined) formData.grind_company_id = null;
 if (formData.operating_hours_enabled === undefined) formData.operating_hours_enabled = true;
 formData.operating_hours = normalizeOperatingHours(formData.operating_hours);
 
@@ -742,10 +740,6 @@ const handleSubmit = async (e?: Event) => {
     formData.membership_description = getMembershipDescriptionHtml() || null;
   }
   formData.operating_hours = normalizeOperatingHours(formData.operating_hours);
-  if (formData.grind_company_id != null) {
-    const g = Number(formData.grind_company_id);
-    formData.grind_company_id = Number.isFinite(g) && g >= 1 ? Math.floor(g) : null;
-  }
   isSaving.value = true;
   saveError.value = null;
   try {
@@ -1080,20 +1074,6 @@ const inputClass =
               v-model.number="formData.court_count"
               type="number"
               min="0"
-              :class="inputClass"
-              :placeholder="t('optional')"
-            />
-          </div>
-          <div class="col-span-2">
-            <label :class="labelClass">{{ t('grindCompanyId') }}</label>
-            <p class="text-[11px] opacity-70 mb-1">
-              {{ t('grindCompanyIdHint') }}
-            </p>
-            <input
-              v-model.number="formData.grind_company_id"
-              type="number"
-              min="1"
-              step="1"
               :class="inputClass"
               :placeholder="t('optional')"
             />
