@@ -564,7 +564,6 @@ function sanitizeRow(body) {
     'membership_enabled', 'membership_description', 'membership_join_link',
     'court_count',
     'booking_url', 'operating_hours', 'operating_hours_enabled',
-    'grind_company_id',
   ]);
   const row = {};
   for (const [k, v] of Object.entries(body || {})) {
@@ -576,9 +575,6 @@ function sanitizeRow(body) {
       } else if (k === 'court_count') {
         const n = v === undefined || v === null || v === '' ? null : parseInt(v, 10);
         row[k] = (Number.isNaN(n) || n < 0) ? null : n;
-      } else if (k === 'grind_company_id') {
-        const n = v === undefined || v === null || v === '' ? null : parseInt(v, 10);
-        row[k] = (Number.isNaN(n) || n < 1) ? null : n;
       } else if (k === 'operating_hours') {
         if (v == null || v === '') row[k] = null;
         else if (typeof v === 'string') row[k] = v;
