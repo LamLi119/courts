@@ -94,7 +94,7 @@ const handleShare = async () => {
           @click.stop="onToggleSave">
           {{ isSaved ? '❤️' : '🤍' }}
         </button></div>
-        <div class="flex items-end justify-end pt-8">
+        <div v-if="venue.startingPrice > 0" class="flex items-end justify-end pt-8">
           <div class="flex flex-col items-end gap-0.5">
             <span class="text-[11px] font-[700] opacity-60 uppercase leading-none">
               {{ language === 'en' ? 'Starting price' : t('startingFrom') }}
