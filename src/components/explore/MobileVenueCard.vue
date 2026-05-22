@@ -95,21 +95,19 @@ const handleShare = async () => {
           {{ isSaved ? '❤️' : '🤍' }}
         </button></div>
         <div class="flex items-end justify-end pt-8">
-          <div class="flex items-baseline gap-1">
-            <span class="text-[11px] font-[700] opacity-60 uppercase"
-            :class="language === 'en' ? 'block' : 'hidden'">
-              {{ language === 'en' ? 'Up to' : '' }}
+          <div class="flex flex-col items-end gap-0.5">
+            <span class="text-[11px] font-[700] opacity-60 uppercase leading-none">
+              {{ language === 'en' ? 'Starting price' : t('startingFrom') }}
             </span>
-            <span class="text-[18px] font-[900] text-[#007a67]">
-              ${{ venue.startingPrice }}
-            </span>
-            <span class="text-[11px] font-[700] opacity-60 uppercase"
-            :class="language === 'en' ? 'hidden' : 'block'">
-              {{ language === 'en' ? '' : '起' }}
-            </span>
-            <span class="text-[11px] font-[700] opacity-60 uppercase">
-              /{{ language === 'en' ? 'hr' : '小時' }}
-            </span>
+            <div class="flex items-baseline gap-0.5 leading-none">
+              <span class="text-[18px] font-[900] text-[#007a67]">
+                ${{ venue.startingPrice }}
+              </span>
+              <span v-if="language !== 'en'" class="text-[11px] font-[700] opacity-60 uppercase">起</span>
+              <span class="text-[11px] font-[700] opacity-60 uppercase">
+                /{{ language === 'en' ? 'hr' : '小時' }}
+              </span>
+            </div>
           </div>
         </div>
       </div>

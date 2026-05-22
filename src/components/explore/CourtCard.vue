@@ -192,7 +192,7 @@ const toggleExpand = (e: MouseEvent) => {
           <div v-if="venue.startingPrice > 0" class="flex items-baseline gap-1">
             <span class="text-[12px] font-[700] opacity-60 uppercase"
             :class="language === 'en' ? 'block' : 'hidden'">
-              {{ language === 'en' ? 'Up to' : '' }}
+              {{ language === 'en' ? 'Starting price' : '' }}
             </span>
             <span class="text-[24px] font-[900] text-[#007a67]">
               ${{ venue.startingPrice }}
