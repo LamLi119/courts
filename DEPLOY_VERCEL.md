@@ -1,4 +1,4 @@
-# Deploy to Vercel (方案 A：前端 + 反向代理)
+# Deploy to Vercel 
 
 The static app is served from Vercel. **`/api/*` is handled by a Vercel serverless function** (`api/[...path].ts`) that **proxies** to your Express API running on a **public URL** (VPS, Railway, Render, Fly.io, etc.). The Express process is what connects to MySQL.
 

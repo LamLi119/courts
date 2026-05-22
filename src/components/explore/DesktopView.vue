@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, ref, watch, nextTick } from 'vue';
-import type { Venue, Language, AppTab } from '../../types';
-import { getStationDisplayName } from '../utils/mtrStations';
+import type { Venue, Language, AppTab } from '../../../types';
+import { getStationDisplayName } from '../../utils/mtrStations';
 import CourtCard from './CourtCard.vue';
 
 const props = defineProps<{

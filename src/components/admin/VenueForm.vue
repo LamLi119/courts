@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue';
-import type { Venue, Language, Sport, OperatingHours, OperatingDayKey } from '../../types';
-import { loadGoogleMapsScript } from '../utils/googleMapsScript';
+import type { Venue, Language, Sport, OperatingHours, OperatingDayKey } from '../../../types';
+import { loadGoogleMapsScript } from '../../utils/googleMapsScript';
 
 declare const google: any;
 
@@ -144,7 +144,7 @@ const defaultForm = {
   membership_join_link: '' as string | null,
   court_count: null as number | null,
   operating_hours: createDefaultOperatingHours() as OperatingHours,
-  operating_hours_enabled: false,
+  operating_hours_enabled: true,
 };
 
 const formData = reactive<any>(
@@ -161,7 +161,22 @@ if (formData.court_count === undefined) formData.court_count = null;
 if (formData.operating_hours_enabled === undefined) formData.operating_hours_enabled = true;
 formData.operating_hours = normalizeOperatingHours(formData.operating_hours);
 
+const DEFAULT_COORDINATES = { lat: 22.3193, lng: 114.1694 };
+
+function hasLocatedPin(coords: { lat?: number; lng?: number } | null | undefined): boolean {
+  if (coords?.lat == null || coords?.lng == null) return false;
+  const lat = Number(coords.lat);
+  const lng = Number(coords.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+  return (
+    Math.abs(lat - DEFAULT_COORDINATES.lat) > 1e-5 ||
+    Math.abs(lng - DEFAULT_COORDINATES.lng) > 1e-5
+  );
+}
+
 const placesApiError = ref(false);
+const pinLocated = ref(hasLocatedPin(formData.coordinates));
+const mapSearchQuery = ref('');
 const isUploading = ref(false);
 const isSaving = ref(false);
 const saveError = ref<string | null>(null);
@@ -169,7 +184,7 @@ const saveError = ref<string | null>(null);
 const fileInputRef = ref<HTMLInputElement | null>(null);
 const pricingImageRef = ref<HTMLInputElement | null>(null);
 const orgIconInputRef = ref<HTMLInputElement | null>(null);
-const addressInputRef = ref<HTMLInputElement | null>(null);
+const mapLocationInputRef = ref<HTMLInputElement | null>(null);
 const autocompleteRef = ref<any>(null);
 const descriptionEditorRef = ref<HTMLDivElement | null>(null);
 const pricingEditorRef = ref<HTMLDivElement | null>(null);
@@ -181,7 +196,7 @@ let membershipDescriptionSelectionHandler: (() => void) | null = null;
 let placesMapsReadyCleanup: (() => void) | null = null;
 
 function initPlacesAutocomplete() {
-  const input = addressInputRef.value;
+  const input = mapLocationInputRef.value;
   if (!input || autocompleteRef.value) return;
 
   if (typeof google === 'undefined' || !google.maps || !google.maps.places) {
@@ -193,7 +208,7 @@ function initPlacesAutocomplete() {
     placesApiError.value = false;
     autocompleteRef.value = new google.maps.places.Autocomplete(input, {
       componentRestrictions: { country: 'hk' },
-      fields: ['geometry', 'formatted_address'],
+      fields: ['geometry', 'name', 'formatted_address'],
       types: ['establishment', 'geocode'],
     });
 
@@ -203,13 +218,13 @@ function initPlacesAutocomplete() {
       const place = ac.getPlace();
       if (!place.geometry || !place.geometry.location) return;
 
-      const latLng = {
+      formData.coordinates = {
         lat: place.geometry.location.lat(),
         lng: place.geometry.location.lng(),
       };
-
-      formData.address = place.formatted_address;
-      formData.coordinates = latLng;
+      pinLocated.value = true;
+      const label = place.name || place.formatted_address || input.value;
+      if (label) mapSearchQuery.value = label;
     });
   } catch (err) {
     console.error('Failed to initialize Autocomplete:', err);
@@ -226,7 +241,7 @@ function setupPlacesAutocomplete() {
   };
 
   nextTick(() => {
-    if (!addressInputRef.value) return;
+    if (!mapLocationInputRef.value) return;
 
     if (typeof google !== 'undefined' && google.maps?.places) {
       initPlacesAutocomplete();
@@ -745,11 +760,14 @@ const handleSubmit = async (e?: Event) => {
   try {
     formData.socialLink = buildSocialLinkJson(formData.socialLinks);
 
-    // Always geocode the address on save so we store correct lat/lng for the map
-    if (formData.address && (typeof formData.address === 'string' ? formData.address.trim() : '')) {
-      const coords = await geocodeAddress(formData.address);
+    // Only geocode display address when map pin was not set via Google search
+    const addressText =
+      typeof formData.address === 'string' ? formData.address.trim() : '';
+    if (!pinLocated.value && addressText) {
+      const coords = await geocodeAddress(addressText);
       if (coords) {
         formData.coordinates = coords;
+        pinLocated.value = true;
       }
     }
 
@@ -1009,18 +1027,68 @@ const inputClass =
           </div>
         </div>
 
-        <div class="relative">
+        <div>
           <label :class="labelClass">
             {{ language === 'en' ? 'Full Address *' : '詳細地址 *' }}
           </label>
-          <input
-            ref="addressInputRef"
+          <textarea
             v-model="formData.address"
-            type="text"
+            rows="3"
             :class="inputClass"
             required
-            placeholder="Start typing building or street name..."
+            :placeholder="
+              language === 'en'
+                ? 'Full address shown to users (shop, floor, building, etc.)'
+                : '向用戶顯示的完整地址（舖位、樓層、大廈等）'
+            "
           />
+        </div>
+        <div class="relative">
+          <label :class="labelClass">
+            {{ language === 'en' ? 'Map pin (Google search)' : '地圖定位（Google 搜尋）' }}
+          </label>
+          <input
+            ref="mapLocationInputRef"
+            v-model="mapSearchQuery"
+            type="text"
+            :class="inputClass"
+            :placeholder="
+              language === 'en'
+                ? 'Search building or street to set map pin…'
+                : '搜尋大廈或街道以設定地圖圖釘…'
+            "
+          />
+          <p
+            v-if="placesApiError"
+            class="mt-1 text-xs text-red-500"
+          >
+            {{
+              language === 'en'
+                ? 'Google Maps could not load. Check VITE_GOOGLE_MAPS_API_KEY.'
+                : '無法載入 Google 地圖，請檢查 VITE_GOOGLE_MAPS_API_KEY。'
+            }}
+          </p>
+          <p
+            v-else-if="pinLocated"
+            class="mt-1 text-xs text-[#007a67] font-bold"
+          >
+            {{
+              language === 'en'
+                ? `Pin set (${Number(formData.coordinates.lat).toFixed(5)}, ${Number(formData.coordinates.lng).toFixed(5)})`
+                : `已設定圖釘（${Number(formData.coordinates.lat).toFixed(5)}, ${Number(formData.coordinates.lng).toFixed(5)}）`
+            }}
+          </p>
+          <p
+            v-else
+            class="mt-1 text-xs"
+            :class="darkMode ? 'text-gray-400' : 'text-gray-500'"
+          >
+            {{
+              language === 'en'
+                ? 'Pick a Google suggestion to place the pin. Full address above is not changed.'
+                : '請從 Google 建議中選擇以設定圖釘；上方完整地址不會被取代。'
+            }}
+          </p>
         </div>
         <div>
           <label :class="labelClass">{{ t('whatsappNumber') }} *</label>

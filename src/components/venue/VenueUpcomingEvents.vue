@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch, nextTick } from 'vue';
-import type { Language } from '../../types';
-import type { GrindEventRow } from '../utils/grindEventFormat';
+import type { Language } from '../../../types';
+import type { GrindEventRow } from '../../utils/grindEventFormat';
 import {
   formatGrindEventCardLine,
   grindExploreEventsUrl,
   grindPublicEventUrl,
   eventImageSrc,
-} from '../utils/grindEventFormat';
+} from '../../utils/grindEventFormat';
 
 const props = defineProps<{
   events: GrindEventRow[];

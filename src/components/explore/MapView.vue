@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onBeforeUnmount, ref, watch, computed } from 'vue';
-import type { Venue, Language } from '../../types';
-import { loadGoogleMapsScript } from '../utils/googleMapsScript';
+import type { Venue, Language } from '../../../types';
+import { loadGoogleMapsScript } from '../../utils/googleMapsScript';
 declare const google: any;
 
 const props = defineProps<{

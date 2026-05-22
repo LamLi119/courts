@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ref, watch, computed, defineAsyncComponent, nextTick } from 'vue';
-import type { Venue, Language, AppTab } from '../../types';
-import { getStationDisplayName } from '../utils/mtrStations';
+import type { Venue, Language, AppTab } from '../../../types';
+import { getStationDisplayName } from '../../utils/mtrStations';
 import MobileVenueCard from './MobileVenueCard.vue';
-import VenueDetail from './VenueDetail.vue';
+import VenueDetail from '../venue/VenueDetail.vue';
 
 const MapView = defineAsyncComponent(() => import('./MapView.vue'));
 
