@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import type { Language } from '../../types';
-import { useAuth } from '../composables/auth';
-import { useAuthStore } from '../stores/auth';
-import authSideImageUrl from '../assets/auth_side.png';
+import type { Language } from '../../../types';
+import { useAuth } from '../../composables/auth';
+import { useAuthStore } from '../../stores/auth';
+import authSideImageUrl from '../../assets/auth_side.png';
 
 const props = defineProps<{
   language: Language;

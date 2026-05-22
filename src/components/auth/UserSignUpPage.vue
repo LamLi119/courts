@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import type { Language } from '../../types';
-import { useAuth } from '../composables/auth';
-import { useAuthStore } from '../stores/auth';
+import type { Language } from '../../../types';
+import { useAuth } from '../../composables/auth';
+import { useAuthStore } from '../../stores/auth';
 import IntlTelInputWrapper from './IntlTelInputWrapper.vue';
-import authSideImageUrl from '../assets/auth_side.png';
+import authSideImageUrl from '../../assets/auth_side.png';
 
 const logoUrl = `${import.meta.env.BASE_URL}green-G.svg`;
 

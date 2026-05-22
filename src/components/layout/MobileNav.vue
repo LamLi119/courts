@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { AppTab } from '../../types';
+import type { AppTab } from '../../../types';
 
 const props = defineProps<{
   currentTab: AppTab;

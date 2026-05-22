@@ -2,10 +2,10 @@
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AdminLogin from './AdminLogin.vue';
-import type { Language } from '../../types';
-import { getAuthApiBase, useAuth } from '../composables/auth';
-import { useAuthStore } from '../stores/auth';
-import authSideImageUrl from '../assets/auth_side.png';
+import type { Language } from '../../../types';
+import { getAuthApiBase, useAuth } from '../../composables/auth';
+import { useAuthStore } from '../../stores/auth';
+import authSideImageUrl from '../../assets/auth_side.png';
 
 const logoUrl = `${import.meta.env.BASE_URL}green-G.svg`;
 
