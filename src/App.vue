@@ -569,6 +569,7 @@ const showAdminNotification = (type: 'success' | 'error', message: string) => {
 
 const handleSaveVenue = async (venueData: any) => {
   try {
+    const editingId = editingVenue.value?.id ?? null;
     const saved = await db.upsertVenue(venueData, { isSuperAdmin: isSuperAdmin.value });
     if (editingVenue.value) {
       venues.value = venues.value.map(old => old.id === saved.id ? saved : old);
@@ -578,7 +579,14 @@ const handleSaveVenue = async (venueData: any) => {
     invalidateVenuesCache();
     showVenueForm.value = false;
     editingVenue.value = null;
-    selectedVenue.value = null;
+    if (editingId != null && selectedVenue.value?.id === editingId) {
+      selectedVenue.value = saved;
+      if (route.name === 'venue') {
+        await router.push('/venues/' + useVenueSlug(saved));
+      }
+    } else if (editingId == null) {
+      selectedVenue.value = null;
+    }
     showAdminNotification('success', t('saveSuccess'));
   } catch (err: any) {
     showAdminNotification('error', err?.message || t('saveFailed'));
