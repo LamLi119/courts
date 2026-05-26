@@ -560,7 +560,7 @@ watch(
                     <span class="text-right" :class="darkMode ? 'text-gray-400' : 'text-gray-600'">{{ publicHolidayDisplay }}</span>
                   </div>
                   <p v-if="operatingHours?.note && operatingHours.note.trim()"
-                    class="text-[12px] lg:text-[14px] border-t pt-2 px-2 lg:pl-10 lg:pr-10"
+                    class="text-[12px] lg:text-[14px] border-t pt-2 px-2 lg:pl-10 lg:pr-10 whitespace-pre-line"
                     :class="darkMode ? 'text-gray-400 border-gray-700' : 'text-gray-500 border-gray-200'">
                     {{ operatingHours.note }}
                   </p>

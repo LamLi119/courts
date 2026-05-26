@@ -32,8 +32,8 @@ function parseSocialLinks(s: string | undefined): Record<string, string> {
         instagram: strip(p.instagram, /^https?:\/\/(www\.)?instagram\.com\/?/i),
         facebook: strip(p.facebook, /^https?:\/\/(www\.)?(fb\.com|facebook\.com)\/?/i),
         x: strip(p.x, /^https?:\/\/(www\.)?(twitter\.com|x\.com)\/?/i),
-        threads: strip(p.threads, /^https?:\/\/(www\.)?threads\.net\/@?/i),
-        youtube: strip(p.youtube, /^https?:\/\/(www\.)?(youtube\.com|youtu\.be)\/@?/i),
+        threads: strip(p.threads, /^https?:\/\/(www\.)?threads\.net\/@+/i).replace(/^@+/, ''),
+        youtube: strip(p.youtube, /^https?:\/\/(www\.)?(youtube\.com|youtu\.be)\/@+/i).replace(/^@+/, ''),
         website: (p.website && typeof p.website === 'string') ? p.website : ''
       };
     }
@@ -41,17 +41,27 @@ function parseSocialLinks(s: string | undefined): Record<string, string> {
   return { ...empty, website: s || '' };
 }
 
+function normalizeSocialHandle(v: string): string {
+  return v.trim().replace(/^@+/, '').replace(/^\//, '');
+}
+
 function buildSocialLinkJson(links: Record<string, string>): string {
-  const url = (v: string, base: string, prefix = '') =>
-    (v && v.trim()) ? (v.trim().startsWith('http') ? v.trim() : `${base}${prefix}${v.trim().replace(/^@?\/?/, '')}`) : '';
+  const url = (v: string, base: string) =>
+    (v && v.trim())
+      ? (v.trim().startsWith('http') ? v.trim() : `${base}${normalizeSocialHandle(v)}`)
+      : '';
   return JSON.stringify({
     instagram: url(links.instagram, 'https://instagram.com/'),
     facebook: url(links.facebook, 'https://facebook.com/'),
     x: url(links.x, 'https://x.com/'),
-    threads: url(links.threads, 'https://threads.net/@', '@'),
-    youtube: url(links.youtube, 'https://youtube.com/@', '@'),
+    threads: url(links.threads, 'https://threads.net/@'),
+    youtube: url(links.youtube, 'https://youtube.com/@'),
     website: (links.website && links.website.trim()) ? links.website.trim() : ''
   });
+}
+
+function preventInputWheel(e: WheelEvent) {
+  e.preventDefault();
 }
 
 const OPERATING_DAY_KEYS: OperatingDayKey[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
@@ -904,7 +914,7 @@ const inputClass =
                   <div
                     ref="membershipDescriptionEditorRef"
                     contenteditable="true"
-                    class="description-editor min-h-[8rem] px-4 py-3 border rounded-b-[12px] focus:outline-none transition text-left"
+                    class="description-editor description-html min-h-[8rem] px-4 py-3 border rounded-b-[12px] focus:outline-none transition text-left"
                     :class="darkMode ? 'bg-gray-700 border-gray-600 text-white border-t-0' : 'bg-white border-gray-200 text-gray-900 border-t-0'"
                     :data-placeholder="language === 'en' ? 'Describe membership benefits for this court...' : '描述此場地的會員福利...'"
                   />
@@ -1020,6 +1030,7 @@ const inputClass =
                 type="number"
                 :class="inputClass"
                 required
+                @wheel="preventInputWheel"
               />
             </div>
             
@@ -1125,6 +1136,7 @@ const inputClass =
               v-model.number="formData.walkingDistance"
               type="number"
               :class="inputClass"
+              @wheel="preventInputWheel"
             />
           </div>
           <div>
@@ -1134,6 +1146,7 @@ const inputClass =
               type="number"
               step="0.1"
               :class="inputClass"
+              @wheel="preventInputWheel"
             />
           </div>
           <div>
@@ -1144,6 +1157,7 @@ const inputClass =
               min="0"
               :class="inputClass"
               :placeholder="t('optional')"
+              @wheel="preventInputWheel"
             />
           </div>
         </div>
@@ -1195,9 +1209,9 @@ const inputClass =
                   :key="`${day}-${idx}`"
                   class="flex items-center gap-2"
                 >
-                  <input v-model="slot[0]" type="time" :class="inputClass" class="!py-2" />
+                  <input v-model="slot[0]" type="time" :class="inputClass" class="!py-2" @wheel="preventInputWheel" />
                   <span class="text-xs opacity-60">-</span>
-                  <input v-model="slot[1]" type="time" :class="inputClass" class="!py-2" />
+                  <input v-model="slot[1]" type="time" :class="inputClass" class="!py-2" @wheel="preventInputWheel" />
                   <button
                     type="button"
                     class="text-red-500 text-xs font-bold px-2 py-1 rounded border border-red-300"
@@ -1230,9 +1244,9 @@ const inputClass =
                 :key="`holiday-${idx}`"
                 class="flex items-center gap-2"
               >
-                <input v-model="slot[0]" type="time" :class="inputClass" class="!py-2" />
+                <input v-model="slot[0]" type="time" :class="inputClass" class="!py-2" @wheel="preventInputWheel" />
                 <span class="text-xs opacity-60">-</span>
-                <input v-model="slot[1]" type="time" :class="inputClass" class="!py-2" />
+                <input v-model="slot[1]" type="time" :class="inputClass" class="!py-2" @wheel="preventInputWheel" />
                 <button
                   type="button"
                   class="text-red-500 text-xs font-bold px-2 py-1 rounded border border-red-300"
@@ -1251,8 +1265,8 @@ const inputClass =
             <label :class="labelClass">{{ language === 'en' ? 'Hours note' : '營業時間備註' }}</label>
             <textarea
               v-model="operatingHoursData.note"
-              rows="2"
-              :class="inputClass"
+              rows="6"
+              :class="inputClass + ' whitespace-pre-wrap'"
               :placeholder="language === 'en' ? 'Example: Public holiday hours may vary.' : '例如：公眾假期時間或會有更改。'"
             />
           </div>
@@ -1285,7 +1299,7 @@ const inputClass =
           <div
             ref="descriptionEditorRef"
             contenteditable="true"
-            class="description-editor min-h-[8rem] px-4 py-3 border rounded-b-[12px] focus:outline-none transition text-left"
+            class="description-editor description-html min-h-[8rem] px-4 py-3 border rounded-b-[12px] focus:outline-none transition text-left"
             :class="darkMode ? 'bg-gray-700 border-gray-600 text-white border-t-0' : 'bg-white border-gray-200 text-gray-900 border-t-0'"
             :data-placeholder="t('typeSomething')"
           />
@@ -1449,7 +1463,7 @@ const inputClass =
             <div
               ref="pricingEditorRef"
               contenteditable="true"
-              class="description-editor min-h-[6rem] px-4 py-3 border rounded-b-[12px] focus:outline-none transition text-left"
+              class="description-editor description-html min-h-[6rem] px-4 py-3 border rounded-b-[12px] focus:outline-none transition text-left"
               :class="darkMode ? 'bg-gray-700 border-gray-600 text-white border-t-0' : 'bg-white border-gray-200 text-gray-900 border-t-0'"
               :data-placeholder="t('typePricingDetails')"
             />
@@ -1526,5 +1540,75 @@ const inputClass =
 .description-editor:empty::before {
   content: attr(data-placeholder);
   opacity: 0.5;
+}
+
+.description-html :deep(h1) {
+  font-size: 1.5rem;
+  font-weight: 800;
+  margin: 0.75em 0 0.25em;
+}
+
+.description-html :deep(h2) {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0.5em 0 0.25em;
+}
+
+.description-html :deep(h3) {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0.5em 0 0.25em;
+}
+
+.description-html :deep(p) {
+  margin: 0.35em 0;
+}
+
+.description-html :deep(blockquote) {
+  border-left: 4px solid currentColor;
+  padding-left: 1rem;
+  margin: 0.5em 0;
+  opacity: 0.9;
+}
+
+.description-html :deep(pre),
+.description-html :deep(code) {
+  font-family: ui-monospace, monospace;
+  font-size: 0.9em;
+  background: rgba(0, 0, 0, 0.06);
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+}
+
+.description-html :deep(pre) {
+  display: block;
+  padding: 0.75rem;
+  overflow-x: auto;
+}
+
+.description-html :deep(div) {
+  display: block;
+  margin: 0.35em 0;
+}
+
+.description-html :deep(ul) {
+  list-style: disc;
+  padding-left: 1.5rem;
+  margin: 0.5em 0;
+}
+
+.description-html :deep(ol) {
+  list-style: decimal;
+  padding-left: 1.5rem;
+  margin: 0.5em 0;
+}
+
+.description-html :deep(li) {
+  margin: 0.25em 0;
+}
+
+.description-html :deep(a) {
+  color: #007a67;
+  text-decoration: underline;
 }
 </style>
