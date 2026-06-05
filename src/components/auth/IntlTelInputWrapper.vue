@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
+import { normalizePhoneFields } from '../../utils/phone';
 
 type CountryOption = {
   label: string;
@@ -26,7 +27,9 @@ const emit = defineEmits<{
 
 const dropdownOpen = ref(false);
 const search = ref('');
-const localPhone = ref((props.phoneNumber || '').toString());
+const localPhone = ref(
+  normalizePhoneFields((props.phoneNumber || '').toString(), props.countryCode || '852').phoneNo,
+);
 const localCode = ref((props.countryCode || '852').toString());
 const countries = ref<CountryOption[]>([
   { iso2: 'hk', code: '852', label: 'Hong Kong' },
@@ -46,11 +49,22 @@ const countries = ref<CountryOption[]>([
 watch(() => props.countryCode, (v) => {
   if (!v) return;
   localCode.value = String(v);
+  const { phoneNo } = normalizePhoneFields(localPhone.value, localCode.value);
+  if (phoneNo !== localPhone.value) {
+    localPhone.value = phoneNo;
+    emit('update:phoneNumber', phoneNo);
+    emit('update:is-valid', isPhoneValid.value);
+  }
 });
 
 watch(() => props.phoneNumber, (v) => {
-  localPhone.value = (v || '').toString();
+  const { phoneNo } = normalizePhoneFields((v || '').toString(), localCode.value);
+  localPhone.value = phoneNo;
 });
+
+function stripDialFromInput(digits: string): string {
+  return normalizePhoneFields(digits, localCode.value).phoneNo;
+}
 
 const selectedCountry = computed(() =>
   countries.value.find((c) => c.code === localCode.value) || countries.value[0]
@@ -70,8 +84,9 @@ const isPhoneValid = computed(() => /^[0-9]{6,15}$/.test(localPhone.value.trim()
 
 function onPhoneInput(v: string) {
   const cleaned = v.replace(/[^\d]/g, '');
-  localPhone.value = cleaned;
-  emit('update:phoneNumber', cleaned);
+  const local = stripDialFromInput(cleaned);
+  localPhone.value = local;
+  emit('update:phoneNumber', local);
   emit('update:is-valid', isPhoneValid.value);
 }
 
@@ -81,9 +96,13 @@ function flagUrl(iso2: string): string {
 
 function pickCountry(code: string) {
   localCode.value = code;
+  const local = stripDialFromInput(localPhone.value);
+  localPhone.value = local;
   emit('update:countryCode', code);
+  emit('update:phoneNumber', local);
   dropdownOpen.value = false;
   search.value = '';
+  emit('update:is-valid', isPhoneValid.value);
   emit('validate', isPhoneValid.value);
 }
 

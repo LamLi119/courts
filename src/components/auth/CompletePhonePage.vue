@@ -5,6 +5,7 @@ import type { Language } from '../../../types';
 import { useAuth } from '../../composables/auth';
 import { useAuthStore } from '../../stores/auth';
 import IntlTelInputWrapper from './IntlTelInputWrapper.vue';
+import { hasLocalPhoneOnly, normalizePhoneFields } from '../../utils/phone';
 import authSideImageUrl from '../../assets/auth_side.png';
 
 const props = defineProps<{
@@ -38,9 +39,13 @@ async function submitPhone() {
   }
 
   try {
+    const { phoneNo: local, countryCode: cc } = normalizePhoneFields(
+      phoneNo.value.trim(),
+      countryCode.value,
+    );
     await completePhone({
-      phoneNo: phoneNo.value.trim(),
-      country_code: countryCode.value,
+      phoneNo: local,
+      country_code: cc,
     });
     const redirect = authStore.redirectPath && authStore.redirectPath !== '/' ? authStore.redirectPath : '/';
     authStore.setRedirectPath('/');
@@ -57,16 +62,19 @@ onMounted(async () => {
     return;
   }
 
-  if (u.phoneNo && u.phoneNo.toString().trim()) {
+  if (hasLocalPhoneOnly(u.phoneNo, u.countryCode)) {
     const redirect = authStore.redirectPath && authStore.redirectPath !== '/' ? authStore.redirectPath : '/';
     authStore.setRedirectPath('/');
     router.replace(redirect);
     return;
   }
 
-  if (u.countryCode && u.countryCode.toString().trim()) {
-    countryCode.value = u.countryCode.toString().trim();
-  }
+  const { phoneNo: local, countryCode: cc } = normalizePhoneFields(
+    u.phoneNo || '',
+    u.countryCode || '852',
+  );
+  countryCode.value = cc;
+  if (local) phoneNo.value = local;
 });
 </script>
 

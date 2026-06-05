@@ -344,6 +344,16 @@ function extractCountryCode(profile) {
   );
 }
 
+/** Keep dial code in country_code only; strip it from phone_no when pasted (e.g. 85291234567). */
+function normalizePhoneFields(phoneNo, countryCode = '852') {
+  const countryCodeDigits = String(countryCode || '852').replace(/\D/g, '') || '852';
+  let phoneDigits = String(phoneNo || '').replace(/\D/g, '');
+  if (countryCodeDigits && phoneDigits.startsWith(countryCodeDigits)) {
+    phoneDigits = phoneDigits.slice(countryCodeDigits.length);
+  }
+  return { phoneNo: phoneDigits, countryCode: countryCodeDigits };
+}
+
 /**
  * Product/platform string from a Grind user profile (e.g. usersNonOdoo).
  * Prefer `platform` over `type`: OAuth flows may set `type` to a role-like value (coach)
@@ -725,7 +735,12 @@ app.post('/api/user/auth/register', async (req, res) => {
     const phoneTrimmed = (phoneNo || '').toString().trim();
     const rawPassword = (password || '').toString();
 
-    if (!emailTrimmed || !loginIdTrimmed || !nameTrimmed || !phoneTrimmed || !rawPassword) {
+    const { phoneNo: phoneNormalized, countryCode: countryNormalized } = normalizePhoneFields(
+      phoneTrimmed,
+      country_code || '852',
+    );
+
+    if (!emailTrimmed || !loginIdTrimmed || !nameTrimmed || !phoneNormalized || !rawPassword) {
       return res.status(400).json({ error: 'email, loginId, name, phoneNo and password are required' });
     }
 
@@ -733,9 +748,9 @@ app.post('/api/user/auth/register', async (req, res) => {
       email: emailTrimmed,
       loginId: loginIdTrimmed,
       name: nameTrimmed,
-      phoneNo: phoneTrimmed,
+      phoneNo: phoneNormalized,
       type: (type || 'courts').toString(),
-      country_code: (country_code || '852').toString(),
+      country_code: countryNormalized,
       description: (description || '').toString(),
       page: (page || '').toString(),
       password: md5(rawPassword),
@@ -783,6 +798,11 @@ app.get('/api/user/auth/session', async (req, res) => {
       headers: { Authorization: `Bearer ${token}` },
     });
 
+    const { phoneNo, countryCode } = normalizePhoneFields(
+      extractPhone(profile),
+      extractCountryCode(profile),
+    );
+
     return res.json({
       user: {
         id: profile?.id,
@@ -791,8 +811,8 @@ app.get('/api/user/auth/session', async (req, res) => {
         email: profile?.email,
         type: grindProfileAppType(profile),
         role: profile?.role || profile?.userRole || profile?.accountType || null,
-        phoneNo: extractPhone(profile),
-        countryCode: extractCountryCode(profile),
+        phoneNo,
+        countryCode,
         avatarSrc: profile?.profile?.filePath,
       },
     });
@@ -809,8 +829,9 @@ app.post('/api/user/auth/complete-phone', async (req, res) => {
     const token = m ? m[1] : '';
     if (!token) return res.status(401).json({ error: 'Missing token' });
 
-    const phoneNo = (req.body?.phoneNo || '').toString().trim();
-    const countryCode = (req.body?.country_code || req.body?.countryCode || '852').toString().trim();
+    const rawPhone = (req.body?.phoneNo || '').toString().trim();
+    const rawCountryCode = (req.body?.country_code || req.body?.countryCode || '852').toString().trim();
+    const { phoneNo, countryCode } = normalizePhoneFields(rawPhone, rawCountryCode);
     if (!phoneNo) return res.status(400).json({ error: 'phoneNo is required' });
 
     const tokenPayload = parseJwtPayload(token);
@@ -873,6 +894,11 @@ app.post('/api/user/auth/complete-phone', async (req, res) => {
       headers: { Authorization: `Bearer ${token}` },
     });
 
+    const responsePhone = normalizePhoneFields(
+      extractPhone(profile) || phoneNo,
+      extractCountryCode(profile) || countryCode,
+    );
+
     return res.json({
       success: true,
       user: {
@@ -882,8 +908,8 @@ app.post('/api/user/auth/complete-phone', async (req, res) => {
         email: profile?.email,
         type: grindProfileAppType(profile),
         role: profile?.role || profile?.userRole || profile?.accountType || null,
-        phoneNo: extractPhone(profile) || phoneNo,
-        countryCode: extractCountryCode(profile) || countryCode,
+        phoneNo: responsePhone.phoneNo,
+        countryCode: responsePhone.countryCode,
         avatarSrc: profile?.profile?.filePath,
       },
     });
