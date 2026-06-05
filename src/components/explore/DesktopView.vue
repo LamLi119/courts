@@ -3,6 +3,7 @@ import { computed, defineAsyncComponent, ref, watch, nextTick } from 'vue';
 import type { Venue, Language, AppTab } from '../../../types';
 import { getStationDisplayName } from '../../utils/mtrStations';
 import CourtCard from './CourtCard.vue';
+import AppFooter from '../layout/AppFooter.vue';
 
 const props = defineProps<{
   venues: Venue[];
@@ -280,16 +281,15 @@ const leftListVenues = computed(() =>
                   @click.stop="selectDistance('10')">
                   <div class="w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0"
                     :class="distanceFilter === '10' ? 'bg-white border-white' : (darkMode ? 'border-gray-500' : 'border-gray-300')">
-                    <svg v-if="distanceFilter === '10'" xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-[#007a67]"
-                      fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg v-if="distanceFilter === '10'" xmlns="http://www.w3.org/2000/svg"
+                      class="w-3 h-3 text-[#007a67]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
                     </svg>
                   </div>
                   <span class="flex-1">{{ t('mtrUnder10Min') }}</span>
                 </button>
               </div>
-              <button type="button"
-                class="flex-shrink-0 mt-2 w-full px-3 py-2 text-[11px] font-bold rounded-[8px]"
+              <button type="button" class="flex-shrink-0 mt-2 w-full px-3 py-2 text-[11px] font-bold rounded-[8px]"
                 :class="darkMode ? 'text-gray-300 bg-gray-800 hover:bg-gray-700' : 'text-gray-600 bg-gray-200 hover:bg-gray-300'"
                 @click.stop="clearDistanceSelection">
                 {{ t('clearAll') }}
@@ -315,7 +315,7 @@ const leftListVenues = computed(() =>
           :class="darkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'">
           <div class="flex items-center justify-between">
             <span class="text-[13px] font-bold" :class="darkMode ? 'text-gray-300' : 'text-gray-700'">{{ t('filter')
-              }}</span>
+            }}</span>
             <!--<button
               type="button"
               class="text-[11px] font-bold px-3 py-1 rounded-[999px] border border-transparent hover:border-gray-400 transition-colors"
@@ -432,36 +432,27 @@ const leftListVenues = computed(() =>
         :onSelectVenue="(v: Venue | null) => onSelectVenue(v)" :onShowVenuesAtLocation="handleShowVenuesAtLocation"
         :language="language" :darkMode="darkMode" :isMobile="false" />
 
+      <AppFooter :language="language" :t="t" :darkMode="darkMode" variant="overlay" />
+
       <!-- Map pin list (desktop): when a multi-venue pin is clicked, show a chooser panel on top of the map -->
       <div v-if="showLocationPicker" class="absolute top-5 left-5 right-5 z-30 pointer-events-none">
-        <div
-          class="max-w-[420px] pointer-events-auto rounded-[16px] border shadow-xl overflow-hidden"
-          :class="darkMode ? 'bg-gray-900/95 border-gray-800 text-white backdrop-blur' : 'bg-white/95 border-gray-200 text-gray-900 backdrop-blur'"
-        >
+        <div class="max-w-[420px] pointer-events-auto rounded-[16px] border shadow-xl overflow-hidden"
+          :class="darkMode ? 'bg-gray-900/95 border-gray-800 text-white backdrop-blur' : 'bg-white/95 border-gray-200 text-gray-900 backdrop-blur'">
           <div class="flex items-center justify-between px-4 py-3 border-b"
             :class="darkMode ? 'border-gray-800' : 'border-gray-200'">
             <p class="text-[12px] font-black tracking-wider uppercase opacity-70">
               {{ language === 'en' ? `Venues here (${locationVenues!.length})` : `此位置場地（${locationVenues!.length}）` }}
             </p>
-            <button
-              type="button"
-              class="w-8 h-8 rounded-full flex items-center justify-center text-[18px]"
+            <button type="button" class="w-8 h-8 rounded-full flex items-center justify-center text-[18px]"
               :class="darkMode ? 'bg-gray-800 text-gray-200' : 'bg-gray-100 text-gray-700'"
-              @click="locationVenues = null"
-              aria-label="Close"
-            >
+              @click="locationVenues = null" aria-label="Close">
               ×
             </button>
           </div>
           <div class="max-h-[280px] overflow-y-auto">
-            <button
-              v-for="v in locationVenues"
-              :key="v.id"
-              type="button"
+            <button v-for="v in locationVenues" :key="v.id" type="button"
               class="w-full flex items-center gap-3 text-left px-4 py-3 font-bold text-[14px] transition-colors"
-              :class="darkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-50'"
-              @click="pickVenueFromLocation(v)"
-            >
+              :class="darkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-50'" @click="pickVenueFromLocation(v)">
               <span class="w-10 h-10 rounded-[12px] overflow-hidden flex-shrink-0"
                 :class="darkMode ? 'bg-gray-800' : 'bg-gray-100'">
                 <img :src="locationVenueIconSrc(v)" alt="" class="w-full h-full object-cover" loading="lazy" />

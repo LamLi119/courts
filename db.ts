@@ -99,8 +99,11 @@ function rowToVenue(row: any): Venue {
   }
 
   const { orgIcon, sport_data: _sd, ...rest } = row;
+  const has_admin_password = Boolean(row.has_admin_password)
+    || !!(row.admin_password && String(row.admin_password).trim());
   return {
     ...rest,
+    has_admin_password,
     images: Array.isArray(images) ? images : [],
     coordinates: coords,
     pricing: pricing,
@@ -229,15 +232,22 @@ export const db = {
     return (Array.isArray(data) ? data : []).map((row: any) => rowToVenue(row));
   },
 
-  async upsertVenue(venue: Partial<Venue>, options?: { isSuperAdmin?: boolean }): Promise<Venue> {
-    const { sort_order: _so, id, sport_data, ...rest } = venue as any;
+  async upsertVenue(venue: Partial<Venue>, _options?: { isSuperAdmin?: boolean }): Promise<Venue> {
+    const {
+      sort_order: _so,
+      id,
+      sport_data,
+      clear_admin_password,
+      has_admin_password: _hap,
+      ...rest
+    } = venue as any;
     const needsOrgIconClear = (rest.org_icon === null || rest.org_icon === '');
     const dataToSave = venueToRow(rest);
     if (needsOrgIconClear) (dataToSave as Record<string, unknown>).orgIcon = null;
     const body: Record<string, unknown> = { ...dataToSave };
-    // When editing, do not send empty admin_password so server keeps existing (list API strips it)
-    // Exception: when super admin explicitly clears password, send '' so server sets no court admin
-    if (id && (body.admin_password === '' || body.admin_password === undefined) && !options?.isSuperAdmin) {
+    if (clear_admin_password) {
+      body.admin_password = '';
+    } else if (id && (body.admin_password === '' || body.admin_password === undefined)) {
       delete body.admin_password;
     }
     if (Array.isArray(sport_data)) {

@@ -5,6 +5,18 @@ import { loadGoogleMapsScript } from '../../utils/googleMapsScript';
 
 declare const google: any;
 
+const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
+
+function imageTooLargeMessage(language: Language, files?: File[]): string {
+  if (!files?.length) {
+    return language === 'en' ? 'Image bigger than 2MB cannot be uploaded.' : '圖片大於 2MB，無法上傳。';
+  }
+  const names = files.map((f) => f.name).join(', ');
+  return language === 'en'
+    ? `${names}: image bigger than 2MB cannot be uploaded.`
+    : `${names}：圖片大於 2MB，無法上傳。`;
+}
+
 const props = withDefaults(
   defineProps<{
     venue: Venue | null;
@@ -159,9 +171,27 @@ const defaultForm = {
 
 const formData = reactive<any>(
   props.venue
-    ? { ...defaultForm, ...props.venue, socialLinks: parseSocialLinks(props.venue.socialLink), sport_data: Array.isArray(props.venue.sport_data) ? props.venue.sport_data.map((d: any) => ({ sport_id: Number(d.sport_id), name: d.name, name_zh: d.name_zh ?? null, slug: d.slug, sort_order: Number(d.sort_order) || 0 })) : [], admin_password: (props.venue as any).admin_password ?? '' }
+    ? {
+        ...defaultForm,
+        ...props.venue,
+        socialLinks: parseSocialLinks(props.venue.socialLink),
+        sport_data: Array.isArray(props.venue.sport_data)
+          ? props.venue.sport_data.map((d: any) => ({
+              sport_id: Number(d.sport_id),
+              name: d.name,
+              name_zh: d.name_zh ?? null,
+              slug: d.slug,
+              sort_order: Number(d.sort_order) || 0,
+            }))
+          : [],
+        admin_password: (props.venue as any).admin_password ?? '',
+      }
     : { ...defaultForm }
 );
+const hasCourtAdminPassword = ref(
+  !!(props.venue?.has_admin_password || (props.venue as any)?.admin_password)
+);
+const clearCourtAdminPassword = ref(false);
 if (!formData.sport_data) formData.sport_data = [];
 if (formData.admin_password === undefined) formData.admin_password = '';
 if (formData.membership_enabled === undefined) formData.membership_enabled = false;
@@ -190,6 +220,8 @@ const mapSearchQuery = ref('');
 const isUploading = ref(false);
 const isSaving = ref(false);
 const saveError = ref<string | null>(null);
+const uploadError = ref<string | null>(null);
+const formRef = ref<HTMLFormElement | null>(null);
 
 const fileInputRef = ref<HTMLInputElement | null>(null);
 const pricingImageRef = ref<HTMLInputElement | null>(null);
@@ -555,16 +587,34 @@ function toolbarClass(dark: boolean) {
   return dark ? 'bg-gray-700 border-gray-600 text-gray-200 hover:bg-gray-600' : 'bg-gray-100 border-gray-200 text-gray-700 hover:bg-gray-200';
 }
 
+const moveImage = (fromIndex: number, delta: number) => {
+  const toIndex = fromIndex + delta;
+  if (fromIndex < 0 || fromIndex >= formData.images.length) return;
+  if (toIndex < 0 || toIndex >= formData.images.length) return;
+  const next = [...formData.images];
+  const tmp = next[fromIndex];
+  next[fromIndex] = next[toIndex];
+  next[toIndex] = tmp;
+  formData.images = next;
+};
+
 const handleImageUpload = async (e: Event) => {
   const input = e.target as HTMLInputElement;
   const files = Array.from(input.files || []) as File[];
   if (files.length === 0) return;
 
   isUploading.value = true;
-  saveError.value = null;
+  uploadError.value = null;
 
   try {
-    const uploadPromises = files.map(
+    const tooLarge = files.filter((f) => f.size > MAX_IMAGE_BYTES);
+    const validFiles = files.filter((f) => f.size <= MAX_IMAGE_BYTES);
+    if (tooLarge.length) {
+      uploadError.value = imageTooLargeMessage(props.language, tooLarge);
+    }
+    if (!validFiles.length) return;
+
+    const uploadPromises = validFiles.map(
       (file) =>
         new Promise<string>((resolve) => {
           const reader = new FileReader();
@@ -577,7 +627,7 @@ const handleImageUpload = async (e: Event) => {
     formData.images = [...formData.images, ...results].slice(0, 12);
   } catch (err) {
     console.error('Upload failed', err);
-    saveError.value = 'Failed to upload photos.';
+    uploadError.value = 'Failed to upload photos.';
   } finally {
     isUploading.value = false;
     if (fileInputRef.value) fileInputRef.value.value = '';
@@ -588,9 +638,14 @@ const handlePricingImageUpload = async (e: Event) => {
   const input = e.target as HTMLInputElement;
   const file = input.files?.[0];
   if (!file) return;
+  if (file.size > MAX_IMAGE_BYTES) {
+    uploadError.value = imageTooLargeMessage(props.language, [file]);
+    if (pricingImageRef.value) pricingImageRef.value.value = '';
+    return;
+  }
 
   isUploading.value = true;
-  saveError.value = null;
+  uploadError.value = null;
 
   try {
     const result = await new Promise<string>((resolve) => {
@@ -602,7 +657,7 @@ const handlePricingImageUpload = async (e: Event) => {
     formData.pricing = { ...formData.pricing, imageUrl: result, type: 'image' };
   } catch (err) {
     console.error('Pricing upload failed', err);
-    saveError.value = 'Failed to upload pricing image.';
+    uploadError.value = 'Failed to upload pricing image.';
   } finally {
     isUploading.value = false;
     if (pricingImageRef.value) pricingImageRef.value.value = '';
@@ -613,9 +668,14 @@ const handleOrgIconUpload = async (e: Event) => {
   const input = e.target as HTMLInputElement;
   const file = input.files?.[0];
   if (!file || !file.type.startsWith('image/')) return;
+  if (file.size > MAX_IMAGE_BYTES) {
+    uploadError.value = imageTooLargeMessage(props.language, [file]);
+    if (orgIconInputRef.value) orgIconInputRef.value.value = '';
+    return;
+  }
 
   isUploading.value = true;
-  saveError.value = null;
+  uploadError.value = null;
 
   try {
     const result = await new Promise<string>((resolve) => {
@@ -626,7 +686,7 @@ const handleOrgIconUpload = async (e: Event) => {
     formData.org_icon = result;
   } catch (err) {
     console.error('Org icon upload failed', err);
-    saveError.value = 'Failed to upload org icon.';
+    uploadError.value = 'Failed to upload org icon.';
   } finally {
     isUploading.value = false;
     if (orgIconInputRef.value) orgIconInputRef.value.value = '';
@@ -754,6 +814,17 @@ function geocodeAddress(address: string): Promise<{ lat: number; lng: number } |
 const handleSubmit = async (e?: Event) => {
   if (e) e.preventDefault();
   if (isUploading.value || isSaving.value) return;
+
+  if (!props.isSuperAdmin) {
+    if (formRef.value && !formRef.value.reportValidity()) {
+      return;
+    }
+    if (!Array.isArray(formData.sport_data) || formData.sport_data.length === 0) {
+      saveError.value = props.language === 'en' ? 'Sport type is required' : '必須選擇運動類型';
+      return;
+    }
+  }
+
   formData.description = getDescriptionHtml();
   if (formData.pricing?.type === 'text') {
     formData.pricing = {
@@ -781,7 +852,20 @@ const handleSubmit = async (e?: Event) => {
       }
     }
 
-    await props.onSave(formData);
+    const payload: Record<string, unknown> = { ...formData };
+    if (props.isSuperAdmin) {
+      const newPassword = String(formData.admin_password || '').trim();
+      if (clearCourtAdminPassword.value) {
+        payload.clear_admin_password = true;
+        payload.admin_password = '';
+      } else if (newPassword) {
+        payload.admin_password = newPassword;
+      } else {
+        delete payload.admin_password;
+      }
+    }
+    delete payload.has_admin_password;
+    await props.onSave(payload);
   } catch (err: any) {
     saveError.value = err?.message || 'An unexpected error occurred while saving.';
   } finally {
@@ -832,6 +916,7 @@ const inputClass =
       </div>
 
       <form
+        ref="formRef"
         class="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar"
         @submit.prevent="handleSubmit"
       >
@@ -860,12 +945,46 @@ const inputClass =
               <p class="text-[11px] opacity-80 mb-2" :class="darkMode ? 'text-amber-200/80' : 'text-amber-700'">
                 {{ language === 'en' ? 'Set a password so court owners can log in to edit this court. Use the same password on multiple courts to let one admin manage them all.' : '設定密碼讓場地管理員可登入編輯此場地。多個場地設相同密碼即由同一管理員管理。' }}
               </p>
+              <p
+                v-if="hasCourtAdminPassword && !clearCourtAdminPassword"
+                class="text-xs font-bold mb-2"
+                :class="darkMode ? 'text-amber-200' : 'text-amber-800'"
+              >
+                {{ language === 'en' ? 'Court admin password is set.' : '已設定場地管理員密碼。' }}
+              </p>
+              <p
+                v-if="clearCourtAdminPassword"
+                class="text-xs font-bold mb-2 text-red-500"
+              >
+                {{ language === 'en' ? 'Court admin will be removed when you save.' : '儲存後將移除場地管理員。' }}
+              </p>
               <input
                 v-model="formData.admin_password"
                 type="text"
                 :class="inputClass"
-                :placeholder="venue && formData.admin_password === '' ? (language === 'en' ? 'Input password' : '輸入密碼') : (language === 'en' ? 'Leave blank for no court admin' : '留空表示無專屬管理員')"
+                :placeholder="
+                  venue && hasCourtAdminPassword && !clearCourtAdminPassword
+                    ? (language === 'en' ? 'Enter new password to change (leave blank to keep)' : '輸入新密碼以更改（留空則保留）')
+                    : (language === 'en' ? 'Leave blank for no court admin' : '留空表示無專屬管理員')
+                "
+                @input="clearCourtAdminPassword = false"
               />
+              <button
+                v-if="hasCourtAdminPassword && !clearCourtAdminPassword"
+                type="button"
+                class="mt-2 text-xs font-bold text-red-500 hover:underline"
+                @click="clearCourtAdminPassword = true; formData.admin_password = ''"
+              >
+                {{ language === 'en' ? 'Remove court admin' : '移除場地管理員' }}
+              </button>
+              <button
+                v-if="clearCourtAdminPassword"
+                type="button"
+                class="mt-2 text-xs font-bold text-[#007a67] hover:underline"
+                @click="clearCourtAdminPassword = false"
+              >
+                {{ language === 'en' ? 'Undo remove' : '取消移除' }}
+              </button>
             </div>
             <div v-if="isSuperAdmin" class="rounded-xl p-4 border" :class="darkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-200'">
               <label :class="labelClass">{{ language === 'en' ? 'Membership (this court)' : '會員（此場地）' }}</label>
@@ -974,6 +1093,9 @@ const inputClass =
             <div>
               <label :class="labelClass">{{ t('sportTypesPriority') }}</label>
               <p class="text-[11px] opacity-60 mb-2">{{ t('sportTypesHint') }}</p>
+              <p v-if="!isSuperAdmin && Array.isArray(formData.sport_data) && formData.sport_data.length === 0" class="text-red-500 text-xs font-bold mb-2">
+                {{ language === 'en' ? 'Sport type is required' : '必須選擇運動類型' }}
+              </p>
               <p v-if="!(sports && sports.length)" class="text-amber-600 dark:text-amber-400 text-sm font-bold mb-2">
                 {{ t('noSportTypesHint') }}
               </p>
@@ -1015,21 +1137,21 @@ const inputClass =
               </div>
             </div>
             <div>
-              <label :class="labelClass">{{ t('courtName') }} *</label>
+              <label :class="labelClass">{{ t('courtName') }}{{ !isSuperAdmin ? ' *' : '' }}</label>
               <input
                 v-model="formData.name"
                 type="text"
                 :class="inputClass"
-                required
+                :required="!isSuperAdmin"
               />
             </div>
             <div>
-              <label :class="labelClass">{{ t('startingPriceForm') }} *</label>
+              <label :class="labelClass">{{ t('startingPriceForm') }}{{ !isSuperAdmin ? ' *' : '' }}</label>
               <input
                 v-model.number="formData.startingPrice"
                 type="number"
                 :class="inputClass"
-                required
+                :required="!isSuperAdmin"
                 @wheel="preventInputWheel"
               />
             </div>
@@ -1040,13 +1162,13 @@ const inputClass =
 
         <div>
           <label :class="labelClass">
-            {{ language === 'en' ? 'Full Address *' : '詳細地址 *' }}
+            {{ language === 'en' ? `Full Address${!isSuperAdmin ? ' *' : ''}` : `詳細地址${!isSuperAdmin ? ' *' : ''}` }}
           </label>
           <textarea
             v-model="formData.address"
             rows="3"
             :class="inputClass"
-            required
+            :required="!isSuperAdmin"
             :placeholder="
               language === 'en'
                 ? 'Full address shown to users (shop, floor, building, etc.)'
@@ -1102,12 +1224,12 @@ const inputClass =
           </p>
         </div>
         <div>
-          <label :class="labelClass">{{ t('whatsappNumber') }} *</label>
+          <label :class="labelClass">{{ t('whatsappNumber') }}{{ !isSuperAdmin ? ' *' : '' }}</label>
           <input
             v-model="formData.whatsapp"
             type="text"
             :class="inputClass"
-            required
+            :required="!isSuperAdmin"
           />
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1366,6 +1488,9 @@ const inputClass =
 
         <div class="space-y-4">
           <label :class="labelClass">{{ t('photos') }} (Max 12 each image size less than 2MB)</label>
+          <p v-if="uploadError" class="text-red-500 text-xs font-bold">
+            {{ uploadError }}
+          </p>
           <div class="grid grid-cols-3 md:grid-cols-6 gap-3">
             <div
               v-for="(img, i) in formData.images"
@@ -1377,6 +1502,28 @@ const inputClass =
                 class="w-full h-full object-cover"
                 alt=""
               />
+              <div class="absolute bottom-1 left-1 flex gap-1">
+                <button
+                  type="button"
+                  class="w-7 h-7 rounded-full bg-black/60 text-white text-xs font-black flex items-center justify-center"
+                  :class="i === 0 ? 'opacity-40 cursor-not-allowed' : 'hover:bg-black/75'"
+                  :disabled="i === 0"
+                  aria-label="Move image left"
+                  @click.stop="moveImage(Number(i), -1)"
+                >
+                  ←
+                </button>
+                <button
+                  type="button"
+                  class="w-7 h-7 rounded-full bg-black/60 text-white text-xs font-black flex items-center justify-center"
+                  :class="i === formData.images.length - 1 ? 'opacity-40 cursor-not-allowed' : 'hover:bg-black/75'"
+                  :disabled="i === formData.images.length - 1"
+                  aria-label="Move image right"
+                  @click.stop="moveImage(Number(i), 1)"
+                >
+                  →
+                </button>
+              </div>
               <button
                 type="button"
                 class="absolute top-1 right-1 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center text-xs"

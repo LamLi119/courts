@@ -67,6 +67,8 @@ export interface Venue {
     lng: number;
   };
   admin_password?: string | null;
+  /** True when a court admin password exists (password value is never returned by API). */
+  has_admin_password?: boolean;
   /** Per-court membership: show description and join link on this venue's detail. */
   membership_enabled?: boolean;
   membership_description?: string | null;
