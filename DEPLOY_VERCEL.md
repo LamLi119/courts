@@ -72,6 +72,7 @@ Set for **Production** (and Preview if you use it), then **Redeploy**:
 |----------|----------|-------------|
 | `PROXY_TARGET` | **Yes** | Base URL of your Express API **with no trailing slash**, e.g. `http://34.x.x.x:3001` (GCP VM) or `https://your-api.example.com`. Requests to `https://your-app.vercel.app/api/sports` are forwarded to `{PROXY_TARGET}/api/sports`. |
 | `PROXY_SECRET` | No | If set, must equal `PROXY_SECRET` on the Express server. The proxy sends it as `x-proxy-secret`. |
+| `VITE_GOOGLE_MAPS_API_KEY` | **Yes** (for map) | Google Maps JavaScript API key. Baked in at **build time** — set on Vercel and **redeploy** after adding. Allow your Vercel domain in Google Cloud key HTTP referrers. |
 
 **Do not** put `MYSQL_*` on Vercel for this setup unless you change the code—the proxy does not talk to MySQL.
 
@@ -99,4 +100,6 @@ Saving env vars does not always rebuild the frontend; trigger a **Redeploy** fro
 | `401` from API | `PROXY_SECRET` mismatch or set on server but not on Vercel. |
 | Mixed content in the **browser** | Rare with this proxy: the page calls same-origin `/api`. If you set `VITE_API_URL` to `http://...`, the **browser** may block it from HTTPS—use empty `VITE_API_URL` on Vercel or HTTPS for direct API URLs. |
 | Works on laptop, fails on Vercel | GCP firewall / `ufw` not allowing **3001** from the internet, or VM not listening on **0.0.0.0** (this repo’s `server/run-local.js` defaults to `0.0.0.0`; redeploy/restart the process on the VM). |
+| White screen / map missing on Vercel; `/assets/*.js` returns HTML | Stale PWA service worker after deploy, or SPA rewrite catching asset URLs. Redeploy after pulling latest (Workbox + `vercel.json` fixes). Then in the browser: DevTools → Application → Service Workers → Unregister, Clear site data, hard refresh. |
+| Map shows “Map Unavailable” | Set `VITE_GOOGLE_MAPS_API_KEY` on Vercel (Production + Preview), redeploy, and allow your Vercel domain in Google Cloud Console → API key HTTP referrers. |
 | Login works on Vercel but not local `npm run dev` | Often **CORS**: `.env` points `VITE_THE_GRIND_API_URL` / `VITE_API_URL` at a **remote** API while the browser runs on `localhost`. The app uses same-origin `/api` in dev when the configured host is not localhost so **Vite’s proxy** forwards auth (see `vite.config.ts`). Ensure `npm run server` is running if you use `http://localhost:3001`, or add **localhost** redirect URIs for Google OAuth. |
