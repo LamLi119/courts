@@ -1,5 +1,6 @@
 import { computed, ref } from 'vue';
 import { useAuthStore } from '../stores/auth';
+import { normalizePhoneFields } from '../utils/phone';
 
 const AUTH_TOKEN_KEY = 'theground_access_token';
 const REFRESH_TOKEN_KEY = 'theground_refresh_token';
@@ -223,13 +224,17 @@ export function useAuth() {
       authStore.setClientStatus(true);
       authStore.setLoading(true);
 
+      const { phoneNo, countryCode } = normalizePhoneFields(
+        payload.phoneNo,
+        payload.country_code || '852',
+      );
       const data = await apiJson<{
         token: string;
         refreshToken?: string;
         user: { id: number; name: string; username: string; email: string; type?: string; role?: UserRole };
       }>('/api/user/auth/register', {
         method: 'POST',
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, phoneNo, country_code: countryCode }),
       });
 
       setToken(data.token);
@@ -249,15 +254,30 @@ export function useAuth() {
   };
 
   const session = async () => {
-    if (authStore.user) return authStore.user;
+    if (authStore.user) {
+      const { phoneNo, countryCode } = normalizePhoneFields(
+        authStore.user.phoneNo || '',
+        authStore.user.countryCode || '852',
+      );
+      const user = { ...authStore.user, phoneNo, countryCode };
+      if (user.phoneNo !== authStore.user.phoneNo || user.countryCode !== authStore.user.countryCode) {
+        authStore.setUser(user);
+      }
+      return user;
+    }
     if (!getToken()) return null;
 
     try {
       authStore.setClientStatus(true);
       authStore.setLoading(true);
       const data = await apiJson<{ user: User }>('/api/user/auth/session', { method: 'GET' });
-      authStore.setUser(data.user);
-      return data.user;
+      const { phoneNo, countryCode } = normalizePhoneFields(
+        data.user.phoneNo || '',
+        data.user.countryCode || '852',
+      );
+      const user = { ...data.user, phoneNo, countryCode };
+      authStore.setUser(user);
+      return user;
     } catch {
       clearToken();
       setRefreshToken(null);
@@ -294,9 +314,13 @@ export function useAuth() {
   };
 
   const completePhone = async (payload: CompletePhonePayload) => {
+    const { phoneNo, countryCode } = normalizePhoneFields(
+      payload.phoneNo,
+      payload.country_code || '852',
+    );
     await apiJson<{ success: boolean; user?: User }>('/api/user/auth/complete-phone', {
       method: 'POST',
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ phoneNo, country_code: countryCode }),
     });
     authStore.setUser(null);
     return session();
