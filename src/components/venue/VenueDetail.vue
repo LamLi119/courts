@@ -7,6 +7,8 @@ import { applyVenueSeo, resetSeoToDefault, getSportTypeLabel, getVenueImageAlt }
 import { slugify } from '../../utils/slugify';
 import ImageCarousel from '../ui/ImageCarousel.vue';
 import VenueUpcomingEvents from './VenueUpcomingEvents.vue';
+import VenueAvailabilityPanel from '../availability/VenueAvailabilityPanel.vue';
+import { isVenueAvailabilityEnabled } from '../availability/venueAvailabilityConfig';
 import { useAuth } from '../../composables/auth';
 import { useGrindUpcomingEvents } from '../../composables/useGrindUpcomingEvents';
 
@@ -269,8 +271,8 @@ function normalizeOperatingHours(value: unknown): OperatingHours | null {
     }
     const slots = Array.isArray(d.slots)
       ? d.slots
-          .map((slot: any) => [String(slot?.[0] ?? ''), String(slot?.[1] ?? '')] as [string, string])
-          .filter((slot: [string, string]) => slot[0] && slot[1])
+        .map((slot: any) => [String(slot?.[0] ?? ''), String(slot?.[1] ?? '')] as [string, string])
+        .filter((slot: [string, string]) => slot[0] && slot[1])
       : [];
     weekly[day] = { closed: Boolean(d.closed), slots };
     if (!weekly[day].closed || weekly[day].slots.length > 0) hasAnyDay = true;
@@ -287,8 +289,8 @@ function normalizeOperatingHours(value: unknown): OperatingHours | null {
       closed: Boolean(source?.public_holiday?.closed),
       slots: Array.isArray(source?.public_holiday?.slots)
         ? source.public_holiday.slots
-            .map((slot: any) => [String(slot?.[0] ?? ''), String(slot?.[1] ?? '')] as [string, string])
-            .filter((slot: [string, string]) => slot[0] && slot[1])
+          .map((slot: any) => [String(slot?.[0] ?? ''), String(slot?.[1] ?? '')] as [string, string])
+          .filter((slot: [string, string]) => slot[0] && slot[1])
         : [],
     },
     note: typeof source.note === 'string' ? source.note : null,
@@ -335,11 +337,13 @@ const hasPricingDetail = computed(() => {
 });
 
 const hasOperatingDetail = computed(() => showOperatingHours.value);
+const hasAvailabilityDetail = computed(() => isVenueAvailabilityEnabled(props.venue.id));
 const availableDetailTabs = computed(() => {
-  const tabs: Array<'description' | 'pricing' | 'operating'> = [];
+  const tabs: Array<'description' | 'pricing' | 'operating' | 'availability'> = [];
   if (hasDescriptionText.value) tabs.push('description');
   if (hasPricingDetail.value) tabs.push('pricing');
   if (hasOperatingDetail.value) tabs.push('operating');
+  if (hasAvailabilityDetail.value) tabs.push('availability');
   return tabs;
 });
 const showDetailTabs = computed(() => availableDetailTabs.value.length > 1);
@@ -347,10 +351,11 @@ const singleDetailLabel = computed(() => {
   const only = availableDetailTabs.value[0];
   if (only === 'pricing') return props.t('pricing');
   if (only === 'operating') return props.language === 'en' ? 'Operating hours' : '營業時間';
+  if (only === 'availability') return props.language === 'en' ? 'Available to book' : '可預約時段';
   return props.t('description');
 });
 
-const detailTab = ref<'description' | 'pricing' | 'operating'>('description');
+const detailTab = ref<'description' | 'pricing' | 'operating' | 'availability'>('description');
 
 const {
   loading: upcomingLoading,
@@ -364,7 +369,14 @@ onMounted(() => {
 });
 
 watch(
-  () => [props.venue.id, hasDescriptionText.value, hasPricingDetail.value, hasOperatingDetail.value] as const,
+  () =>
+    [
+      props.venue.id,
+      hasDescriptionText.value,
+      hasPricingDetail.value,
+      hasOperatingDetail.value,
+      hasAvailabilityDetail.value,
+    ] as const,
   () => {
     if (availableDetailTabs.value.includes(detailTab.value)) return;
     detailTab.value = availableDetailTabs.value[0] || 'description';
@@ -440,24 +452,14 @@ watch(
     </div>
 
     <div class="hidden lg:block fixed left-4 top-1/2 -translate-y-1/2 z-40">
-      <button
-        type="button"
-        class="btn btn-utility btn-utility-round shadow-lg"
-        :class="canGoPrev ? '' : 'opacity-40 cursor-not-allowed'"
-        :disabled="!canGoPrev"
-        @click="onPrevVenue?.()"
-      >
+      <button type="button" class="btn btn-utility btn-utility-round shadow-lg"
+        :class="canGoPrev ? '' : 'opacity-40 cursor-not-allowed'" :disabled="!canGoPrev" @click="onPrevVenue?.()">
         ←
       </button>
     </div>
     <div class="hidden lg:block fixed right-4 top-1/2 -translate-y-1/2 z-40">
-      <button
-        type="button"
-        class="btn btn-utility btn-utility-round shadow-lg"
-        :class="canGoNext ? '' : 'opacity-40 cursor-not-allowed'"
-        :disabled="!canGoNext"
-        @click="onNextVenue?.()"
-      >
+      <button type="button" class="btn btn-utility btn-utility-round shadow-lg"
+        :class="canGoNext ? '' : 'opacity-40 cursor-not-allowed'" :disabled="!canGoNext" @click="onNextVenue?.()">
         →
       </button>
     </div>
@@ -496,7 +498,47 @@ watch(
                 🥅 {{ venue.court_count }} {{ venue.court_count === 1 ? t('court') : t('courts') }}
               </span>
             </div>
-            <div v-if="hasDescriptionText || hasPricingDetail || hasOperatingDetail" class="rounded-[12px] border overflow-hidden"
+
+            <!-- Availability -->
+            <div v-if="hasAvailabilityDetail"
+              class="relative overflow-hidden rounded-[12px] border p-4 min-h-[140px]"
+              :class="darkMode ? 'border-gray-700 bg-gray-800/40' : 'border-gray-200 bg-gray-50/80'">
+              <h3
+                class="text-[12px] md:text-[18px] uppercase tracking-widest font-bold opacity-70 m-0 pb-2 border-b-2"
+                :class="darkMode ? 'border-gray-600' : 'border-gray-200'">
+                {{ language === 'en' ? 'Available to book' : '可預約時段' }}
+              </h3>
+              <div v-if="!canSeeSpecialOffer" class="relative mt-3 min-h-[100px]">
+                <div class="space-y-2 select-none pointer-events-none" aria-hidden="true">
+                  <div class="h-8 rounded-lg blur-[1.5px]"
+                    :class="darkMode ? 'bg-gray-600/70' : 'bg-gray-300/70'"></div>
+                  <div class="h-4 w-4/5 rounded blur-[1.5px]"
+                    :class="darkMode ? 'bg-gray-600/70' : 'bg-gray-300/70'"></div>
+                  <div class="h-4 w-2/3 rounded blur-[1.5px]"
+                    :class="darkMode ? 'bg-gray-600/70' : 'bg-gray-300/70'"></div>
+                </div>
+                <div class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 px-4"
+                  :class="darkMode ? 'bg-gray-800/60' : 'bg-gray-50/80'">
+                  <button type="button" :id="`${venue.name}-availability-login-button`"
+                    class="px-4 py-2 rounded-xl font-black shadow-xl bg-[#007a67] text-white hover:brightness-110"
+                    @click="goToLogin">
+                    {{ language === 'en' ? 'Login to view' : '登入以查看' }}
+                  </button>
+                </div>
+              </div>
+              <div v-else class="mt-3">
+                <VenueAvailabilityPanel
+                  :venue-id="venue.id"
+                  :dark-mode="darkMode"
+                  :language="language"
+                  :operating-hours="operatingHours"
+                />
+              </div>
+            </div>
+
+            <!-- Details -->
+            <div v-if="hasDescriptionText || hasPricingDetail || hasOperatingDetail || hasAvailabilityDetail"
+              class="rounded-[12px] border overflow-hidden"
               :class="darkMode ? 'border-gray-700 bg-gray-800/40' : 'border-gray-200 bg-gray-50/80'">
               <div v-if="showDetailTabs" class="flex border-b" :class="darkMode ? 'border-gray-700' : 'border-gray-200'"
                 role="tablist" :aria-label="language === 'en' ? 'Venue details' : '場地資訊'">
@@ -547,17 +589,28 @@ watch(
                     <img :src="venue.pricing.imageUrl" class="w-full" alt="Pricing" />
                   </button>
                 </div>
-                <div v-show="hasOperatingDetail && (!showDetailTabs || detailTab === 'operating')" class="space-y-2 lg:space-y-3">
+                <div v-show="hasOperatingDetail && (!showDetailTabs || detailTab === 'operating')"
+                  class="space-y-2 lg:space-y-3">
                   <div class="space-y-1">
-                    <div v-for="row in operatingHoursRows" :key="row.day" class="px-2 lg:px-20 flex items-start justify-between gap-3 lg:gap-4 text-[13px] lg:text-[15px]">
-                      <span :class="row.isToday ? (darkMode ? 'text-[#79d8c7] font-semibold text-[14px] lg:text-[18px] pl-2' : 'text-[#007a67] font-semibold text-[14px] lg:text-[18px] pl-2') : (darkMode ? 'text-gray-300' : 'text-gray-700')">{{ row.label }}</span>
-                      <span class="text-right" :class="row.isToday ? (darkMode ? 'text-[#79d8c7] font-semibold text-[14px] lg:text-[17px] pr-2' : 'text-[#007a67] font-semibold text-[14px] lg:text-[17px] pr-2') : (darkMode ? 'text-gray-400' : 'text-gray-600')">{{ row.value }}</span>
+                    <div v-for="row in operatingHoursRows" :key="row.day"
+                      class="px-2 lg:px-20 flex items-start justify-between gap-3 lg:gap-4 text-[13px] lg:text-[15px]">
+                      <span
+                        :class="row.isToday ? (darkMode ? 'text-[#79d8c7] font-semibold text-[14px] lg:text-[18px] pl-2' : 'text-[#007a67] font-semibold text-[14px] lg:text-[18px] pl-2') : (darkMode ? 'text-gray-300' : 'text-gray-700')">{{
+                        row.label }}</span>
+                      <span class="text-right"
+                        :class="row.isToday ? (darkMode ? 'text-[#79d8c7] font-semibold text-[14px] lg:text-[17px] pr-2' : 'text-[#007a67] font-semibold text-[14px] lg:text-[17px] pr-2') : (darkMode ? 'text-gray-400' : 'text-gray-600')">{{
+                        row.value }}</span>
                     </div>
                   </div>
-                  <div class="pt-2 px-2 lg:px-20 flex items-start justify-between gap-3 lg:gap-4 text-[13px] lg:text-[15px]"
+                  <div
+                    class="pt-2 px-2 lg:px-20 flex items-start justify-between gap-3 lg:gap-4 text-[13px] lg:text-[15px]"
                     :class="darkMode ? 'border-gray-700' : 'border-gray-200'">
-                    <span :class="darkMode ? 'text-gray-300' : 'text-gray-700'">{{ language === 'en' ? 'Public holiday' : '公眾假期' }}</span>
-                    <span class="text-right" :class="darkMode ? 'text-gray-400' : 'text-gray-600'">{{ publicHolidayDisplay }}</span>
+                    <span :class="darkMode ? 'text-gray-300' : 'text-gray-700'">{{ language === 'en' ? 'Public holiday'
+                      :
+                      '公眾假期' }}</span>
+                    <span class="text-right" :class="darkMode ? 'text-gray-400' : 'text-gray-600'">{{
+                      publicHolidayDisplay
+                      }}</span>
                   </div>
                   <p v-if="operatingHours?.note && operatingHours.note.trim()"
                     class="text-[12px] lg:text-[14px] border-t pt-2 px-2 lg:pl-10 lg:pr-10 whitespace-pre-line"
@@ -569,23 +622,16 @@ watch(
             </div>
 
             <div class="hidden lg:block mt-8">
-              <VenueUpcomingEvents
-                :events="upcomingEvents"
-                :loading="upcomingLoading"
-                :error="upcomingError"
-                :dark-mode="darkMode"
-                :language="language"
-                :t="t"
-                @retry="refreshUpcoming"
-              />
+              <VenueUpcomingEvents :events="upcomingEvents" :loading="upcomingLoading" :error="upcomingError"
+                :dark-mode="darkMode" :language="language" :t="t" @retry="refreshUpcoming" />
             </div>
 
             <!-- Mobile view -->
             <div class="lg:hidden space-y-4 mt-4">
               <!-- Mobile: Contact button -->
               <div class="flex flex-row items-end justify-end gap-2">
-                <button type="button" :id="`${venue.name}-WhatsApp-button`" class="btn btn-ghost shrink-0 w-1/2 justify-center"
-                  @click="handleWhatsApp">
+                <button type="button" :id="`${venue.name}-WhatsApp-button`"
+                  class="btn btn-ghost shrink-0 w-1/2 justify-center" @click="handleWhatsApp">
                   <svg class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                     <path
                       d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
@@ -593,17 +639,16 @@ watch(
                   {{ t('contact') }}
                 </button>
                 <button v-if="websiteLink" type="button" :id="`${venue.name}-website-button`"
-                    class="btn btn-ghost shrink-0 w-1/2 justify-center"
-                    @click="openSocialLink(websiteLink)">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="w-5 h-5 shrink-0" fill="none"
-                      stroke="currentColor" stroke-width="2" aria-hidden="true">
-                      <circle cx="12" cy="12" r="9"></circle>
-                      <path d="M3 12h18"></path>
-                      <path d="M12 3a15 15 0 0 1 0 18"></path>
-                      <path d="M12 3a15 15 0 0 0 0 18"></path>
-                    </svg>
-                    {{ language === 'en' ? 'Book on Website' : '在網站上預訂' }}
-                  </button>
+                  class="btn btn-ghost shrink-0 w-1/2 justify-center" @click="openSocialLink(websiteLink)">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="w-5 h-5 shrink-0" fill="none"
+                    stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <circle cx="12" cy="12" r="9"></circle>
+                    <path d="M3 12h18"></path>
+                    <path d="M12 3a15 15 0 0 1 0 18"></path>
+                    <path d="M12 3a15 15 0 0 0 0 18"></path>
+                  </svg>
+                  {{ language === 'en' ? 'Book on Website' : '在網站上預訂' }}
+                </button>
               </div>
               <!-- Mobile: Location -->
               <div v-if="venue.address && venue.address.trim() !== ''"
@@ -629,15 +674,8 @@ watch(
                 </div>
               </div>
               <div class="lg:hidden mt-6">
-                <VenueUpcomingEvents
-                  :events="upcomingEvents"
-                  :loading="upcomingLoading"
-                  :error="upcomingError"
-                  :dark-mode="darkMode"
-                  :language="language"
-                  :t="t"
-                  @retry="refreshUpcoming"
-                />
+                <VenueUpcomingEvents :events="upcomingEvents" :loading="upcomingLoading" :error="upcomingError"
+                  :dark-mode="darkMode" :language="language" :t="t" @retry="refreshUpcoming" />
               </div>
               <div v-if="venue.membership_enabled && (venue.membership_description || venue.membership_join_link)"
                 class="flex justify-between w-full pt-4 mt-2 mb-4 border-t border-gray-300">
@@ -661,14 +699,14 @@ watch(
                   v-html="sanitizeDescription(venue.membership_description)"></div>
                 <div v-else-if="venue.membership_description" class="space-y-2 select-none pointer-events-none"
                   aria-hidden="true">
-                  <div class="h-4 rounded blur-[1.5px]"
-                    :class="darkMode ? 'bg-gray-600/70' : 'bg-gray-300/70'"></div>
-                  <div class="h-4 w-5/6 rounded blur-[1.5px]"
-                    :class="darkMode ? 'bg-gray-600/70' : 'bg-gray-300/70'"></div>
-                  <div class="h-4 w-2/3 rounded blur-[1.5px]"
-                    :class="darkMode ? 'bg-gray-600/70' : 'bg-gray-300/70'"></div>
+                  <div class="h-4 rounded blur-[1.5px]" :class="darkMode ? 'bg-gray-600/70' : 'bg-gray-300/70'"></div>
+                  <div class="h-4 w-5/6 rounded blur-[1.5px]" :class="darkMode ? 'bg-gray-600/70' : 'bg-gray-300/70'">
+                  </div>
+                  <div class="h-4 w-2/3 rounded blur-[1.5px]" :class="darkMode ? 'bg-gray-600/70' : 'bg-gray-300/70'">
+                  </div>
                 </div>
-                <div v-if="!canSeeSpecialOffer" class="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4">
+                <div v-if="!canSeeSpecialOffer"
+                  class="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4">
                   <button type="button" :id="`${venue.name}-login-to-view-button`"
                     class="px-4 py-2 rounded-xl font-black shadow-xl bg-[#007a67] text-white hover:brightness-110"
                     @click="goToLogin">
@@ -699,8 +737,8 @@ watch(
                         <path d="M12 3a15 15 0 0 1 0 18"></path>
                         <path d="M12 3a15 15 0 0 0 0 18"></path>
                       </svg>
-                      <img v-else :src="`${SOCIAL_ICON_CDN}/${link.icon}`" :alt="link.name" class="w-5 h-5 object-contain"
-                        loading="lazy" />
+                      <img v-else :src="`${SOCIAL_ICON_CDN}/${link.icon}`" :alt="link.name"
+                        class="w-5 h-5 object-contain" loading="lazy" />
                     </span>
                     <div class="min-w-0 flex-1">
                       <span class="font-bold block mb-1">{{ link.name }}</span>
@@ -732,8 +770,8 @@ watch(
                           <path d="M12 3a15 15 0 0 1 0 18"></path>
                           <path d="M12 3a15 15 0 0 0 0 18"></path>
                         </svg>
-                        <img v-else :src="`${SOCIAL_ICON_CDN}/${link.icon}`" :alt="link.name" class="w-5 h-5 object-contain"
-                          loading="lazy" />
+                        <img v-else :src="`${SOCIAL_ICON_CDN}/${link.icon}`" :alt="link.name"
+                          class="w-5 h-5 object-contain" loading="lazy" />
                       </span>
                       <div class="min-w-0 flex-1">
                         <span class="font-bold block mb-1">{{ link.name }}</span>
@@ -744,22 +782,14 @@ watch(
                 </div>
               </template>
               <div class="flex gap-2 pt-1">
-                <button
-                  type="button"
-                  class="btn btn-ghost btn-cta-block btn-cta-md w-full"
-                  :class="canGoPrev ? '' : 'opacity-40 cursor-not-allowed'"
-                  :disabled="!canGoPrev"
-                  @click="onPrevVenue?.()"
-                >
+                <button type="button" class="btn btn-ghost btn-cta-block btn-cta-md w-full"
+                  :class="canGoPrev ? '' : 'opacity-40 cursor-not-allowed'" :disabled="!canGoPrev"
+                  @click="onPrevVenue?.()">
                   {{ language === 'en' ? 'Previous Court' : '上一個場地' }}
                 </button>
-                <button
-                  type="button"
-                  class="btn btn-ghost btn-cta-block btn-cta-md w-full"
-                  :class="canGoNext ? '' : 'opacity-40 cursor-not-allowed'"
-                  :disabled="!canGoNext"
-                  @click="onNextVenue?.()"
-                >
+                <button type="button" class="btn btn-ghost btn-cta-block btn-cta-md w-full"
+                  :class="canGoNext ? '' : 'opacity-40 cursor-not-allowed'" :disabled="!canGoNext"
+                  @click="onNextVenue?.()">
                   {{ language === 'en' ? 'Next Court' : '下一個場地' }}
                 </button>
               </div>
@@ -800,10 +830,9 @@ watch(
                 {{ t('contact') }}
               </button>
               <button v-if="websiteLink" type="button" :id="`${venue.name}-website-button`"
-                class="btn btn-ghost btn-cta-block btn-cta-md w-full"
-                @click="openSocialLink(websiteLink)">
+                class="btn btn-ghost btn-cta-block btn-cta-md w-full" @click="openSocialLink(websiteLink)">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="w-5 h-5 shrink-0" fill="none"
-                stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  stroke="currentColor" stroke-width="2" aria-hidden="true">
                   <circle cx="12" cy="12" r="9"></circle>
                   <path d="M3 12h18"></path>
                   <path d="M12 3a15 15 0 0 1 0 18"></path>
@@ -850,14 +879,14 @@ watch(
                   v-html="sanitizeDescription(venue.membership_description)" />
                 <div v-else-if="venue.membership_description" class="space-y-2 select-none pointer-events-none"
                   aria-hidden="true">
-                  <div class="h-4 rounded blur-[1.5px]"
-                    :class="darkMode ? 'bg-gray-600/70' : 'bg-gray-300/70'"></div>
-                  <div class="h-4 w-5/6 rounded blur-[1.5px]"
-                    :class="darkMode ? 'bg-gray-600/70' : 'bg-gray-300/70'"></div>
-                  <div class="h-4 w-2/3 rounded blur-[1.5px]"
-                    :class="darkMode ? 'bg-gray-600/70' : 'bg-gray-300/70'"></div>
+                  <div class="h-4 rounded blur-[1.5px]" :class="darkMode ? 'bg-gray-600/70' : 'bg-gray-300/70'"></div>
+                  <div class="h-4 w-5/6 rounded blur-[1.5px]" :class="darkMode ? 'bg-gray-600/70' : 'bg-gray-300/70'">
+                  </div>
+                  <div class="h-4 w-2/3 rounded blur-[1.5px]" :class="darkMode ? 'bg-gray-600/70' : 'bg-gray-300/70'">
+                  </div>
                 </div>
-                <div v-if="!canSeeSpecialOffer" class="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4">
+                <div v-if="!canSeeSpecialOffer"
+                  class="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4">
                   <button type="button" :id="`${venue.name}-login-to-view-button`"
                     class="px-4 py-2 rounded-xl font-black shadow-xl bg-[#007a67] text-white hover:brightness-110"
                     @click="goToLogin">
@@ -894,8 +923,8 @@ watch(
           <span class="text-[14px] opacity-60">/{{ t('hour') }}</span>
         </div>
         <div v-if="!canSeeSpecialOffer" class="flex flex-col items-end justify-center gap-1 max-w-[min(200px,45vw)]">
-          <button type="button" :id="`${venue.name}-login-to-view-button`" class="btn btn-cta flex-shrink-0 w-full py-3 px-4"
-            @click="goToLogin">
+          <button type="button" :id="`${venue.name}-login-to-view-button`"
+            class="btn btn-cta flex-shrink-0 w-full py-3 px-4" @click="goToLogin">
             {{ t('joinMembership') }}
           </button>
         </div>

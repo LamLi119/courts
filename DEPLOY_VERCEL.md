@@ -72,8 +72,12 @@ Set for **Production** (and Preview if you use it), then **Redeploy**:
 |----------|----------|-------------|
 | `PROXY_TARGET` | **Yes** | Base URL of your Express API **with no trailing slash**, e.g. `http://34.x.x.x:3001` (GCP VM) or `https://your-api.example.com`. Requests to `https://your-app.vercel.app/api/sports` are forwarded to `{PROXY_TARGET}/api/sports`. |
 | `PROXY_SECRET` | No | If set, must equal `PROXY_SECRET` on the Express server. The proxy sends it as `x-proxy-secret`. |
+| `N8N_AVAILABILITY_WEBHOOK_URL` | For live booking slots | Production URL of n8n webhook (see `docs/N8N_AVAILABILITY.md`). |
+| `N8N_WEBHOOK_SECRET` | No | Optional; must match n8n `Resolve venue` code if used. |
 
 **Do not** put `MYSQL_*` on Vercel for this setup unless you change the code—the proxy does not talk to MySQL.
+
+Live **Available to book** tabs use n8n only (no Express change). See `docs/N8N_AVAILABILITY.md`.
 
 ## 4. Redeploy after changes
 
