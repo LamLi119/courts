@@ -6,7 +6,7 @@
     { "source": "/venues/:slug/", "destination": "/api/html-venue?slug=:slug" },
     { "source": "/venues/:slug", "destination": "/api/html-venue?slug=:slug" },
     { "source": "/venues/:slug*", "destination": "/api/html-venue?slug=:slug*" },
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
+    { "source": "/((?!api/|assets/|sw\\.js|workbox-|manifest\\.webmanifest).*)", "destination": "/index.html" }
   ],
   "functions": {
     "api/**/*.{ts,js}": {

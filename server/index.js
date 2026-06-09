@@ -344,6 +344,16 @@ function extractCountryCode(profile) {
   );
 }
 
+/** Keep dial code in country_code only; strip it from phone_no when pasted (e.g. 85291234567). */
+function normalizePhoneFields(phoneNo, countryCode = '852') {
+  const countryCodeDigits = String(countryCode || '852').replace(/\D/g, '') || '852';
+  let phoneDigits = String(phoneNo || '').replace(/\D/g, '');
+  if (countryCodeDigits && phoneDigits.startsWith(countryCodeDigits)) {
+    phoneDigits = phoneDigits.slice(countryCodeDigits.length);
+  }
+  return { phoneNo: phoneDigits, countryCode: countryCodeDigits };
+}
+
 /**
  * Product/platform string from a Grind user profile (e.g. usersNonOdoo).
  * Prefer `platform` over `type`: OAuth flows may set `type` to a role-like value (coach)
@@ -523,12 +533,19 @@ setInterval(() => {
   void prewarmPublicEventsCache();
 }, 60 * 1000);
 
-/** Fetch a single venue by id with sport_data populated (name, name_zh, slug, sort_order). Strips admin_password. */
-async function getVenueWithSports(db, venueId) {
+function attachHasAdminPassword(row, includePassword = false) {
+  if (!row || typeof row !== 'object') return row;
+  const pwd = row.admin_password;
+  row.has_admin_password = !!(pwd && String(pwd).trim());
+  if (!includePassword && Object.prototype.hasOwnProperty.call(row, 'admin_password')) delete row.admin_password;
+  return row;
+}
+
+/** Fetch a single venue by id with sport_data populated (name, name_zh, slug, sort_order). */
+async function getVenueWithSports(db, venueId, includePassword = false) {
   const [rows] = await db.execute('SELECT * FROM venues WHERE id = ?', [venueId]);
   if (!rows.length) return null;
-  const r = { ...rows[0] };
-  if (Object.prototype.hasOwnProperty.call(r, 'admin_password')) delete r.admin_password;
+  const r = attachHasAdminPassword({ ...rows[0] }, includePassword);
   try {
     let vsRows;
     try {
@@ -725,7 +742,12 @@ app.post('/api/user/auth/register', async (req, res) => {
     const phoneTrimmed = (phoneNo || '').toString().trim();
     const rawPassword = (password || '').toString();
 
-    if (!emailTrimmed || !loginIdTrimmed || !nameTrimmed || !phoneTrimmed || !rawPassword) {
+    const { phoneNo: phoneNormalized, countryCode: countryNormalized } = normalizePhoneFields(
+      phoneTrimmed,
+      country_code || '852',
+    );
+
+    if (!emailTrimmed || !loginIdTrimmed || !nameTrimmed || !phoneNormalized || !rawPassword) {
       return res.status(400).json({ error: 'email, loginId, name, phoneNo and password are required' });
     }
 
@@ -733,9 +755,9 @@ app.post('/api/user/auth/register', async (req, res) => {
       email: emailTrimmed,
       loginId: loginIdTrimmed,
       name: nameTrimmed,
-      phoneNo: phoneTrimmed,
+      phoneNo: phoneNormalized,
       type: (type || 'courts').toString(),
-      country_code: (country_code || '852').toString(),
+      country_code: countryNormalized,
       description: (description || '').toString(),
       page: (page || '').toString(),
       password: md5(rawPassword),
@@ -783,6 +805,11 @@ app.get('/api/user/auth/session', async (req, res) => {
       headers: { Authorization: `Bearer ${token}` },
     });
 
+    const { phoneNo, countryCode } = normalizePhoneFields(
+      extractPhone(profile),
+      extractCountryCode(profile),
+    );
+
     return res.json({
       user: {
         id: profile?.id,
@@ -791,8 +818,8 @@ app.get('/api/user/auth/session', async (req, res) => {
         email: profile?.email,
         type: grindProfileAppType(profile),
         role: profile?.role || profile?.userRole || profile?.accountType || null,
-        phoneNo: extractPhone(profile),
-        countryCode: extractCountryCode(profile),
+        phoneNo,
+        countryCode,
         avatarSrc: profile?.profile?.filePath,
       },
     });
@@ -809,8 +836,9 @@ app.post('/api/user/auth/complete-phone', async (req, res) => {
     const token = m ? m[1] : '';
     if (!token) return res.status(401).json({ error: 'Missing token' });
 
-    const phoneNo = (req.body?.phoneNo || '').toString().trim();
-    const countryCode = (req.body?.country_code || req.body?.countryCode || '852').toString().trim();
+    const rawPhone = (req.body?.phoneNo || '').toString().trim();
+    const rawCountryCode = (req.body?.country_code || req.body?.countryCode || '852').toString().trim();
+    const { phoneNo, countryCode } = normalizePhoneFields(rawPhone, rawCountryCode);
     if (!phoneNo) return res.status(400).json({ error: 'phoneNo is required' });
 
     const tokenPayload = parseJwtPayload(token);
@@ -873,6 +901,11 @@ app.post('/api/user/auth/complete-phone', async (req, res) => {
       headers: { Authorization: `Bearer ${token}` },
     });
 
+    const responsePhone = normalizePhoneFields(
+      extractPhone(profile) || phoneNo,
+      extractCountryCode(profile) || countryCode,
+    );
+
     return res.json({
       success: true,
       user: {
@@ -882,8 +915,8 @@ app.post('/api/user/auth/complete-phone', async (req, res) => {
         email: profile?.email,
         type: grindProfileAppType(profile),
         role: profile?.role || profile?.userRole || profile?.accountType || null,
-        phoneNo: extractPhone(profile) || phoneNo,
-        countryCode: extractCountryCode(profile) || countryCode,
+        phoneNo: responsePhone.phoneNo,
+        countryCode: responsePhone.countryCode,
         avatarSrc: profile?.profile?.filePath,
       },
     });
@@ -1156,8 +1189,9 @@ app.get('/api/venues', async (req, res) => {
   try {
     const db = getPool();
     const adminSession = getAdminSession(req);
-    const includePasswords = (adminSession && adminSession.type === 'super')
-      || req.query.superAdminPassword === SUPER_ADMIN_PASSWORD;
+    const includePasswords =
+      (adminSession && adminSession.type === 'super') ||
+      req.query.superAdminPassword === SUPER_ADMIN_PASSWORD;
     const [rows] = await db.execute(
       `SELECT * FROM venues ORDER BY sort_order IS NULL, sort_order ASC, name ASC`
     );
@@ -1179,11 +1213,7 @@ app.get('/api/venues', async (req, res) => {
       });
       rows.forEach((r) => { r.sport_data = byVenue[r.id] || []; });
     } catch (_) {}
-    if (!includePasswords) {
-      rows.forEach((r) => {
-        if (Object.prototype.hasOwnProperty.call(r, 'admin_password')) delete r.admin_password;
-      });
-    }
+    rows.forEach((r) => attachHasAdminPassword(r, includePasswords));
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: dbErrorMessage(err) });
@@ -1240,7 +1270,9 @@ app.post('/api/venues', async (req, res) => {
         }
       } catch (_) {}
     }
-    const out = await getVenueWithSports(db, venueId);
+    const adminSession = getAdminSession(req);
+    const includePasswords = adminSession && adminSession.type === 'super';
+    const out = await getVenueWithSports(db, venueId, includePasswords);
     res.status(201).json(out || { id: venueId, ...row });
   } catch (err) {
     console.error('POST Error:', err.message);
@@ -1252,6 +1284,8 @@ app.put('/api/venues/:id', async (req, res) => {
     try {
       const db = getPool();
       const id = parseInt(req.params.id, 10);
+      const adminSession = getAdminSession(req);
+      const includePasswords = adminSession && adminSession.type === 'super';
       const row = sanitizeRow(req.body);
       // Do not overwrite admin_password when not provided (list API strips it; keep existing when re-editing)
       if (req.body.admin_password === undefined) {
@@ -1276,7 +1310,7 @@ app.put('/api/venues/:id', async (req, res) => {
 
       const keys = Object.keys(row);
       if (keys.length === 0) {
-        const out = await getVenueWithSports(db, id);
+        const out = await getVenueWithSports(db, id, includePasswords);
         return res.json(out || { id, ...row });
       }
       const setClause = keys.map((k) => `\`${k}\` = ?`).join(', ');
@@ -1295,7 +1329,7 @@ app.put('/api/venues/:id', async (req, res) => {
           }
         } catch (_) {}
       }
-      const out = await getVenueWithSports(db, id);
+      const out = await getVenueWithSports(db, id, includePasswords);
       res.json(out || { id, ...row });
   } catch (err) {
     res.status(500).json({ error: dbErrorMessage(err) });

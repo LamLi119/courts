@@ -9,6 +9,7 @@ import ImageCarousel from '../ui/ImageCarousel.vue';
 import VenueUpcomingEvents from './VenueUpcomingEvents.vue';
 import VenueAvailabilityPanel from '../availability/VenueAvailabilityPanel.vue';
 import { isVenueAvailabilityEnabled } from '../availability/venueAvailabilityConfig';
+import AppFooter from '../layout/AppFooter.vue';
 import { useAuth } from '../../composables/auth';
 import { useGrindUpcomingEvents } from '../../composables/useGrindUpcomingEvents';
 
@@ -907,6 +908,8 @@ watch(
         </div>
       </div>
     </div>
+
+    <AppFooter :language="language" :t="t" :darkMode="darkMode" variant="inline" />
 
     <!-- Mobile: fixed bar – price + Join membership -->
     <div v-if="venue.startingPrice > 0" class="fixed bottom-0 left-0 right-0 z-50 p-4 border-t lg:hidden"

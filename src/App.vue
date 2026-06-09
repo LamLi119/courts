@@ -570,17 +570,28 @@ const showAdminNotification = (type: 'success' | 'error', message: string) => {
 const handleSaveVenue = async (venueData: any) => {
   try {
     const editingId = editingVenue.value?.id ?? null;
+    const previousVenue = editingVenue.value;
     const saved = await db.upsertVenue(venueData, { isSuperAdmin: isSuperAdmin.value });
+    let merged = saved;
+    if (isSuperAdmin.value) {
+      if (venueData.clear_admin_password) {
+        merged = { ...saved, admin_password: '', has_admin_password: false };
+      } else if (venueData.admin_password) {
+        merged = { ...saved, admin_password: venueData.admin_password, has_admin_password: true };
+      } else if (previousVenue?.admin_password) {
+        merged = { ...saved, admin_password: previousVenue.admin_password, has_admin_password: true };
+      }
+    }
     if (editingVenue.value) {
-      venues.value = venues.value.map(old => old.id === saved.id ? saved : old);
+      venues.value = venues.value.map(old => old.id === merged.id ? merged : old);
     } else {
-      venues.value = [...venues.value, saved];
+      venues.value = [...venues.value, merged];
     }
     invalidateVenuesCache();
     showVenueForm.value = false;
     editingVenue.value = null;
     if (editingId != null && selectedVenue.value?.id === editingId) {
-      selectedVenue.value = saved;
+      selectedVenue.value = merged;
       if (route.name === 'venue') {
         await router.push('/venues/' + useVenueSlug(saved));
       }

@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router';
 import type { Language } from '../../../types';
 import { useAuth } from '../../composables/auth';
 import { useAuthStore } from '../../stores/auth';
+import { hasLocalPhoneOnly, normalizePhoneFields, phoneIncludesDialCode } from '../../utils/phone';
 import authSideImageUrl from '../../assets/auth_side.png';
 
 const props = defineProps<{
@@ -14,7 +15,7 @@ const props = defineProps<{
 
 const router = useRouter();
 const authStore = useAuthStore();
-const { session, loading } = useAuth();
+const { session, loading, completePhone } = useAuth();
 
 const accessToken = ref('');
 const refreshToken = ref('');
@@ -31,10 +32,15 @@ async function saveAndLogin() {
     if (rt) localStorage.setItem('theground_refresh_token', rt);
     else localStorage.removeItem('theground_refresh_token');
 
-    const u = await session();
+    let u = await session();
     if (!u) throw new Error(props.language === 'en' ? 'Invalid token' : 'Token 無效');
-    const phone = (u.phoneNo || '').toString().trim();
-    if (!phone) {
+
+    if (phoneIncludesDialCode(u.phoneNo, u.countryCode)) {
+      const { phoneNo, countryCode } = normalizePhoneFields(u.phoneNo || '', u.countryCode || '852');
+      u = (await completePhone({ phoneNo, country_code: countryCode })) ?? u;
+    }
+
+    if (!hasLocalPhoneOnly(u.phoneNo, u.countryCode)) {
       router.push('/complete-phone');
       return;
     }

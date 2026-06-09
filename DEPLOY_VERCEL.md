@@ -75,6 +75,7 @@ Set for **Production** (and Preview if you use it), then **Redeploy**:
 | `N8N_AVAILABILITY_WEBHOOK_URL` | For live booking slots | Production URL of n8n webhook (see `docs/N8N_AVAILABILITY.md`). Example: `http://34.71.151.165:5678/webhook/courts-availability` |
 | `N8N_WEBHOOK_SECRET` | No | Optional; must match n8n `Resolve venue` code if used. |
 | ~~`VITE_N8N_*`~~ | **Do not set on Vercel** | Bakes HTTP n8n URL into the frontend; the browser blocks it (mixed content / CORS). Use `N8N_*` server vars only. The API route can fall back to `VITE_N8N_*` at runtime if both are set by mistake. |
+| `VITE_GOOGLE_MAPS_API_KEY` | **Yes** (for map) | Google Maps JavaScript API key. Baked in at **build time** — set on Vercel and **redeploy** after adding. Allow your Vercel domain in Google Cloud key HTTP referrers. |
 
 **Do not** put `MYSQL_*` on Vercel for this setup unless you change the code—the proxy does not talk to MySQL.
 
@@ -106,4 +107,6 @@ Saving env vars does not always rebuild the frontend; trigger a **Redeploy** fro
 | Works on laptop, fails on Vercel | GCP firewall / `ufw` not allowing **3001** from the internet, or VM not listening on **0.0.0.0** (this repo’s `server/run-local.js` defaults to `0.0.0.0`; redeploy/restart the process on the VM). |
 | **`503` on `/api/venues/*/availability`** (7 requests in logs) | `N8N_AVAILABILITY_WEBHOOK_URL` not set on Vercel **Preview** / **Production**. Add `N8N_*` vars, enable for **Preview**, then **Redeploy**. Ensure GCP firewall allows **5678** for n8n. |
 | **No availability / requests to `http://…:5678/webhook` from the live site** | Remove `VITE_N8N_*` from Vercel env, redeploy. The app must call same-origin `/api/venues/…/availability`, not n8n from the browser. |
+| White screen / map missing on Vercel; `/assets/*.js` returns HTML | Stale PWA service worker after deploy, or SPA rewrite catching asset URLs. Redeploy after pulling latest (Workbox + `vercel.json` fixes). Then in the browser: DevTools → Application → Service Workers → Unregister, Clear site data, hard refresh. |
+| Map shows “Map Unavailable” | Set `VITE_GOOGLE_MAPS_API_KEY` on Vercel (Production + Preview), redeploy, and allow your Vercel domain in Google Cloud Console → API key HTTP referrers. |
 | Login works on Vercel but not local `npm run dev` | Often **CORS**: `.env` points `VITE_THE_GRIND_API_URL` / `VITE_API_URL` at a **remote** API while the browser runs on `localhost`. The app uses same-origin `/api` in dev when the configured host is not localhost so **Vite’s proxy** forwards auth (see `vite.config.ts`). Ensure `npm run server` is running if you use `http://localhost:3001`, or add **localhost** redirect URIs for Google OAuth. |
