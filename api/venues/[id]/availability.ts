@@ -36,17 +36,26 @@ export default async function handler(req: any, res: any) {
     return sendJson(res, 400, { error: 'Invalid date; use YYYY-MM-DD', supported: false });
   }
 
-  const webhookBase = process.env.N8N_AVAILABILITY_WEBHOOK_URL?.trim();
+  const webhookBase = (
+    process.env.N8N_AVAILABILITY_WEBHOOK_URL
+    ?? process.env.VITE_N8N_AVAILABILITY_WEBHOOK_URL
+  )?.trim();
   if (!webhookBase) {
     return sendJson(res, 503, {
-      error: 'N8N_AVAILABILITY_WEBHOOK_URL is not configured on Vercel',
+      error:
+        'N8N_AVAILABILITY_WEBHOOK_URL is not configured on Vercel '
+        + '(set N8N_AVAILABILITY_WEBHOOK_URL or VITE_N8N_AVAILABILITY_WEBHOOK_URL, then redeploy)',
       supported: false,
       date,
       courts: [],
     });
   }
 
-  const secret = process.env.N8N_WEBHOOK_SECRET?.trim() || '';
+  const secret = (
+    process.env.N8N_WEBHOOK_SECRET
+    ?? process.env.VITE_N8N_WEBHOOK_SECRET
+    ?? ''
+  ).trim();
   const targetUrl = buildN8nWebhookUrl(webhookBase, venueId, date, secret, days);
   const timeoutMs = days > 1 ? 60000 : 25000;
 
