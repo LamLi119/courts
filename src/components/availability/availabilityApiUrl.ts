@@ -1,8 +1,9 @@
 import { courtApiUrl } from '../../utils/courtApiUrl';
 
 /**
- * Prefer same-origin /api proxy (Vercel). For local dev without that route on Express,
- * set VITE_N8N_AVAILABILITY_WEBHOOK_URL to your n8n Production Webhook URL.
+ * Production (Vercel): same-origin `/api/venues/:id/availability` → server calls n8n.
+ * Local dev only: set VITE_N8N_AVAILABILITY_WEBHOOK_URL to call n8n directly.
+ * Do not set VITE_N8N_* on Vercel — HTTPS pages cannot call HTTP n8n from the browser.
  */
 export function buildAvailabilityFetchUrl(
   venueId: number,
@@ -10,7 +11,7 @@ export function buildAvailabilityFetchUrl(
   days = 7,
 ): string {
   const n8nDirect = (import.meta.env.VITE_N8N_AVAILABILITY_WEBHOOK_URL ?? '').trim();
-  if (n8nDirect) {
+  if (n8nDirect && import.meta.env.DEV) {
     const u = new URL(n8nDirect);
     u.searchParams.set('venueId', String(venueId));
     u.searchParams.set('date', startDate);

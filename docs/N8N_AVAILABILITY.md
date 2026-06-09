@@ -224,6 +224,7 @@ Set `VITE_API_URL` to your Vercel preview URL so `/api/venues/4/availability` hi
 | 401 Unauthorized | Match `secret` query param in n8n and Vercel |
 | Empty courts | Check 212HK URL / date; run HTTP node alone in n8n |
 | CORS error in local dev | Use `VITE_N8N_*` or Vercel proxy, not Express :3001 |
+| Live Vercel site calls `http://…:5678/webhook` directly | Remove `VITE_N8N_*` from Vercel; set `N8N_AVAILABILITY_WEBHOOK_URL` only. Redeploy. |
 | Tab not visible | Venue id must be in `AVAILABILITY_VENUE_IDS` (only `4` now) |
 
 Reference: your original export `docs/reference/Courts-AvailableTime.json`.
