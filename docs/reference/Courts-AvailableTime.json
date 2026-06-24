@@ -1,8 +1,0 @@
-{
-  "name": "Courts-AvailableTime",
-  "nodes": [],
-  "connections": {},
-  "meta": {
-    "note": "Export of manual test workflow. See docs/N8N_AVAILABILITY.md for Production Webhook setup."
-  }
-}
