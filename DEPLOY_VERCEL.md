@@ -1,5 +1,7 @@
 # Deploy to Vercel 
 
+> **Lower Vercel bandwidth:** After deploying the latest frontend, configure [GCS CORS for map icons](./docs/GCS_MAP_ICONS.md) so map pins load images from GCS directly instead of through `/api/image-proxy`.
+
 The static app is served from Vercel. **`/api/*` is handled by a Vercel serverless function** (`api/[...path].ts`) that **proxies** to your Express API running on a **public URL** (VPS, Railway, Render, Fly.io, etc.). The Express process is what connects to MySQL.
 
 ## 1. Deploy the Express API first
