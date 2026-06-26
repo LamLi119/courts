@@ -1,0 +1,12 @@
+[
+  {
+    "origin": [
+      "https://courts.theground.io",
+      "https://court-git-dev-theground.vercel.app",
+      "http://localhost:3000"
+    ],
+    "method": ["GET", "HEAD"],
+    "responseHeader": ["Content-Type"],
+    "maxAgeSeconds": 3600
+  }
+]

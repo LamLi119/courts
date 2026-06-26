@@ -2,6 +2,7 @@
 import { onMounted, onBeforeUnmount, ref, watch, computed } from 'vue';
 import type { Venue, Language } from '../../../types';
 import { loadGoogleMapsScript } from '../../utils/googleMapsScript';
+import { courtApiUrl, getCourtApiBaseUrl } from '../../utils/courtApiUrl';
 declare const google: any;
 
 const props = defineProps<{
@@ -317,7 +318,7 @@ function toAbsoluteAssetUrl(rawUrl: string): string {
   if (/^https?:\/\//i.test(input)) return input;
 
   // In production, venue icon paths may be relative (/uploads/...) but served by API host.
-  const apiBase = (import.meta.env.VITE_API_URL as string | undefined)?.trim();
+  const apiBase = getCourtApiBaseUrl() || (typeof window !== 'undefined' ? window.location.origin : '');
   const baseCandidates = [apiBase, (typeof window !== 'undefined' ? window.location.origin : '')]
     .filter((v): v is string => !!v);
 
@@ -472,26 +473,111 @@ async function blobToPngDataUrl(blob: Blob, size = 96): Promise<string> {
   }
 }
 
+function isGcsPublicUrl(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return host === 'storage.googleapis.com' || host.endsWith('.storage.googleapis.com');
+  } catch {
+    return false;
+  }
+}
+
+/** GCS CORS is configured for production + localhost; Vercel previews need bucket CORS or image-proxy. */
+function shouldTryDirectGcsFirst(): boolean {
+  if (typeof window === 'undefined') return false;
+  const host = window.location.hostname.toLowerCase();
+  if (host === 'localhost' || host === '127.0.0.1') return true;
+  if (host === 'courts.theground.io') return true;
+  return false;
+}
+
+async function imageUrlToPngDataUrl(imageUrl: string, size = 96): Promise<string> {
+  if (typeof document === 'undefined') return '';
+  try {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error('Failed to load icon image'));
+      img.src = imageUrl;
+    });
+
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return '';
+    ctx.clearRect(0, 0, size, size);
+    const iw = img.naturalWidth || size;
+    const ih = img.naturalHeight || size;
+    const scale = Math.max(size / iw, size / ih);
+    const dw = iw * scale;
+    const dh = ih * scale;
+    const dx = (size - dw) / 2;
+    const dy = (size - dh) / 2;
+    ctx.drawImage(img, dx, dy, dw, dh);
+    return canvas.toDataURL('image/png');
+  } catch {
+    return '';
+  }
+}
+
+async function fetchIconViaProxy(iconUrl: string): Promise<string> {
+  const proxiedUrl = courtApiUrl(`/api/image-proxy?url=${encodeURIComponent(iconUrl)}`);
+  const res = await fetch(proxiedUrl, { method: 'GET', credentials: 'omit' });
+  if (!res.ok) return '';
+  const blob = await res.blob();
+  let dataUrl = await blobToPngDataUrl(blob, 96);
+  if (!dataUrl) dataUrl = await blobToDataUrl(blob);
+  return dataUrl || '';
+}
+
 async function ensureEmbeddedIcon(venue?: Venue): Promise<void> {
   const rawIcon = (venue?.org_icon || venue?.images?.[0] || '').toString().trim();
   const iconUrl = toAbsoluteAssetUrl(rawIcon);
   if (!iconUrl) return;
   if (embeddedIconCache.value[iconUrl]) return;
+
   try {
-    // Use same-origin proxy to avoid bucket CORS issues (e.g. GCS public objects without CORS).
-    const proxiedUrl = `/api/image-proxy?url=${encodeURIComponent(iconUrl)}`;
-    // Include same-origin cookies so Vercel preview protection doesn't 401 this API route.
-    const res = await fetch(proxiedUrl, { method: 'GET', credentials: 'same-origin' });
-    if (!res.ok) return;
-    const blob = await res.blob();
-    // Rasterize to PNG so it's safe to embed inside our SVG marker icon.
-    let dataUrl = await blobToPngDataUrl(blob, 96);
-    if (!dataUrl) dataUrl = await blobToDataUrl(blob);
+    // Direct GCS only when bucket CORS allows this origin (prod domain / localhost).
+    // Vercel previews skip direct GCS and use VM /api/image-proxy (no red CORS errors per pin).
+    let dataUrl = '';
+    if (isGcsPublicUrl(iconUrl) && shouldTryDirectGcsFirst()) {
+      dataUrl = await imageUrlToPngDataUrl(iconUrl, 96);
+    }
+    if (!dataUrl) {
+      dataUrl = await fetchIconViaProxy(iconUrl);
+    }
     if (!dataUrl) return;
     embeddedIconCache.value[iconUrl] = dataUrl;
   } catch {
-    // If image fetch/convert fails (CORS or remote host restriction), fallback to default marker icon.
+    // Fallback to default marker icon (count / "1") when load fails.
   }
+}
+
+function upgradeMarkerIcon(locationKey: string, venue: Venue, venueCount: number) {
+  try {
+    const marker = markers.value[locationKey];
+    if (!marker) return;
+    const currentVenue = selectedVenueByLocation.value[locationKey] || venue;
+    const selectedPos = props.selectedVenue ? normalizeLatLng((props.selectedVenue as any).coordinates) : null;
+    const selectedLocationKey = selectedPos ? getLocationKey(selectedPos) : null;
+    const isSelected = selectedLocationKey === locationKey;
+    marker.setIcon(markerIconConfig(currentVenue, isSelected, venueCount));
+  } catch {
+    // ignore marker update errors (e.g. marker cleared during re-sync)
+  }
+}
+
+function refreshSelectedVenueMarkerIcon() {
+  const selected = props.selectedVenue;
+  if (!selected || !googleMap.value) return;
+  const pos = normalizeLatLng((selected as any).coordinates);
+  const locationKey = pos ? getLocationKey(pos) : null;
+  if (!locationKey || !markers.value[locationKey]) return;
+  void ensureEmbeddedIcon(selected).then(() => {
+    upgradeMarkerIcon(locationKey, selected, venueCountByLocation.value[locationKey] ?? 1);
+  });
 }
 
 // Valid ranges: lat -90..90, lng -180..180 (Hong Kong ~22.3, 114.1)
@@ -591,24 +677,12 @@ const syncMarkers = async () => {
       map: googleMap.value,
       title,
       icon: markerIconConfig(initialVenue, false, venueList.length),
-      // Faster first paint: render pins immediately; upgrade to icon pins asynchronously.
-      // animation: google.maps.Animation.DROP
     });
 
-    // Async: fetch + rasterize icon then update this marker.
-    // Do not await here — otherwise initial pins appear very slowly.
-    ensureEmbeddedIcon(initialVenue)
-      .then(() => {
-        try {
-          const currentVenue = selectedVenueByLocation.value[locationKey] || initialVenue;
-          const selectedPos = props.selectedVenue ? normalizeLatLng((props.selectedVenue as any).coordinates) : null;
-          const selectedLocationKey = selectedPos ? getLocationKey(selectedPos) : null;
-          const isSelected = selectedLocationKey === locationKey;
-          marker.setIcon(markerIconConfig(currentVenue, isSelected, venueList.length));
-        } catch {
-          // ignore marker update errors (e.g. marker cleared during re-sync)
-        }
-      })
+    // Load custom icons for every pin. Uses direct GCS when CORS is configured (no Vercel proxy).
+    // embeddedIconCache dedupes identical org_icon URLs across venues.
+    void ensureEmbeddedIcon(initialVenue)
+      .then(() => upgradeMarkerIcon(locationKey, initialVenue, venueList.length))
       .catch(() => null);
 
     marker.addListener('click', () => {
@@ -638,6 +712,8 @@ const syncMarkers = async () => {
     });
     markers.value[locationKey] = marker;
   }
+
+  refreshSelectedVenueMarkerIcon();
 };
 
 const fitToAllVenues = () => {
