@@ -187,9 +187,25 @@ async function uploadToGCS(imageInput, folder = 'venues') {
 
 /** Upload venue images; throws if any new data URL fails to reach GCS. */
 async function uploadVenueImages(images) {
-  if (!Array.isArray(images) || images.length === 0) return undefined;
+  if (!Array.isArray(images) || images.length === 0) return '[]';
   const imageUrls = await Promise.all(images.map((img) => uploadToGCS(img, 'venues')));
   return JSON.stringify(imageUrls.filter((url) => url != null && url !== ''));
+}
+
+/** mysql2 rejects undefined bind values — coerce before INSERT/UPDATE. */
+function prepareRowForDb(row) {
+  for (const [k, v] of Object.entries(row)) {
+    if (v === undefined) {
+      row[k] = null;
+    } else if (k === 'amenities' && Array.isArray(v)) {
+      row[k] = JSON.stringify(v);
+    } else if (k === 'pricing' && v != null && typeof v === 'object') {
+      row[k] = JSON.stringify(v);
+    } else if (k === 'images' && Array.isArray(v)) {
+      row[k] = JSON.stringify(v);
+    }
+  }
+  return row;
 }
 
 /** Helper: ensure pricing image is a GCS URL (not base64) before DB write. */
@@ -1282,6 +1298,8 @@ app.post('/api/venues', async (req, res) => {
 
     if (row.coordinates) row.coordinates = JSON.stringify(row.coordinates);
 
+    prepareRowForDb(row);
+
     const keys = Object.keys(row);
     const values = keys.map((k) => row[k]);
     const placeholders = keys.map(() => '?').join(', ');
@@ -1339,6 +1357,8 @@ app.put('/api/venues/:id', async (req, res) => {
         row.pricing = await normalizePricingForStorage(row.pricing);
       }
       if (row.coordinates) row.coordinates = JSON.stringify(row.coordinates);
+
+      prepareRowForDb(row);
 
       const keys = Object.keys(row);
       if (keys.length === 0) {
