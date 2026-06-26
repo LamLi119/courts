@@ -4,6 +4,8 @@ The Vercel project serves **only** the Vite build (`dist/`). The browser calls t
 
 API host: **`https://courts.api.theground.io`**
 
+**Updating the VM API (staging vs prod):** see [docs/VM_SERVER_UPDATE.md](docs/VM_SERVER_UPDATE.md).
+
 | Path on API host | Backend |
 |------------------|---------|
 | `/api/...` | Production (port 3001) — enable after prod cutover |
@@ -53,12 +55,17 @@ Verify in DevTools → Network:
 - API calls → `https://courts.api.theground.io/staging/api/...`
 - **Not** `vercel.app/api/...`
 
-### 4. GCS CORS (map icons)
+### 4. GCS CORS (map icons) — **one-time on GCP**
 
-Add to the bucket policy (`docs/GCS_MAP_ICONS.md`):
+On a machine with `gsutil` access to bucket `courts-image-bucket`:
 
-- `https://courts.theground.io`
-- Your specific Vercel preview hostname (GCS does not support `*.vercel.app` wildcards)
+```bash
+gsutil cors set scripts/gcs-cors.json gs://courts-image-bucket
+```
+
+Add your Vercel preview hostname to `scripts/gcs-cors.json` first if it is not `court-git-dev-theground.vercel.app`. See `docs/GCS_MAP_ICONS.md`.
+
+Preview deployments work **without** GCS CORS (icons use VM `/staging/api/image-proxy`), but CORS is recommended for production.
 
 ### 5. Google Maps API key
 

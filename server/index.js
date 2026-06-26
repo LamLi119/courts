@@ -679,6 +679,7 @@ app.get('/api/image-proxy', async (req, res) => {
     // Keep cache-friendly defaults; the underlying GCS objects are immutable in this app.
     res.setHeader('Content-Type', contentType);
     res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.setHeader('Access-Control-Allow-Origin', '*');
     return res.status(200).send(Buffer.from(response.data));
   } catch (err) {
     const msg = err?.message || 'Proxy failed';

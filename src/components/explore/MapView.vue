@@ -482,6 +482,15 @@ function isGcsPublicUrl(url: string): boolean {
   }
 }
 
+/** GCS CORS is configured for production + localhost; Vercel previews need bucket CORS or image-proxy. */
+function shouldTryDirectGcsFirst(): boolean {
+  if (typeof window === 'undefined') return false;
+  const host = window.location.hostname.toLowerCase();
+  if (host === 'localhost' || host === '127.0.0.1') return true;
+  if (host === 'courts.theground.io') return true;
+  return false;
+}
+
 async function imageUrlToPngDataUrl(imageUrl: string, size = 96): Promise<string> {
   if (typeof document === 'undefined') return '';
   try {
@@ -515,7 +524,7 @@ async function imageUrlToPngDataUrl(imageUrl: string, size = 96): Promise<string
 
 async function fetchIconViaProxy(iconUrl: string): Promise<string> {
   const proxiedUrl = courtApiUrl(`/api/image-proxy?url=${encodeURIComponent(iconUrl)}`);
-  const res = await fetch(proxiedUrl, { method: 'GET', credentials: 'same-origin' });
+  const res = await fetch(proxiedUrl, { method: 'GET', credentials: 'omit' });
   if (!res.ok) return '';
   const blob = await res.blob();
   let dataUrl = await blobToPngDataUrl(blob, 96);
@@ -530,10 +539,12 @@ async function ensureEmbeddedIcon(venue?: Venue): Promise<void> {
   if (embeddedIconCache.value[iconUrl]) return;
 
   try {
-    // Prefer direct GCS load (browser → bucket). Avoids Vercel/API image-proxy bandwidth.
-    let dataUrl = isGcsPublicUrl(iconUrl) ? await imageUrlToPngDataUrl(iconUrl, 96) : '';
-
-    // Fallback when bucket CORS is missing or the icon is hosted elsewhere.
+    // Direct GCS only when bucket CORS allows this origin (prod domain / localhost).
+    // Vercel previews skip direct GCS and use VM /api/image-proxy (no red CORS errors per pin).
+    let dataUrl = '';
+    if (isGcsPublicUrl(iconUrl) && shouldTryDirectGcsFirst()) {
+      dataUrl = await imageUrlToPngDataUrl(iconUrl, 96);
+    }
     if (!dataUrl) {
       dataUrl = await fetchIconViaProxy(iconUrl);
     }
