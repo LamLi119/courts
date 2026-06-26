@@ -1,47 +1,48 @@
 # GCS CORS for map marker icons
 
-Every map pin loads its venue icon on first render. Icons are fetched **directly from Google Cloud Storage** in the browser when CORS is configured.
+Map pins load venue icons from **Google Cloud Storage**. The browser must be allowed by **bucket CORS** to read them directly.
 
-If CORS is not configured, the app falls back to `/api/image-proxy` on the VM API (configure CORS below to avoid that extra hop).
+| Frontend origin | Without CORS | With CORS |
+|-----------------|--------------|-----------|
+| `courts.theground.io` | Uses VM `/api/image-proxy` | Direct GCS (best) |
+| `localhost:3000` | Uses image-proxy if direct fails | Direct GCS |
+| Vercel preview (`*.vercel.app`) | Uses VM `/api/image-proxy` (code skips doomed direct GCS) | Direct GCS if origin added below |
 
-## Configure CORS on your GCS bucket
+If CORS is missing on a preview URL, icons still load via **`https://courts.api.theground.io/staging/api/image-proxy`** (requires `VITE_API_URL` on Preview).
 
-Google Cloud Console → **Cloud Storage** → your venues bucket → **Permissions** tab → **CORS** → **Edit** (or use `gsutil`).
+---
 
-Example policy (replace origins with your real frontend URLs):
+## One-time setup (GCP — you must run this)
 
-```json
-[
-  {
-    "origin": [
-      "https://courts.theground.io",
-      "https://your-vercel-preview-url.vercel.app",
-      "http://localhost:3000"
-    ],
-    "method": ["GET", "HEAD"],
-    "responseHeader": ["Content-Type"],
-    "maxAgeSeconds": 3600
-  }
-]
-```
-
-### Using gsutil
-
-Save the JSON above as `cors.json`, then:
+Someone with access to bucket **`courts-image-bucket`** runs:
 
 ```bash
-gsutil cors set cors.json gs://YOUR_BUCKET_NAME
+cd /path/to/court
+gsutil cors set scripts/gcs-cors.json gs://courts-image-bucket
+gsutil cors get gs://courts-image-bucket
 ```
+
+Or Cloud Console → **Cloud Storage** → `courts-image-bucket` → **Permissions** → **CORS**.
+
+### Add more Vercel preview URLs
+
+GCS does **not** support `https://*.vercel.app`. Edit `scripts/gcs-cors.json` and add each preview hostname, then run `gsutil cors set` again.
+
+Example preview host: `https://court-git-dev-theground.vercel.app`
+
+---
 
 ## Verify
 
-1. Open your live site → open the map view.
-2. DevTools → **Network** → filter by `storage.googleapis.com`.
-3. You should see icon requests go **directly to GCS**, not `vercel.app/api/image-proxy`.
+1. Open the site → map view.
+2. DevTools → **Network**:
+   - **With CORS:** `storage.googleapis.com` → **200**
+   - **Without CORS (preview):** `courts.api.theground.io/.../image-proxy` → **200** (not failed GCS rows)
+3. Map pins show venue icons (not only default numbered pins).
 
-If direct load fails, check the browser console for CORS errors and add the missing origin to the bucket policy.
+---
 
 ## Notes
 
-- Wildcards like `https://*.vercel.app` are **not** supported in GCS CORS. Add each Vercel preview URL you use, or rely on proxy fallback for previews.
-- Venue gallery photos (`ImageCarousel`) already use GCS URLs directly; this doc is only for **map pin** icons.
+- Gallery photos (`ImageCarousel`) use GCS URLs directly; map pins use the logic in `MapView.vue`.
+- After changing CORS, hard-refresh the browser (CORS preflight may be cached up to 1 hour).
