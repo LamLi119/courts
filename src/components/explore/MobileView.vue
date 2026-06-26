@@ -4,6 +4,7 @@ import type { Venue, Language, AppTab } from '../../../types';
 import { getStationDisplayName } from '../../utils/mtrStations';
 import MobileVenueCard from './MobileVenueCard.vue';
 import VenueDetail from '../venue/VenueDetail.vue';
+import AppFooter from '../layout/AppFooter.vue';
 
 const MapView = defineAsyncComponent(() => import('./MapView.vue'));
 
@@ -634,6 +635,13 @@ const goNextVenueFromDetail = async () => {
       :isMobile="true"
     />
 
+    <AppFooter
+      :language="language"
+      :t="t"
+      :darkMode="darkMode"
+      variant="overlay"
+    />
+
     <div
       v-if="showLocationPicker"
       class="absolute left-4 right-4 top-24 z-30 pointer-events-auto"
@@ -683,7 +691,7 @@ const goNextVenueFromDetail = async () => {
 
     <div
       v-if="showStickyCard && selectedVenue"
-      class="fixed inset-x-0 bottom-5 z-40 pb-safe px-3"
+      class="fixed inset-x-0 bottom-28 z-40 pb-safe px-3"
     >
       <div
         class="rounded-[16px] shadow-[0_-10px_30px_rgba(0,0,0,0.25)] border mb-3"
@@ -1142,6 +1150,8 @@ const goNextVenueFromDetail = async () => {
           }"
         />
       </div>
+
+      <AppFooter :language="language" :t="t" :darkMode="darkMode" variant="inline" />
     </div>
   </div>
 </template>
