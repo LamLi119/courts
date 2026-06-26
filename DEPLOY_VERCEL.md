@@ -1,107 +1,135 @@
-# Deploy to Vercel 
+# Deploy to Vercel (static frontend + direct API)
 
-> **Lower Vercel bandwidth:** After deploying the latest frontend, configure [GCS CORS for map icons](./docs/GCS_MAP_ICONS.md) so map pins load images from GCS directly instead of through `/api/image-proxy`.
+The Vercel project serves **only** the Vite build (`dist/`). The browser calls the Express API on the GCP VM directly via `VITE_API_URL` (baked in at build time).
 
-The static app is served from Vercel. **`/api/*` is handled by a Vercel serverless function** (`api/[...path].ts`) that **proxies** to your Express API running on a **public URL** (VPS, Railway, Render, Fly.io, etc.). The Express process is what connects to MySQL.
+API host: **`https://courts.api.theground.io`**
 
-## 1. Deploy the Express API first
+| Path on API host | Backend |
+|------------------|---------|
+| `/api/...` | Production (port 3001) — enable after prod cutover |
+| `/staging/api/...` | Staging (port 3002) — for Preview / local testing |
 
-1. Run `server/index.js` (e.g. `node server/run-local.js` or your host’s start command) on a host with a **stable HTTPS URL**.
-2. On **that host only**, set the database and app env vars:
+---
 
-| Variable | Description |
-|----------|-------------|
-| `MYSQL_HOST` | Cloud SQL / MySQL host |
-| `MYSQL_PORT` | `3306` (if not default) |
-| `MYSQL_USER` | DB user |
-| `MYSQL_PASSWORD` | DB password |
-| `MYSQL_DATABASE` | DB name |
-| `MYSQL_CA` | (If using Cloud SQL SSL) full PEM text of server CA |
-| `MYSQL_CERT` | Full PEM text of client cert |
-| `MYSQL_KEY` | Full PEM text of client key |
-| `IMGBB_API_KEY` | (Optional) image uploads |
-| `PROXY_SECRET` | (Optional) shared secret; must match Vercel if set |
+## Option A — Preview tests staging first (recommended)
 
-PEM values: paste the entire file including `-----BEGIN ...` / `-----END ...` lines.
+Use this while production on `main` may still use the old Vercel proxy. Work on branch **`vercel-static-preview`**.
 
-3. Confirm from **outside** your laptop (e.g. phone on cellular data): `http://YOUR_VM_IP:3001/api/sports` returns JSON. If this fails, Vercel will fail too.
+### What stays the same until final cutover
 
-### Google Cloud VM (firewall + OS)
+- **Production** (`courts.theground.io`): can keep `PROXY_TARGET` + `api/` on `main` until you set up new prod on `:3001`.
+- **Preview** deployments from this branch: static only → `https://courts.api.theground.io/staging`.
 
-The VM **external IP** must allow **TCP 3001** from the internet.
+### 1. VM — staging (already done if Phase 1–3 complete)
 
-**GCP – VPC firewall (required)**
+- Staging API: `courts-api-staging` on port **3002**
+- nginx: `https://courts.api.theground.io/staging/` → `127.0.0.1:3002`
+- VM network tag: **`courts-api`** (for firewall `allow-courts-http-https`)
+- Test: `curl https://courts.api.theground.io/staging/api/sports`
 
-- Console: **VPC network → Firewall → Create firewall rule**
-  - **Direction**: Ingress  
-  - **Targets**: this VM (use the same **Network tags** as the VM, or “All instances in the network” for a quick test)  
-  - **Source IPv4 ranges**: `0.0.0.0/0` (tighten later)  
-  - **Protocols and ports**: `tcp:3001`  
+### 2. Vercel — Preview environment only
 
-Or **gcloud** (replace `NETWORK_NAME` and tag if you use tags):
+Settings → Environment Variables → **Preview**:
 
-```bash
-gcloud compute firewall-rules create allow-courts-api-3001 \
-  --network=default \
-  --direction=INGRESS \
-  --action=ALLOW \
-  --rules=tcp:3001 \
-  --source-ranges=0.0.0.0/0 \
-  --target-tags=courts-api
-```
+| Variable | Value |
+|----------|--------|
+| `VITE_API_URL` | `https://courts.api.theground.io/staging` |
+| `VITE_GOOGLE_MAPS_API_KEY` | your key |
 
-If you use `--target-tags`, add the same tag to the VM under **Edit → Network tags**.
+**Do not change Production** until prod API on `:3001` is ready behind nginx.
 
-**VM – Ubuntu `ufw` (if enabled)**
+Remove from **Preview** (if set): `PROXY_TARGET`, `PROXY_SECRET`.
+
+### 3. Push branch and open Preview URL
 
 ```bash
-sudo ufw allow 3001/tcp
-sudo ufw reload
+git push -u origin vercel-static-preview
 ```
 
-**`http://IP:3001` is OK for `PROXY_TARGET`:** the browser talks to Vercel over HTTPS; only Vercel’s servers call your VM over HTTP (no mixed-content block in the browser).
+Vercel creates a Preview deployment. Open the `*.vercel.app` URL.
 
-## 2. Connect the repo to Vercel and deploy
+Verify in DevTools → Network:
 
-- Vercel uses `vercel.json` (SPA rewrites + Vite build).
-- **Do not** set `VITE_API_URL` in Vercel (or leave it empty). The browser must call **`/api/*` on the same Vercel domain** so the proxy runs.
+- API calls → `https://courts.api.theground.io/staging/api/...`
+- **Not** `vercel.app/api/...`
 
-## 3. Vercel environment variables
+### 4. GCS CORS (map icons)
 
-Set for **Production** (and Preview if you use it), then **Redeploy**:
+Add to the bucket policy (`docs/GCS_MAP_ICONS.md`):
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `PROXY_TARGET` | **Yes** | Base URL of your Express API **with no trailing slash**, e.g. `http://34.x.x.x:3001` (GCP VM) or `https://your-api.example.com`. Requests to `https://your-app.vercel.app/api/sports` are forwarded to `{PROXY_TARGET}/api/sports`. |
-| `PROXY_SECRET` | No | If set, must equal `PROXY_SECRET` on the Express server. The proxy sends it as `x-proxy-secret`. |
-| `VITE_GOOGLE_MAPS_API_KEY` | **Yes** (for map) | Google Maps JavaScript API key. Baked in at **build time** — set on Vercel and **redeploy** after adding. Allow your Vercel domain in Google Cloud key HTTP referrers. |
+- `https://courts.theground.io`
+- Your specific Vercel preview hostname (GCS does not support `*.vercel.app` wildcards)
 
-**Do not** put `MYSQL_*` on Vercel for this setup unless you change the code—the proxy does not talk to MySQL.
+### 5. Google Maps API key
 
-## 4. Redeploy after changes
+HTTP referrers:
 
-Saving env vars does not always rebuild the frontend; trigger a **Redeploy** from the Vercel dashboard so `PROXY_TARGET` is picked up.
+- `https://courts.theground.io/*`
+- `https://*.vercel.app/*`
 
-## 5. Local dev without a local API
+---
 
-- `npm run dev`
-- In `.env`: `VITE_API_URL=https://your-app.vercel.app` (or your preview URL) so the browser hits Vercel’s proxy, which forwards to `PROXY_TARGET`.
+## Final cutover — Production uses prod API
 
-## 6. Local dev with local API
+When Preview works and **new prod** runs on `:3001` behind nginx:
 
-- `.env`: `VITE_API_URL=http://localhost:3001`
-- Terminal 1: `npm run server`
-- Terminal 2: `npm run dev`
+### VM
+
+1. Prod systemd: `courts-api-prod` on port **3001**, `HOST=127.0.0.1`
+2. nginx `location /` → `127.0.0.1:3001` (keep `/staging/` → 3002)
+3. Test: `curl https://courts.api.theground.io/api/sports`
+4. Remove `PROXY_SECRET` from prod/staging env if set
+5. Close public GCP firewall for **tcp:3001** (only 80/443 public)
+
+### Vercel — Production
+
+| Variable | Value |
+|----------|--------|
+| `VITE_API_URL` | `https://courts.api.theground.io` |
+| `VITE_GOOGLE_MAPS_API_KEY` | your key |
+
+**Delete:** `PROXY_TARGET`, `PROXY_SECRET`
+
+Redeploy Production.
+
+### Merge
+
+Merge `vercel-static-preview` → `main` and redeploy.
+
+---
+
+## Local development
+
+**Local API:**
+
+```env
+VITE_API_URL=http://localhost:3001
+```
+
+Terminal 1: `npm run server`  
+Terminal 2: `npm run dev`
+
+**VM staging:**
+
+```env
+VITE_API_URL=https://courts.api.theground.io/staging
+```
+
+---
 
 ## Troubleshooting
 
 | Symptom | Likely cause |
 |---------|----------------|
-| `Missing PROXY_TARGET env var` | `PROXY_TARGET` not set on Vercel or deploy is stale—redeploy. |
-| Browser calls `localhost` from the live site | `VITE_API_URL` was set at build time to localhost—remove it on Vercel and redeploy. |
-| `401` from API | `PROXY_SECRET` mismatch or set on server but not on Vercel. |
-| Mixed content in the **browser** | Rare with this proxy: the page calls same-origin `/api`. If you set `VITE_API_URL` to `http://...`, the **browser** may block it from HTTPS—use empty `VITE_API_URL` on Vercel or HTTPS for direct API URLs. |
-| Works on laptop, fails on Vercel | GCP firewall / `ufw` not allowing **3001** from the internet, or VM not listening on **0.0.0.0** (this repo’s `server/run-local.js` defaults to `0.0.0.0`; redeploy/restart the process on the VM). |
-| White screen / map missing on Vercel; `/assets/*.js` returns HTML | Stale PWA service worker after deploy, or SPA rewrite catching asset URLs. Redeploy after pulling latest (Workbox + `vercel.json` fixes). Then in the browser: DevTools → Application → Service Workers → Unregister, Clear site data, hard refresh. |
-| Map shows “Map Unavailable” | Set `VITE_GOOGLE_MAPS_API_KEY` on Vercel (Production + Preview), redeploy, and allow your Vercel domain in Google Cloud Console → API key HTTP referrers. |
-| Login works on Vercel but not local `npm run dev` | Often **CORS**: `.env` points `VITE_THE_GRIND_API_URL` / `VITE_API_URL` at a **remote** API while the browser runs on `localhost`. The app uses same-origin `/api` in dev when the configured host is not localhost so **Vite’s proxy** forwards auth (see `vite.config.ts`). Ensure `npm run server` is running if you use `http://localhost:3001`, or add **localhost** redirect URIs for Google OAuth. |
+| Preview: no data | Preview missing `VITE_API_URL=.../staging` — redeploy |
+| Production broken after merge without env | Set Production `VITE_API_URL` before merging static-only branch |
+| `401` from API | `PROXY_SECRET` set on VM — unset for direct browser calls |
+| Map icons via `image-proxy` | Configure GCS CORS (`docs/GCS_MAP_ICONS.md`) |
+| Admin login fails cross-origin | Cookies need `SameSite=None; Secure` when frontend and API are on different hosts |
+| Connection timeout to API | VM missing `courts-api` network tag or firewall 80/443 |
+
+---
+
+## Cost note
+
+Vercel **Fast Origin Transfer** drops when Production no longer uses `api/` serverless proxy. Preview-only static deploys on this branch do not affect Production billing until you merge and switch Production env.

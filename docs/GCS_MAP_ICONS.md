@@ -1,8 +1,8 @@
 # GCS CORS for map marker icons
 
-Every map pin loads its venue icon on first render. Icons are fetched **directly from Google Cloud Storage** in the browser when CORS is configured. That avoids routing all pin images through Vercel `/api/image-proxy` (a major source of Fast Origin Transfer cost).
+Every map pin loads its venue icon on first render. Icons are fetched **directly from Google Cloud Storage** in the browser when CORS is configured.
 
-If CORS is not configured, the app falls back to the image proxy per icon (expensive on Vercel — configure CORS below).
+If CORS is not configured, the app falls back to `/api/image-proxy` on the VM API (configure CORS below to avoid that extra hop).
 
 ## Configure CORS on your GCS bucket
 
@@ -15,7 +15,7 @@ Example policy (replace origins with your real frontend URLs):
   {
     "origin": [
       "https://courts.theground.io",
-      "https://your-production-app.vercel.app",
+      "https://your-vercel-preview-url.vercel.app",
       "http://localhost:3000"
     ],
     "method": ["GET", "HEAD"],
