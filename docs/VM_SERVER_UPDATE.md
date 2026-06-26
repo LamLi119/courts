@@ -38,7 +38,7 @@ ssh team@instance-courts   # or gcloud compute ssh ...
 cd /opt/courts-new         # use WorkingDirectory from above
 
 git fetch
-git checkout your-branch   # e.g. dev, or main for a staging test
+git checkout Fix/vercel-problem   # e.g. dev, or main for a staging test
 git pull
 
 npm ci
@@ -140,10 +140,22 @@ MYSQL_USER=...
 MYSQL_PASSWORD=...
 MYSQL_DATABASE=...   # courts-db (prod) or courts_staging (staging)
 
-GCS_BUCKET_NAME=...
+GCS_BUCKET_NAME=courts-image-bucket
 THE_GRIND_BACKEND_URL=https://api.thegrind-app.com
 COURTS_FRONTEND_URL=https://courts.theground.io
 ```
+
+**Image uploads** require `GCS_BUCKET_NAME` and GCS write access (VM service account or a service-account JSON in `api/`). The server defaults to `courts-image-bucket` if unset. If staging saves venues but `images` comes back as `[]`, deploy latest code and run on the VM:
+
+```bash
+cd /opt/courts-new
+git pull
+npm ci
+sudo systemctl restart courts-api-staging
+bash scripts/check-gcs-upload.sh /etc/courts/staging.env
+```
+
+If the check script fails, add `GCS_BUCKET_NAME=courts-image-bucket` to staging env (copy from prod if needed) and grant the VM service account **Storage Object Creator** on the bucket.
 
 Do **not** set `PROXY_SECRET` when the browser calls the API directly (causes `401`).
 
@@ -171,6 +183,8 @@ Do **not** set `PROXY_SECRET` when the browser calls the API directly (causes `4
 | HTTPS 404 | nginx config — `/staging/` → 3002, `/` → 3001 |
 | HTTPS timeout | VM network tag `courts-api` + firewall 80/443 |
 | `401` from API | Remove `PROXY_SECRET` from env file |
+| Save OK but `images: "[]"` | Add `GCS_BUCKET_NAME=courts-image-bucket` to env; check `journalctl` for `GCS upload error` |
+| `Image upload failed` on save | VM service account needs **Storage Object Creator** on `courts-image-bucket` |
 
 ### Service status (both)
 

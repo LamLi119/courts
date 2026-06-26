@@ -70,14 +70,42 @@ const getPool = () => {
   return pool;
 };
 
-const GCS_BUCKET_NAME = (process.env.GCS_BUCKET_NAME || '').trim();
+const GCS_BUCKET_DEFAULT = 'courts-image-bucket';
+const GCS_BUCKET_NAME = (process.env.GCS_BUCKET_NAME || GCS_BUCKET_DEFAULT).trim();
+let gcsStorage = null;
 let gcsBucket = null;
+
+/** Use GOOGLE_APPLICATION_CREDENTIALS when set; else first service-account JSON in api/. */
+function ensureGcsCredentials() {
+  if (process.env.GOOGLE_APPLICATION_CREDENTIALS) return;
+  const apiDir = path.join(process.cwd(), 'api');
+  try {
+    if (!fs.existsSync(apiDir)) return;
+    for (const name of fs.readdirSync(apiDir)) {
+      if (!name.endsWith('.json')) continue;
+      const fullPath = path.join(apiDir, name);
+      try {
+        const raw = JSON.parse(fs.readFileSync(fullPath, 'utf8'));
+        if (raw?.type === 'service_account' && raw?.private_key) {
+          process.env.GOOGLE_APPLICATION_CREDENTIALS = fullPath;
+          console.log(`GCS: using credentials from ${fullPath}`);
+          return;
+        }
+      } catch (_) {
+        // not a service account key
+      }
+    }
+  } catch (_) {
+    // ignore
+  }
+}
 
 function getGcsBucket() {
   if (!GCS_BUCKET_NAME) return null;
   if (!gcsBucket) {
-    const storage = new Storage();
-    gcsBucket = storage.bucket(GCS_BUCKET_NAME);
+    ensureGcsCredentials();
+    gcsStorage = new Storage();
+    gcsBucket = gcsStorage.bucket(GCS_BUCKET_NAME);
   }
   return gcsBucket;
 }
@@ -130,8 +158,7 @@ async function uploadToGCS(imageInput, folder = 'venues') {
 
   const bucket = getGcsBucket();
   if (!bucket) {
-    console.error('GCS upload skipped: GCS_BUCKET_NAME is not set');
-    return null;
+    throw new Error('GCS_BUCKET_NAME is not configured');
   }
 
   try {
@@ -152,9 +179,17 @@ async function uploadToGCS(imageInput, folder = 'venues') {
     });
     return `https://storage.googleapis.com/${GCS_BUCKET_NAME}/${encodeURIComponent(objectPath).replace(/%2F/g, '/')}`;
   } catch (err) {
-    console.error('GCS upload error:', err?.message || err);
-    return null;
+    const msg = err?.message || String(err);
+    console.error('GCS upload error:', msg);
+    throw new Error(`Image upload failed: ${msg}`);
   }
+}
+
+/** Upload venue images; throws if any new data URL fails to reach GCS. */
+async function uploadVenueImages(images) {
+  if (!Array.isArray(images) || images.length === 0) return undefined;
+  const imageUrls = await Promise.all(images.map((img) => uploadToGCS(img, 'venues')));
+  return JSON.stringify(imageUrls.filter((url) => url != null && url !== ''));
 }
 
 /** Helper: ensure pricing image is a GCS URL (not base64) before DB write. */
@@ -1228,10 +1263,7 @@ app.post('/api/venues', async (req, res) => {
 
     // 1. Process Main Images
     if (row.images && Array.isArray(row.images)) {
-      const imageUrls = await Promise.all(
-        row.images.map((img) => uploadToGCS(img, 'venues'))
-      );
-      row.images = JSON.stringify(imageUrls.filter(url => url !== null));
+      row.images = await uploadVenueImages(row.images);
     }
 
     // 2. Process orgIcon: upload data URLs to GCS, cap length for DB
@@ -1294,8 +1326,7 @@ app.put('/api/venues/:id', async (req, res) => {
       }
 
       if (row.images && Array.isArray(row.images)) {
-        const imageUrls = await Promise.all(row.images.map((img) => uploadToGCS(img, 'venues')));
-        row.images = JSON.stringify(imageUrls.filter(u => u !== null));
+        row.images = await uploadVenueImages(row.images);
       }
       if (row.orgIcon != null && row.orgIcon !== '') {
         if (row.orgIcon.startsWith('data:')) {
