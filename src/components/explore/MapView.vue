@@ -227,10 +227,16 @@ const markerIconUrl = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
     </g>
   </svg>
 `)}`;
-const MARKER_NORMAL_SIZE = 40;
-const MARKER_SELECTED_SIZE = 56;
+const MARKER_NORMAL_SIZE = 30;
+const MARKER_SELECTED_SIZE = 40;
 const SELECTED_MARKER_SVG_WIDTH = 48;
 const NORMAL_MARKER_SVG_WIDTH = 24;
+/** Trimmed viewBox height — pin tip sits at y=22; no padding below. */
+const MARKER_SVG_HEIGHT = 22;
+/** Selected pin includes venue preview popup to the right (extends to ~y=31). */
+const SELECTED_MARKER_SVG_HEIGHT = 32;
+const PIN_TIP_X = 12;
+const PIN_TIP_Y = 22;
 const MARKER_ZOOM_BASE = 11;
 const MARKER_MIN_SCALE = 1.5;
 const MARKER_MAX_SCALE = 2.2;
@@ -354,8 +360,8 @@ function buildMarkerIconUrl(venue?: Venue, isSelected = false, venueCount = 1): 
   const clampedCount = Math.max(1, Math.floor(venueCount || 1));
   const countLabel = clampedCount > 99 ? '99+' : String(clampedCount);
   const isMultiVenuePin = clampedCount > 1;
-  // Ensure selected popup (x + width) stays inside viewBox to avoid clipping.
   const svgWidth = isSelected ? SELECTED_MARKER_SVG_WIDTH : NORMAL_MARKER_SVG_WIDTH;
+  const svgHeight = isSelected ? SELECTED_MARKER_SVG_HEIGHT : MARKER_SVG_HEIGHT;
   const iconRadius = isSelected ? 4.2 : 3.8;
   const pinCountFontSize = clampedCount >= 10 ? 5 : 6.2;
   const pinCountY = 11.2;
@@ -386,7 +392,7 @@ function buildMarkerIconUrl(venue?: Venue, isSelected = false, venueCount = 1): 
       ? `<image href="${safeIcon}" xlink:href="${safeIcon}" x="${iconX}" y="${iconY}" width="${iconSize}" height="${iconSize}" preserveAspectRatio="xMidYMid slice" clip-path="url(#venueIconClip)" />`
       : `<text x="12" y="${pinCountY}" text-anchor="middle" font-size="${pinCountFontSize}" font-weight="700" fill="#ffffff" font-family="Arial, sans-serif">1</text>`);
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
-    <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${svgWidth}" height="34" viewBox="0 0 ${svgWidth} 34">
+    <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}">
       <defs>
         <clipPath id="venueIconClip">
           <circle cx="12" cy="9.5" r="${iconRadius}" />
@@ -408,12 +414,17 @@ function markerIconConfig(venue: Venue | undefined, isSelected = false, venueCou
   const delta = zoom - MARKER_ZOOM_BASE;
   const scale = Math.min(MARKER_MAX_SCALE, Math.max(MARKER_MIN_SCALE, 1 + (delta * 0.12)));
   const baseSize = isSelected ? MARKER_SELECTED_SIZE : MARKER_NORMAL_SIZE;
-  const size = Math.round(baseSize * scale);
-  const width = isSelected ? Math.round((size * SELECTED_MARKER_SVG_WIDTH) / NORMAL_MARKER_SVG_WIDTH) : size;
+  const scaledH = Math.round(baseSize * scale);
+  const svgWidth = isSelected ? SELECTED_MARKER_SVG_WIDTH : NORMAL_MARKER_SVG_WIDTH;
+  const svgHeight = isSelected ? SELECTED_MARKER_SVG_HEIGHT : MARKER_SVG_HEIGHT;
+  const scaledW = Math.round(scaledH * svgWidth / svgHeight);
   return {
     url: buildMarkerIconUrl(venue, isSelected, venueCount),
-    scaledSize: new google.maps.Size(width, size),
-    anchor: new google.maps.Point(size / 2, size),
+    scaledSize: new google.maps.Size(scaledW, scaledH),
+    anchor: new google.maps.Point(
+      Math.round(scaledW * PIN_TIP_X / svgWidth),
+      Math.round(scaledH * PIN_TIP_Y / svgHeight),
+    ),
   };
 }
 
