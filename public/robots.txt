@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://courts.theground.io/sitemap.xml
