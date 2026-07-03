@@ -1,0 +1,74 @@
+nvm: ~/.nvm/nvm.sh not found - skipped
+=== Attempt 1: default API URL ===
+Sitemap base URL: https://courts.theground.io
+API URL: https://courts.api.theground.io/staging
+Fetching https://courts.api.theground.io/staging/api/sports…
+Fetch failed:
+fetch failed
+  caused by: Connect Timeout Error (attempted address: courts.api.theground.io:443, timeout: 10000ms) [UND_ERR_CONNECT_TIMEOUT]
+Fetching https://courts.api.theground.io/staging/api/sports (attempt 2/3)…
+Fetch failed:
+fetch failed
+  caused by: Connect Timeout Error (attempted address: courts.api.theground.io:443, timeout: 10000ms) [UND_ERR_CONNECT_TIMEOUT]
+Fetching https://courts.api.theground.io/staging/api/sports (attempt 3/3)…
+generate-sitemap failed:
+GET https://courts.api.theground.io/staging/api/sports failed after 3 attempts:
+fetch failed
+  caused by: Connect Timeout Error (attempted address: courts.api.theground.io:443, timeout: 10000ms) [UND_ERR_CONNECT_TIMEOUT]
+
+Tips:
+  • Test API: curl -I https://courts.api.theground.io/staging/api/sports
+  • Local server: SITEMAP_API_URL=http://localhost:3001 npm run generate-sitemap
+  • Staging API:  SITEMAP_API_URL=https://courts.api.theground.io/staging npm run generate-sitemap
+  • Override base: SITEMAP_BASE_URL=https://courts.theground.io
+ATTEMPT_1_STATUS=failed
+
+=== Attempt 2: SITEMAP_API_URL=https://courts.api.theground.io/staging ===
+Sitemap base URL: https://courts.theground.io
+API URL: https://courts.api.theground.io/staging
+Fetching https://courts.api.theground.io/staging/api/sports…
+Fetch failed:
+fetch failed
+  caused by: Connect Timeout Error (attempted address: courts.api.theground.io:443, timeout: 10000ms) [UND_ERR_CONNECT_TIMEOUT]
+Fetching https://courts.api.theground.io/staging/api/sports (attempt 2/3)…
+Fetch failed:
+fetch failed
+  caused by: Connect Timeout Error (attempted address: courts.api.theground.io:443, timeout: 10000ms) [UND_ERR_CONNECT_TIMEOUT]
+Fetching https://courts.api.theground.io/staging/api/sports (attempt 3/3)…
+generate-sitemap failed:
+GET https://courts.api.theground.io/staging/api/sports failed after 3 attempts:
+fetch failed
+  caused by: Connect Timeout Error (attempted address: courts.api.theground.io:443, timeout: 10000ms) [UND_ERR_CONNECT_TIMEOUT]
+
+Tips:
+  • Test API: curl -I https://courts.api.theground.io/staging/api/sports
+  • Local server: SITEMAP_API_URL=http://localhost:3001 npm run generate-sitemap
+  • Staging API:  SITEMAP_API_URL=https://courts.api.theground.io/staging npm run generate-sitemap
+  • Override base: SITEMAP_BASE_URL=https://courts.theground.io
+ATTEMPT_2_STATUS=failed
+
+=== Attempt 3: SITEMAP_API_URL=http://localhost:3001 ===
+Sitemap base URL: https://courts.theground.io
+API URL: http://localhost:3001
+Fetching http://localhost:3001/api/sports…
+Fetch failed:
+fetch failed
+  caused by: connect ECONNREFUSED 127.0.0.1:3001 [ECONNREFUSED]
+Fetching http://localhost:3001/api/sports (attempt 2/3)…
+Fetch failed:
+fetch failed
+  caused by: connect ECONNREFUSED 127.0.0.1:3001 [ECONNREFUSED]
+Fetching http://localhost:3001/api/sports (attempt 3/3)…
+generate-sitemap failed:
+GET http://localhost:3001/api/sports failed after 3 attempts:
+fetch failed
+  caused by: connect ECONNREFUSED 127.0.0.1:3001 [ECONNREFUSED]
+
+Tips:
+  • Test API: curl -I http://localhost:3001/api/sports
+  • Local server: SITEMAP_API_URL=http://localhost:3001 npm run generate-sitemap
+  • Staging API:  SITEMAP_API_URL=https://courts.api.theground.io/staging npm run generate-sitemap
+  • Override base: SITEMAP_BASE_URL=https://courts.theground.io
+ATTEMPT_3_STATUS=failed
+
+SITEMAP_CREATED=no

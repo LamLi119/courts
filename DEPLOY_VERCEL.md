@@ -4,6 +4,8 @@ The Vercel project serves **only** the Vite build (`dist/`). The browser calls t
 
 API host: **`https://courts.api.theground.io`**
 
+**Docs index:** [docs/README.md](docs/README.md) · **Features:** [docs/FEATURES.md](docs/FEATURES.md)
+
 **Updating the VM API (staging vs prod):** see [docs/VM_SERVER_UPDATE.md](docs/VM_SERVER_UPDATE.md).
 
 | Path on API host | Backend |

@@ -1,20 +1,49 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Courts Finder
 
-# Run and deploy your AI Studio app
+Discover sports courts in Hong Kong — map, list, venue details, and admin tools for venue managers.
 
-This contains everything you need to run your app locally.
+**Production:** [courts.theground.io](https://courts.theground.io)
 
-View your app in AI Studio: https://ai.studio/apps/drive/1zjcTbSs-GM8mHHrdxhum_TWJKfUasDSc
+## Documentation
 
-## Run Locally
+See **[docs/README.md](docs/README.md)** for the full doc index:
 
-**Prerequisites:**  Node.js
+- [Features & technical reference](docs/FEATURES.md)
+- [Deploy frontend (Vercel)](DEPLOY_VERCEL.md)
+- [Update API server (GCP VM)](docs/VM_SERVER_UPDATE.md)
+- [GCS map icons / CORS](docs/GCS_MAP_ICONS.md)
 
+## Run locally
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+**Prerequisites:** Node.js 20+
+
+```bash
+npm install
+```
+
+Create `.env`:
+
+```env
+VITE_API_URL=http://localhost:3001
+VITE_GOOGLE_MAPS_API_KEY=your-key
+```
+
+Terminal 1 — API:
+
+```bash
+npm run server
+```
+
+Terminal 2 — frontend:
+
+```bash
+npm run dev
+```
+
+Open `http://localhost:3000`.
+
+To use the staging API instead of a local server, set `VITE_API_URL=https://courts.api.theground.io/staging`.
+
+## Stack
+
+Vue 3 · TypeScript · Vite · Tailwind · Express · MySQL (Cloud SQL) · GCS · Vercel · GCP VM
