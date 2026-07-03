@@ -407,7 +407,8 @@ const leftListVenues = computed(() =>
           </p>
         </div>
         <template v-else>
-          <CourtCard v-for="venue in leftListVenues" :key="venue.id" :venue="venue"
+          <CourtCard v-for="(venue, index) in leftListVenues" :key="venue.id" :venue="venue"
+            :priorityImage="index === 0"
             :onClick="() => onSelectVenue(venue)" :onViewDetail="() => onViewDetail(venue)" :language="language" :t="t"
             :darkMode="darkMode" :isSaved="savedVenues.includes(venue.id)" :onToggleSave="() => toggleSave(venue.id)" />
         </template>

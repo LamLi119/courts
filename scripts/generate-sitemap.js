@@ -14,6 +14,7 @@ dotenv.config();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 const OUT_PATH = path.join(ROOT, 'public', 'sitemap.xml');
+const BOOTSTRAP_PATH = path.join(ROOT, 'public', 'venues-bootstrap.json');
 const CACHE_DIR = path.join(ROOT, 'scripts', '.sitemap-cache');
 
 const BASE_URL = (process.env.SITEMAP_BASE_URL || 'https://courts.theground.io').replace(/\/$/, '');
@@ -169,6 +170,22 @@ async function writeCache(name, data) {
   fs.writeFileSync(path.join(CACHE_DIR, `${name}.json`), JSON.stringify(data));
 }
 
+function stripVenueForBootstrap(venue) {
+  if (!venue || typeof venue !== 'object') return venue;
+  const { admin_password, has_admin_password, ...rest } = venue;
+  return rest;
+}
+
+function writeVenuesBootstrap({ sports, venues }) {
+  const payload = {
+    generatedAt: new Date().toISOString(),
+    sports: sports || [],
+    venues: (venues || []).map(stripVenueForBootstrap),
+  };
+  fs.mkdirSync(path.dirname(BOOTSTRAP_PATH), { recursive: true });
+  fs.writeFileSync(BOOTSTRAP_PATH, JSON.stringify(payload));
+}
+
 async function loadData({ cacheOnly = false } = {}) {
   if (cacheOnly) {
     console.log('Using cached API data from scripts/.sitemap-cache/');
@@ -238,12 +255,14 @@ async function main() {
 
   const { sports, venues } = await loadData({ cacheOnly });
   const xml = buildSitemap({ sports, venues });
+  writeVenuesBootstrap({ sports, venues });
 
   fs.mkdirSync(path.dirname(OUT_PATH), { recursive: true });
   fs.writeFileSync(OUT_PATH, xml, 'utf8');
 
   const urlCount = (xml.match(/<loc>/g) || []).length;
   console.log(`Wrote ${urlCount} URLs to public/sitemap.xml`);
+  console.log(`Wrote venues bootstrap (${(venues || []).length} venues) to public/venues-bootstrap.json`);
 }
 
 main().catch((err) => {

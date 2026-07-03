@@ -1135,9 +1135,10 @@ const goNextVenueFromDetail = async () => {
         class="space-y-3"
       >
         <MobileVenueCard
-          v-for="venue in venues"
+          v-for="(venue, index) in venues"
           :key="venue.id"
           :venue="venue"
+          :priorityImage="index === 0"
           :language="language"
           :t="t"
           :darkMode="darkMode"

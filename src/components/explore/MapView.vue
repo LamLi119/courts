@@ -79,11 +79,19 @@ onMounted(() => {
   window.addEventListener('google-maps-auth-error', onGoogleMapsAuthError as EventListener);
   window.addEventListener('google-maps-ready', onGoogleMapsReady as EventListener);
 
-  if (typeof google !== 'undefined' && google.maps) {
-    initMap();
+  const startMaps = () => {
+    if (typeof google !== 'undefined' && google.maps) {
+      initMap();
+    } else {
+      mapError.value = null;
+      loadGoogleMapsScript();
+    }
+  };
+
+  if ('requestIdleCallback' in window) {
+    requestIdleCallback(startMaps, { timeout: 2500 });
   } else {
-    mapError.value = null;
-    loadGoogleMapsScript();
+    setTimeout(startMaps, 1500);
   }
 });
 

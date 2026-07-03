@@ -30,11 +30,21 @@ export default defineConfig(({ mode }) => {
       },
     },
     plugins: [
+      {
+        name: 'inject-last-modified',
+        transformIndexHtml(html) {
+          const today = new Date().toISOString().slice(0, 10);
+          return html.replace(
+            /<meta name="last-modified" content="[^"]*">/,
+            `<meta name="last-modified" content="${today}">`
+          );
+        },
+      },
       vue(),
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['green-G.svg', 'placeholder.svg'],
+        includeAssets: ['green-G.svg', 'placeholder.svg', 'venues-bootstrap.json'],
         manifest: {
           name: 'Courts | Find Sports Courts in Hong Kong',
           short_name: 'Courts',
