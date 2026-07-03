@@ -62,7 +62,8 @@ Verify in DevTools → Network:
 On a machine with `gsutil` access to bucket `courts-image-bucket`:
 
 ```bash
-gsutil cors set scripts/gcs-cors.json gs://courts-image-bucket
+npm run gcs:cors
+# or: gsutil cors set scripts/gcs-cors.json gs://courts-image-bucket
 ```
 
 Add your Vercel preview hostname to `scripts/gcs-cors.json` first if it is not `court-git-dev-theground.vercel.app`. See `docs/GCS_MAP_ICONS.md`.

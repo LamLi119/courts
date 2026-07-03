@@ -18,6 +18,12 @@ Someone with access to bucket **`courts-image-bucket`** runs:
 
 ```bash
 cd /path/to/court
+npm run gcs:cors
+```
+
+Or with `gsutil`:
+
+```bash
 gsutil cors set scripts/gcs-cors.json gs://courts-image-bucket
 gsutil cors get gs://courts-image-bucket
 ```

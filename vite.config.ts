@@ -5,6 +5,7 @@ import vue from '@vitejs/plugin-vue';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import { buildVenueOgMeta, injectVenueOgIntoHtml } from './lib/venueOgMeta.js';
+import { injectLastModified } from './lib/injectLastModified.js';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
@@ -34,7 +35,7 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['green-G.svg', 'placeholder.svg'],
+        includeAssets: ['green-G.svg', 'placeholder.svg', 'venues-bootstrap.json'],
         manifest: {
           name: 'Courts | Find Sports Courts in Hong Kong',
           short_name: 'Courts',
@@ -119,7 +120,7 @@ export default defineConfig(({ mode }) => {
               if (!r.ok) {
                 return fs.readFile(indexPath, 'utf-8', (err, html) => {
                   if (err) return next(err);
-                  sendHtml(html);
+                  sendHtml(injectLastModified(html));
                 });
               }
               const venue = await r.json();
@@ -133,12 +134,12 @@ export default defineConfig(({ mode }) => {
               });
               fs.readFile(indexPath, 'utf-8', (err, html) => {
                 if (err) return next(err);
-                sendHtml(injectVenueOgIntoHtml(html, meta));
+                sendHtml(injectLastModified(injectVenueOgIntoHtml(html, meta)));
               });
             } catch {
               return fs.readFile(indexPath, 'utf-8', (err, html) => {
                 if (err) return next(err);
-                sendHtml(html);
+                sendHtml(injectLastModified(html));
               });
             }
           });
@@ -151,9 +152,16 @@ export default defineConfig(({ mode }) => {
             fs.readFile(indexPath, 'utf-8', (err, html) => {
               if (err) return next(err);
               res.setHeader('Content-Type', 'text/html');
-              res.end(html);
+              res.end(injectLastModified(html));
             });
           });
+        },
+      },
+      {
+        name: 'inject-last-modified',
+        enforce: 'post',
+        transformIndexHtml(html) {
+          return injectLastModified(html);
         },
       },
     ],

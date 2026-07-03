@@ -15,6 +15,8 @@ const props = defineProps<{
   isSaved: boolean;
   onToggleSave: () => void;
   isMobile?: boolean;
+  /** First above-the-fold card: eager-load image for LCP. */
+  priorityImage?: boolean;
 }>();
 
 const isExpanded = ref(false);
@@ -69,7 +71,10 @@ const toggleExpand = (e: MouseEvent) => {
             :src="venue.images[0] || '/placeholder.svg'"
             class="w-full h-full object-cover"
             :alt="venue.name"
-            loading="lazy"
+            width="64"
+            height="64"
+            :loading="priorityImage ? 'eager' : 'lazy'"
+            :fetchpriority="priorityImage ? 'high' : undefined"
           />
           <span v-if="venue.membership_enabled" class="absolute top-0 left-0 rounded-br-md px-1.5 py-0.5 text-[12px] font-bold text-white bg-[#007a67] shadow-sm" :title="t('specialOffer')">
             {{ t('specialOffer') }}
@@ -143,7 +148,10 @@ const toggleExpand = (e: MouseEvent) => {
         :src="venue.images[0] || '/placeholder.svg'"
         :alt="imageAlt"
         class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
-        loading="lazy"
+        width="400"
+        height="176"
+        :loading="priorityImage ? 'eager' : 'lazy'"
+        :fetchpriority="priorityImage ? 'high' : undefined"
       />
       <span v-if="venue.membership_enabled" class="absolute top-2 left-2 rounded-md px-2 py-1 text-[11px] font-bold text-white bg-[#007a67] shadow-md z-0" :title="t('specialOffer')">
         {{ t('specialOffer') }}

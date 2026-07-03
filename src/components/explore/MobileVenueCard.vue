@@ -13,6 +13,8 @@ const props = defineProps<{
   isSaved: boolean;
   onToggleSave: () => void;
   onViewDetails: () => void;
+  /** First above-the-fold card: eager-load image for LCP. */
+  priorityImage?: boolean;
 }>();
 
 const imageAlt = computed(() => getVenueImageAlt(props.venue));
@@ -52,8 +54,15 @@ const handleShare = async () => {
       :class="darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'">
       <div class="flex items-center gap-4 px-4 pt-3 pb-2">
         <div class="relative w-20 h-20 rounded-[16px] overflow-hidden flex-shrink-0 bg-gray-200 dark:bg-gray-700">
-          <img :src="venue.images[0] || '/placeholder.svg'" :alt="imageAlt" class="w-full h-full object-cover"
-            loading="lazy" />
+          <img
+            :src="venue.images[0] || '/placeholder.svg'"
+            :alt="imageAlt"
+            class="w-full h-full object-cover"
+            width="80"
+            height="80"
+            :loading="priorityImage ? 'eager' : 'lazy'"
+            :fetchpriority="priorityImage ? 'high' : undefined"
+          />
           <span v-if="venue.membership_enabled" class="absolute top-0 left-0 rounded-br-md px-1.5 py-0.5 text-[9px] font-bold text-white bg-[#007a67] shadow-sm" :title="t('specialOffer')">
             {{ t('specialOffer') }}
           </span>

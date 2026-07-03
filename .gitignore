@@ -11,6 +11,7 @@ node_modules
 dist
 dist-ssr
 public/sitemap.xml
+public/venues-bootstrap.json
 scripts/.sitemap-cache/
 *.local
 .env
