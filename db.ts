@@ -12,7 +12,7 @@ if (import.meta.env.DEV && !API_BASE) {
 }
 
 // DB uses quoted camelCase ("mtrStation", "socialLink", "orgIcon"). App uses org_icon.
-function rowToVenue(row: any): Venue {
+export function rowToVenue(row: any): Venue {
   if (!row) return row;
 
   // Parse images from string back to array

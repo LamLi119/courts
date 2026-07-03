@@ -22,6 +22,12 @@ import VenueForm from './components/admin/VenueForm.vue';
 import AdminPage from './components/admin/AdminPage.vue';
 import { useAuth } from './composables/auth';
 import { useGrindUpcomingEvents } from './composables/useGrindUpcomingEvents';
+import {
+  hydrateInitialVenueData,
+  setVenuesCache,
+} from './utils/venuesBootstrap';
+
+const initialVenueData = hydrateInitialVenueData();
 
 const route = useRoute();
 const { refresh: refreshGrindUpcomingEvents } = useGrindUpcomingEvents();
@@ -56,11 +62,11 @@ const isAdminLoggingIn = ref(false);
 const showVenueForm = ref(false);
 const editingVenue = ref<Venue | null>(null);
 const venueToDelete = ref<Venue | null>(null);
-const isLoading = ref(true);
+const isLoading = ref(!initialVenueData.hasData);
 const mobileViewMode = ref<'map' | 'list'>('list');
 
-const venues = ref<Venue[]>([]);
-const sports = ref<{ id: number; name: string; name_zh?: string | null; slug: string }[]>([]);
+const venues = ref<Venue[]>(initialVenueData.venues);
+const sports = ref<{ id: number; name: string; name_zh?: string | null; slug: string }[]>(initialVenueData.sports);
 const savedVenues = ref<number[]>([]);
 
 const sportDisplayName = (s: { name: string; name_zh?: string | null }) =>
@@ -79,8 +85,9 @@ const locationVenueIds = ref<number[] | null>(null);
 const darkMode = ref(localStorage.getItem('pickleball_darkmode') === 'true');
 const isMobile = ref(typeof window !== 'undefined' ? window.innerWidth < 1024 : false);
 
-const VENUES_CACHE_KEY = 'pickleball_venues_cache';
-const VENUES_CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutes
+const invalidateVenuesCache = () => {
+  sessionStorage.removeItem('pickleball_venues_cache');
+};
 
 const adminStatus = ref<{ type: 'none' | 'super' | 'court'; allowedIds: number[] }>({ type: 'none', allowedIds: [] });
 const isSuperAdmin = computed(() => adminStatus.value.type === 'super');
@@ -91,59 +98,30 @@ function canEditVenue(venueId: number): boolean {
   if (adminStatus.value.type === 'court') return adminStatus.value.allowedIds.includes(venueId);
   return false;
 }
-function setVenuesCache(data: Venue[], ts: number): void {
-  try {
-    sessionStorage.setItem(VENUES_CACHE_KEY, JSON.stringify({ data, ts }));
-  } catch (e) {
-    if (e instanceof DOMException && (e.name === 'QuotaExceededError' || e.code === 22)) {
-      try {
-        sessionStorage.removeItem(VENUES_CACHE_KEY);
-      } catch {
-        // ignore
-      }
-    }
-    // Skip cache when quota exceeded or any other error; app works without cache
-  }
-}
 
 const loadData = async () => {
+  const hadData = venues.value.length > 0;
   try {
-    // Show cached data immediately for faster repeat loads
-    const cachedRaw = sessionStorage.getItem(VENUES_CACHE_KEY);
-    if (cachedRaw) {
-      try {
-        const { data: cached, ts } = JSON.parse(cachedRaw);
-        if (Array.isArray(cached) && typeof ts === 'number' && Date.now() - ts < VENUES_CACHE_TTL_MS) {
-          venues.value = cached;
-          isLoading.value = false;
-          // Revalidate in background
-          const [fresh, sportsList] = await Promise.all([db.getVenues(), db.getSports()]);
-          if (fresh?.length !== undefined) {
-            venues.value = fresh;
-            setVenuesCache(fresh, Date.now());
-          }
-          if (sportsList?.length !== undefined) sports.value = sportsList;
-          return;
-        }
-      } catch {
-        // ignore invalid cache
-      }
+    if (!hadData) {
+      isLoading.value = true;
     }
 
-    isLoading.value = true;
-    const [data, sportsList] = await Promise.all([db.getVenues(), db.getSports()]);
-    venues.value = data || [];
-    sports.value = sportsList || [];
-    setVenuesCache(venues.value, Date.now());
+    const [fresh, sportsList] = await Promise.all([db.getVenues(), db.getSports()]);
+    if (fresh?.length !== undefined) {
+      venues.value = fresh;
+      setVenuesCache(fresh, sportsList || [], Date.now());
+    }
+    if (sportsList?.length !== undefined) {
+      sports.value = sportsList;
+    }
   } catch (err) {
     console.error('Error fetching venues from DB:', err);
+    if (!venues.value.length) {
+      console.error('No cached venues available after API failure.');
+    }
   } finally {
     isLoading.value = false;
   }
-};
-
-const invalidateVenuesCache = () => {
-  sessionStorage.removeItem(VENUES_CACHE_KEY);
 };
 
 const handleResize = () => {
@@ -259,11 +237,10 @@ onMounted(() => {
       if (isAdminPath()) currentTab.value = 'admin';
     } catch {
       adminStatus.value = { type: 'none', allowedIds: [] };
-    } finally {
-      await loadData();
     }
   };
-  restoreAdminSession();
+  void loadData();
+  void restoreAdminSession();
 
   try {
     const saved = localStorage.getItem('pickleball_saved_ids');

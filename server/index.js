@@ -1106,6 +1106,7 @@ app.get('/api/sports', async (req, res) => {
         rows = (r || []).map((s) => ({ ...s, name_zh: null }));
       } else throw e;
     }
+    res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=3600');
     res.json(rows);
   } catch (err) {
     if (err.code === 'ER_NO_SUCH_TABLE') return res.json([]);
@@ -1266,6 +1267,9 @@ app.get('/api/venues', async (req, res) => {
       rows.forEach((r) => { r.sport_data = byVenue[r.id] || []; });
     } catch (_) {}
     rows.forEach((r) => attachHasAdminPassword(r, includePasswords));
+    if (!includePasswords) {
+      res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
+    }
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: dbErrorMessage(err) });
