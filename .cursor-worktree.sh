@@ -1,0 +1,21 @@
+#!/bin/bash
+set -eu
+export PATH="/home/lily119/.asdf/shims:/usr/local/bin:/usr/bin:/bin"
+WORKTREE_ID="sitemap-f3a8b2c1"
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+REPO_BASENAME="$(basename "$REPO_ROOT")"
+REPO_HASH="$(printf '%s' "$REPO_ROOT" | sha256sum | cut -c1-12)"
+REPO_KEY="${REPO_BASENAME}-${REPO_HASH}"
+WORKTREE_SET_DIR="$HOME/.cursor/worktrees/$WORKTREE_ID"
+WORKTREE_DIR="$WORKTREE_SET_DIR/$REPO_KEY"
+mkdir -p "$WORKTREE_SET_DIR"
+if [ -d "$WORKTREE_DIR" ]; then echo "ERROR: worktree directory already exists: $WORKTREE_DIR" >&2; exit 1; fi
+WORKTREE_START_REF="${WORKTREE_START_REF:-HEAD}"
+git worktree add --detach "$WORKTREE_DIR" "$WORKTREE_START_REF"
+HEAD_COMMIT="$(git -C "$WORKTREE_DIR" rev-parse HEAD)"
+echo "WORKTREE_ID=$WORKTREE_ID"
+echo "REPO_KEY=$REPO_KEY"
+echo "WORKTREE_PATH=$WORKTREE_DIR"
+echo "REPO_ROOT=$REPO_ROOT"
+echo "HEAD_COMMIT=$HEAD_COMMIT"
+echo "WORKTREE_START_REF=$WORKTREE_START_REF"

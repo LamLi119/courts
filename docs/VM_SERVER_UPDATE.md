@@ -19,11 +19,31 @@ Frontend (Vercel / local) is separate — see [DEPLOY_VERCEL.md](../DEPLOY_VERCE
 
 Both services run the same repo (`server/run-local.js`) with different env files. Restarting one does **not** update the other.
 
+**Both services must use the same code folder** (`/opt/courts-new`). If prod points at another path (e.g. `/home/team/court/court`), `git pull` in `/opt/courts-new` will not update production.
+
 Confirm paths on your VM:
 
 ```bash
-grep WorkingDirectory /etc/systemd/system/courts-api-staging.service
-grep WorkingDirectory /etc/systemd/system/courts-api-prod.service
+sudo systemctl cat courts-api-staging | grep WorkingDirectory
+sudo systemctl cat courts-api-prod | grep WorkingDirectory
+```
+
+Both should show `WorkingDirectory=/opt/courts-new`. To fix prod:
+
+```bash
+sudo nano /etc/systemd/system/courts-api-prod.service
+# set WorkingDirectory=/opt/courts-new
+sudo systemctl daemon-reload
+sudo systemctl restart courts-api-prod
+```
+
+Or use an override:
+
+```bash
+sudo mkdir -p /etc/systemd/system/courts-api-prod.service.d
+echo -e '[Service]\nWorkingDirectory=/opt/courts-new' | sudo tee /etc/systemd/system/courts-api-prod.service.d/override.conf
+sudo systemctl daemon-reload
+sudo systemctl restart courts-api-prod
 ```
 
 ---
@@ -137,10 +157,10 @@ HOST=127.0.0.1
 MYSQL_HOST=...
 MYSQL_PORT=3306
 MYSQL_USER=...
-MYSQL_PASSWORD=...
+MYSQL_PASSWORD='...'   # use single quotes if password has $ ! & etc.
 MYSQL_DATABASE=...   # courts-db (prod) or courts_staging (staging)
 
-GCS_BUCKET_NAME=courts-image-bucket
+GCS_BUCKET_NAME=courts-image-bucket   # no spaces around =
 THE_GRIND_BACKEND_URL=https://api.thegrind-app.com
 COURTS_FRONTEND_URL=https://courts.theground.io
 ```
@@ -152,10 +172,10 @@ cd /opt/courts-new
 git pull
 npm ci
 sudo systemctl restart courts-api-staging
-bash scripts/check-gcs-upload.sh /etc/courts/staging.env
+sudo bash scripts/check-gcs-upload.sh /etc/courts/staging.env
 ```
 
-If the check script fails, add `GCS_BUCKET_NAME=courts-image-bucket` to staging env (copy from prod if needed) and grant the VM service account **Storage Object Creator** on the bucket.
+Run the check script from `/opt/courts-new` with `sudo` (env files are root-readable). If the check script fails, add `GCS_BUCKET_NAME=courts-image-bucket` to staging env (copy from prod if needed) and grant the VM service account **Storage Object Creator** on the bucket.
 
 Do **not** set `PROXY_SECRET` when the browser calls the API directly (causes `401`).
 
@@ -179,11 +199,15 @@ Do **not** set `PROXY_SECRET` when the browser calls the API directly (causes `4
 |---------|--------|
 | Service won’t start | `sudo journalctl -u courts-api-staging -n 30` |
 | `EADDRINUSE :3002` on prod | `prod.env` has `PORT=3001`, not `3002` |
+| 502 Bad Gateway (OPTIONS/PUT) | Prod API down — `sudo systemctl status courts-api-prod`; nothing on `:3001` |
+| Prod not updated after `git pull` | `WorkingDirectory` still points at old folder — use `/opt/courts-new` |
 | `CHDIR` error | `WorkingDirectory` in systemd doesn’t exist — fix path |
 | HTTPS 404 | nginx config — `/staging/` → 3002, `/` → 3001 |
 | HTTPS timeout | VM network tag `courts-api` + firewall 80/443 |
 | `401` from API | Remove `PROXY_SECRET` from env file |
 | Save OK but `images: "[]"` | Add `GCS_BUCKET_NAME=courts-image-bucket` to env; check `journalctl` for `GCS upload error` |
+| `Image upload failed` / stream destroyed | Remove stale `api/*.json` in code folder; use VM service account; check bucket permissions |
+| `MYSQL_PASSWORD: command not found` | Quote password in env file: `MYSQL_PASSWORD='...'` |
 | `Image upload failed` on save | VM service account needs **Storage Object Creator** on `courts-image-bucket` |
 
 ### Service status (both)
