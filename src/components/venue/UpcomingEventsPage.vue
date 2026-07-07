@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { onMounted } from 'vue';
-import { useRouter } from 'vue-router';
 import type { Language } from '../../../types';
 import VenueUpcomingEvents from './VenueUpcomingEvents.vue';
 import { useGrindUpcomingEvents } from '../../composables/useGrindUpcomingEvents';
@@ -11,7 +10,6 @@ defineProps<{
   t: (key: string) => string;
 }>();
 
-const router = useRouter();
 const { loading, error, events, refresh } = useGrindUpcomingEvents();
 
 onMounted(() => {
@@ -22,11 +20,13 @@ onMounted(() => {
 
 <template>
   <div
-    class="min-h-screen"
+    class="w-full min-h-screen min-w-0"
     :class="darkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'"
   >
-    <div class="mx-auto max-w-5xl px-4 py-6">
+    <div class="w-full py-6">
       <VenueUpcomingEvents
+        class="w-full"
+        standalone
         :events="events"
         :loading="loading"
         :error="error"
