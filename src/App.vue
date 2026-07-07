@@ -18,6 +18,7 @@ import DesktopView from './components/explore/DesktopView.vue';
 import MobileView from './components/explore/MobileView.vue';
 import MobileNav from './components/layout/MobileNav.vue';
 import VenueDetail from './components/venue/VenueDetail.vue';
+import UpcomingEventsPage from './components/venue/UpcomingEventsPage.vue';
 import VenueForm from './components/admin/VenueForm.vue';
 import AdminPage from './components/admin/AdminPage.vue';
 import { useAuth } from './composables/auth';
@@ -209,7 +210,7 @@ watch(
       clearInterval(grindUpcomingPollTimer);
       grindUpcomingPollTimer = null;
     }
-    if (name === 'home') {
+    if (name === 'home' || name === 'upcoming-events') {
       void refreshGrindUpcomingEvents();
       grindUpcomingPollTimer = setInterval(() => {
         void refreshGrindUpcomingEvents();
@@ -621,6 +622,13 @@ const handleSaveVenue = async (venueData: any) => {
       :darkMode="darkMode"
     />
 
+    <UpcomingEventsPage
+      v-else-if="route.name === 'upcoming-events'"
+      :language="language"
+      :t="t"
+      :darkMode="darkMode"
+    />
+
     <Header
       v-else
       :language="language"
@@ -647,7 +655,7 @@ const handleSaveVenue = async (venueData: any) => {
       :hideNavTabs="!!selectedVenue && (route.name === 'venue' || showDesktopDetail)"
     />
 
-    <main v-if="route.name !== 'login' && route.name !== 'signup' && route.name !== 'token-login' && route.name !== 'complete-phone'" class="h-full">
+    <main v-if="route.name !== 'login' && route.name !== 'signup' && route.name !== 'token-login' && route.name !== 'complete-phone' && route.name !== 'upcoming-events'" class="h-full">
       <AdminPage
         v-if="currentTab === 'admin' && isAnyAdmin && !selectedVenue"
         :venues="venues"
