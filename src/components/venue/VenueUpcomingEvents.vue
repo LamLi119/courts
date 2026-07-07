@@ -16,6 +16,8 @@ const props = defineProps<{
   darkMode: boolean;
   language: Language;
   t: (key: string) => string;
+  /** Full-width layout for /upcoming-events page */
+  standalone?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -60,8 +62,11 @@ function goingLabel(n: number): string {
 </script>
 
 <template>
-  <section class="venue-upcoming-events" aria-labelledby="venue-upcoming-events-heading">
-    <div class="mb-2 flex flex-row items-center justify-between gap-3">
+  <section class="venue-upcoming-events w-full" aria-labelledby="venue-upcoming-events-heading">
+    <div
+      class="mb-2 flex flex-row items-center justify-between gap-3"
+      :class="standalone ? 'px-4 md:px-6' : ''"
+    >
       <h2
         id="venue-upcoming-events-heading"
         class="text-[18px] md:text-[20px] font-black tracking-tight m-0"
@@ -80,7 +85,11 @@ function goingLabel(n: number): string {
       </a>
     </div>
 
-    <div v-if="loading" class="flex gap-3 overflow-x-auto pb-2 scrollbar-none">
+    <div
+      v-if="loading"
+      class="flex gap-3 overflow-x-auto pb-2 scrollbar-none"
+      :class="standalone ? 'px-4 md:px-6' : ''"
+    >
       <div v-for="i in 4" :key="i" class="w-[260px] shrink-0">
         <div
           class="rounded-[14px] border overflow-hidden animate-pulse"
@@ -99,7 +108,10 @@ function goingLabel(n: number): string {
     <div
       v-else-if="error"
       class="py-6 text-center rounded-[14px] border"
-      :class="darkMode ? 'border-gray-700 bg-gray-800/40' : 'border-gray-200 bg-gray-50'"
+      :class="[
+        standalone ? 'mx-4 md:mx-6' : '',
+        darkMode ? 'border-gray-700 bg-gray-800/40' : 'border-gray-200 bg-gray-50',
+      ]"
     >
       <p class="text-[14px] mb-3" :class="darkMode ? 'text-gray-400' : 'text-gray-600'">
         {{ t('eventsCouldNotLoad') }}
@@ -113,16 +125,23 @@ function goingLabel(n: number): string {
       </button>
     </div>
 
-    <div v-else-if="events.length === 0" class="py-6 text-center text-[14px]" :class="darkMode ? 'text-gray-500' : 'text-gray-500'">
+    <div
+      v-else-if="events.length === 0"
+      class="py-6 text-center text-[14px]"
+      :class="[standalone ? 'px-4 md:px-6' : '', darkMode ? 'text-gray-500' : 'text-gray-500']"
+    >
       {{ t('noUpcomingEvents') }}
     </div>
 
-    <div v-else class="group relative -mx-0.5">
+    <div v-else class="group relative w-full" :class="standalone ? '' : '-mx-0.5'">
       <button
         v-show="canScrollLeft"
         type="button"
-        class="absolute left-0 top-[42%] z-10 hidden md:flex size-9 -translate-y-1/2 items-center justify-center rounded-full shadow-md transition-opacity hover:opacity-90"
-        :class="darkMode ? 'bg-gray-700 text-white' : 'bg-white text-gray-900'"
+        class="absolute top-[42%] z-10 hidden md:flex size-9 -translate-y-1/2 items-center justify-center rounded-full shadow-md transition-opacity hover:opacity-90"
+        :class="[
+          standalone ? 'left-4 md:left-6' : 'left-0',
+          darkMode ? 'bg-gray-700 text-white' : 'bg-white text-gray-900',
+        ]"
         aria-label="Scroll left"
         @click="scroll('left')"
       >
@@ -131,8 +150,11 @@ function goingLabel(n: number): string {
       <button
         v-show="canScrollRight"
         type="button"
-        class="absolute right-0 top-[42%] z-10 hidden md:flex size-9 -translate-y-1/2 items-center justify-center rounded-full shadow-md transition-opacity hover:opacity-90"
-        :class="darkMode ? 'bg-gray-700 text-white' : 'bg-white text-gray-900'"
+        class="absolute top-[42%] z-10 hidden md:flex size-9 -translate-y-1/2 items-center justify-center rounded-full shadow-md transition-opacity hover:opacity-90"
+        :class="[
+          standalone ? 'right-4 md:right-6' : 'right-0',
+          darkMode ? 'bg-gray-700 text-white' : 'bg-white text-gray-900',
+        ]"
         aria-label="Scroll right"
         @click="scroll('right')"
       >
@@ -142,6 +164,7 @@ function goingLabel(n: number): string {
       <div
         ref="scrollContainer"
         class="scrollbar-none flex gap-3 overflow-x-auto p-0.5 pb-2"
+        :class="standalone ? 'px-4 md:px-6' : ''"
         @scroll="updateScrollState"
       >
         <a
