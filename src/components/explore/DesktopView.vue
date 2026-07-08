@@ -2,9 +2,13 @@
 import { computed, defineAsyncComponent, ref, watch, nextTick } from 'vue';
 import type { Venue, Language, AppTab } from '../../../types';
 import { getStationDisplayName } from '../../utils/mtrStations';
+import {
+  HK_DISTRICTS,
+  HK_REGION_LABELS,
+  getDistrictDisplayName,
+  type HkRegion,
+} from '../../utils/hkDistricts';
 import CourtCard from './CourtCard.vue';
-import AppFooter from '../layout/AppFooter.vue';
-
 const props = defineProps<{
   venues: Venue[];
   selectedVenue: Venue | null;
@@ -14,6 +18,8 @@ const props = defineProps<{
   setSearchQuery: (s: string) => void;
   mtrFilter: string[];
   setMtrFilter: (arr: string[]) => void;
+  districtFilter: string[];
+  setDistrictFilter: (arr: string[]) => void;
   distanceFilter: string;
   setDistanceFilter: (s: string) => void;
   language: Language;
@@ -44,17 +50,40 @@ const props = defineProps<{
   hasLocationFilter?: boolean;
   /** Clears the location filter so the full list can show again. */
   onClearLocationFilter?: () => void;
+  /** When true, used inside the landing page (fixed height, no map footer). */
+  embedded?: boolean;
 }>();
+
+const shellClass = computed(() =>
+  props.embedded
+    ? [
+        'flex flex-col lg:flex-row w-full min-w-0 max-w-full h-[min(80vh,720px)] overflow-hidden',
+        'max-lg:rounded-none max-lg:border-x-0',
+        'lg:rounded-2xl lg:border shadow-lg',
+        props.darkMode ? 'border-gray-700' : 'border-gray-200',
+      ]
+    : 'flex w-full min-w-0 h-[calc(100vh-64px)] overflow-hidden'
+);
+
+const sidebarClass = computed(() =>
+  props.embedded
+    ? 'w-full lg:w-[400px] xl:w-[450px] flex-shrink-0 border-b lg:border-b-0 lg:border-r transition-colors flex flex-col max-lg:max-h-[45%]'
+    : 'w-[400px] xl:w-[450px] flex-shrink-0 border-r transition-colors flex flex-col'
+);
 
 const MapView = defineAsyncComponent(() => import('./MapView.vue'));
 
 const showFilterPanel = ref(false);
 const showMtrDropdown = ref(false);
+const showDistrictDropdown = ref(false);
 const showSportDropdown = ref(false);
 const showDistanceDropdown = ref(false);
 const mtrSearchQuery = ref('');
+const districtSearchQuery = ref('');
 const draftMtrFilter = ref<string[]>([]);
+const draftDistrictFilter = ref<string[]>([]);
 const draftSportFilter = ref<string[]>([]);
+const REGION_ORDER: HkRegion[] = ['hk-island', 'kowloon', 'new-territories'];
 const mapViewRef = ref<{ clearPins?: () => void; syncPins?: () => void; resetView?: () => void } | null>(null);
 const locationVenues = ref<Venue[] | null>(null);
 
@@ -91,9 +120,12 @@ watch(
   (open) => {
     if (open) {
       draftMtrFilter.value = [...props.mtrFilter];
+      draftDistrictFilter.value = [...props.districtFilter];
       draftSportFilter.value = [...props.sportFilter];
       mtrSearchQuery.value = '';
+      districtSearchQuery.value = '';
       showMtrDropdown.value = false;
+      showDistrictDropdown.value = false;
       showSportDropdown.value = false;
       showDistanceDropdown.value = false;
     }
@@ -106,6 +138,64 @@ const toggleMtrStation = (station: string) => {
   } else {
     draftMtrFilter.value = [...draftMtrFilter.value, station];
   }
+};
+
+const toggleDistrict = (slug: string) => {
+  if (draftDistrictFilter.value.includes(slug)) {
+    draftDistrictFilter.value = draftDistrictFilter.value.filter((s) => s !== slug);
+  } else {
+    draftDistrictFilter.value = [...draftDistrictFilter.value, slug];
+  }
+};
+
+const filteredDistricts = computed(() => {
+  const query = districtSearchQuery.value.toLowerCase().trim();
+  if (!query) return HK_DISTRICTS;
+  return HK_DISTRICTS.filter((district) => {
+    const en = district.en.toLowerCase();
+    const zh = district.zh;
+    return en.includes(query) || zh.includes(query) || district.slug.includes(query);
+  });
+});
+
+const districtsByRegion = computed(() =>
+  REGION_ORDER.map((region) => ({
+    region,
+    label: props.language === 'zh' ? HK_REGION_LABELS[region].zh : HK_REGION_LABELS[region].en,
+    districts: filteredDistricts.value.filter((d) => d.region === region),
+  })).filter((group) => group.districts.length > 0)
+);
+
+const applyDraftFilters = async () => {
+  await mapViewRef.value?.clearPins?.();
+  props.setDistrictFilter([...draftDistrictFilter.value]);
+  props.setMtrFilter([...draftMtrFilter.value]);
+  if (draftDistrictFilter.value.length > 0) {
+    props.setMtrFilter([]);
+  } else if (draftMtrFilter.value.length > 0) {
+    props.setDistrictFilter([]);
+  }
+  props.setSportFilter([...draftSportFilter.value]);
+  showFilterPanel.value = false;
+  showMtrDropdown.value = false;
+  showDistrictDropdown.value = false;
+  showSportDropdown.value = false;
+  mtrSearchQuery.value = '';
+  districtSearchQuery.value = '';
+  await nextTick();
+  mapViewRef.value?.syncPins?.();
+};
+
+const resetDraftFilters = () => {
+  draftMtrFilter.value = [];
+  draftDistrictFilter.value = [];
+  draftSportFilter.value = [];
+  showFilterPanel.value = false;
+  showMtrDropdown.value = false;
+  showDistrictDropdown.value = false;
+  showSportDropdown.value = false;
+  mtrSearchQuery.value = '';
+  districtSearchQuery.value = '';
 };
 
 const filteredStations = computed(() => {
@@ -163,9 +253,13 @@ const leftListVenues = computed(() =>
 </script>
 
 <template>
-  <div class="flex h-[calc(100vh-64px)] overflow-hidden">
-    <div class="w-[400px] xl:w-[450px] flex-shrink-0 border-r transition-colors flex flex-col"
-      :class="darkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'">
+  <div :class="shellClass">
+    <div
+      :class="[
+        sidebarClass,
+        darkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50',
+      ]"
+    >
       <div class="p-6 space-y-4 shadow-sm z-10" :class="darkMode ? 'bg-gray-800' : 'bg-white'">
         <div class="flex items-center justify-between">
           <span class="text-[11px] font-[900] uppercase tracking-wider opacity-70"
@@ -232,6 +326,17 @@ const leftListVenues = computed(() =>
               </div>
             </div>
           </div>
+          <template v-for="slug in districtFilter" :key="`district-${slug}`">
+            <span
+              class="inline-flex items-center gap-1.5 rounded-[999px] pl-3 pr-1.5 py-2 text-[12px] font-bold bg-[#007a67] text-white shadow-sm">
+              {{ getDistrictDisplayName(slug, language) }}
+              <button type="button"
+                class="w-5 h-5 rounded-full flex items-center justify-center hover:bg-white/20 text-[14px] leading-none"
+                @click="setDistrictFilter(districtFilter.filter((s) => s !== slug))">
+                ×
+              </button>
+            </span>
+          </template>
           <template v-for="station in mtrFilter" :key="station">
             <span
               class="inline-flex items-center gap-1.5 rounded-[999px] pl-3 pr-1.5 py-2 text-[12px] font-bold bg-[#007a67] text-white shadow-sm">
@@ -325,6 +430,58 @@ const leftListVenues = computed(() =>
               {{ language === 'en' ? 'Go search' : '開始搜尋' }}
             </button>-->
           </div>
+          <!-- District dropdown -->
+          <div class="relative">
+            <button type="button"
+              class="w-full flex items-center justify-between px-3 py-2.5 text-[12px] font-bold rounded-[8px] border transition-colors"
+              :class="darkMode ? 'bg-gray-800 border-gray-600 text-gray-200 hover:bg-gray-700' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-100'"
+              @click="showDistrictDropdown = !showDistrictDropdown; showMtrDropdown = false">
+              <span>{{ t('district') }}</span>
+              <span v-if="draftDistrictFilter.length > 0" class="text-[11px] opacity-80">({{ draftDistrictFilter.length }})</span>
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 opacity-70 transition-transform"
+                :class="showDistrictDropdown ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            <div v-if="showDistrictDropdown"
+              class="absolute top-full left-0 right-0 mt-1 p-2 rounded-[8px] border shadow-lg z-20 max-h-[260px] flex flex-col"
+              :class="darkMode ? 'bg-gray-800 border-gray-600' : 'bg-white border-gray-200'">
+              <div class="relative flex-shrink-0 mb-2">
+                <span class="absolute left-2 top-1/2 -translate-y-1/2 opacity-50 text-xs">🔍</span>
+                <input type="text" v-model="districtSearchQuery"
+                  :placeholder="language === 'en' ? 'Search districts...' : '搜尋地區...'"
+                  class="w-full pl-7 pr-3 py-2 text-[12px] border rounded-[8px] focus:ring-2 focus:ring-[#007a67] focus:outline-none"
+                  :class="darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-700'"
+                  @click.stop />
+              </div>
+              <div class="max-h-[180px] overflow-y-auto space-y-1 custom-scrollbar pr-1 flex-1 min-h-0">
+                <template v-for="group in districtsByRegion" :key="group.region">
+                  <p class="px-2 pt-2 pb-1 text-[10px] font-bold uppercase tracking-wider opacity-60"
+                    :class="darkMode ? 'text-gray-400' : 'text-gray-500'">{{ group.label }}</p>
+                  <button v-for="district in group.districts" :key="district.slug" type="button"
+                    class="w-full flex items-center gap-2 px-3 py-2 rounded-[8px] text-left text-[12px] font-bold transition-all"
+                    :class="draftDistrictFilter.includes(district.slug)
+                      ? 'bg-[#007a67] text-white'
+                      : (darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200')"
+                    @click.stop="toggleDistrict(district.slug)">
+                    <div class="w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0"
+                      :class="draftDistrictFilter.includes(district.slug) ? 'bg-white border-white' : (darkMode ? 'border-gray-500' : 'border-gray-300')">
+                      <svg v-if="draftDistrictFilter.includes(district.slug)" xmlns="http://www.w3.org/2000/svg"
+                        class="w-3 h-3 text-[#007a67]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                    <span class="flex-1">{{ language === 'zh' ? district.zh : district.en }}</span>
+                  </button>
+                </template>
+              </div>
+              <button type="button" class="flex-shrink-0 mt-2 w-full px-3 py-2 text-[12px] font-bold rounded-[8px]"
+                :class="darkMode ? 'text-gray-300 bg-gray-700 hover:bg-gray-600' : 'text-gray-600 bg-gray-200 hover:bg-gray-300'"
+                @click.stop="draftDistrictFilter = []; setDistrictFilter([]); districtSearchQuery = ''">
+                {{ t('clearAll') }}
+              </button>
+            </div>
+          </div>
           <!-- MTR Station dropdown: trigger shows label only, items drop down -->
           <div class="relative">
             <button type="button"
@@ -377,12 +534,12 @@ const leftListVenues = computed(() =>
             <button v-if="onClearFilters" type="button"
               class="flex-1 px-3 py-2 text-[12px] font-bold rounded-[8px] transition-opacity"
               :class="darkMode ? 'text-gray-300 bg-gray-800 hover:bg-gray-700' : 'text-gray-600 bg-gray-200 hover:bg-gray-300'"
-              @click="onClearFilters(); draftMtrFilter = []; draftSportFilter = []; showFilterPanel = false; showMtrDropdown = false; showSportDropdown = false; mtrSearchQuery = ''">
+              @click="onClearFilters(); resetDraftFilters()">
               {{ t('clearFilters') }}
             </button>
             <button type="button" class="flex-1 px-3 py-2 text-[12px] font-bold rounded-[8px] transition-opacity"
               :class="darkMode ? 'text-gray-300 bg-gray-800 hover:bg-gray-700' : 'text-gray-600 bg-gray-200 hover:bg-gray-300'"
-              @click="async () => { await mapViewRef?.clearPins?.(); setMtrFilter([...draftMtrFilter]); setSportFilter([...draftSportFilter]); showFilterPanel = false; showMtrDropdown = false; showSportDropdown = false; mtrSearchQuery = ''; await nextTick(); mapViewRef?.syncPins?.(); }">
+              @click="applyDraftFilters">
               {{ language === 'en' ? 'Go search' : '開始搜尋' }}
             </button>
           </div>
@@ -428,12 +585,11 @@ const leftListVenues = computed(() =>
       </div> -->
     </div>
 
-    <div class="flex-1 relative">
+    <div class="flex-1 relative min-w-0 min-h-0">
       <MapView ref="mapViewRef" :venues="props.venues" :selectedVenue="selectedVenue"
         :onSelectVenue="(v: Venue | null) => onSelectVenue(v)" :onShowVenuesAtLocation="handleShowVenuesAtLocation"
         :language="language" :darkMode="darkMode" :isMobile="false" />
 
-      <AppFooter :language="language" :t="t" :darkMode="darkMode" variant="overlay" />
 
       <!-- Map pin list (desktop): when a multi-venue pin is clicked, show a chooser panel on top of the map -->
       <div v-if="showLocationPicker" class="absolute top-5 left-5 right-5 z-30 pointer-events-none">

@@ -1,0 +1,44 @@
+{
+  "siteId": "64a3d87da25bdfc447bb9470",
+  "pageId": "6a4cc976d5d448ff93b2b52c",
+  "formName": "Courts Form",
+  "formId": "wf-form-Courts-Form",
+  "fields": [
+    {
+      "name": "First-name-pilot-2",
+      "type": "text",
+      "required": true,
+      "labelKey": "landingCtaFieldFirstName"
+    },
+    {
+      "name": "Last-name-pilot-2",
+      "type": "text",
+      "required": false,
+      "labelKey": "landingCtaFieldLastName"
+    },
+    {
+      "name": "Email-pilot-2",
+      "type": "email",
+      "required": true,
+      "labelKey": "landingCtaFieldEmail"
+    },
+    {
+      "name": "Phone-pilot-2",
+      "type": "tel",
+      "required": true,
+      "labelKey": "landingCtaFieldPhone"
+    },
+    {
+      "name": "Company-pilot-2",
+      "type": "text",
+      "required": true,
+      "labelKey": "landingCtaFieldCompany"
+    },
+    {
+      "name": "field-2",
+      "type": "text",
+      "required": false,
+      "labelKey": "landingCtaFieldNotes"
+    }
+  ]
+}

@@ -98,7 +98,7 @@ async function loadGrindUpcomingEvents(): Promise<void> {
   if (cached.length > 0) {
     events.value = cached;
     loading.value = false;
-  } else {
+  } else if (events.value.length === 0) {
     loading.value = true;
   }
   error.value = null;
@@ -131,8 +131,9 @@ async function loadGrindUpcomingEvents(): Promise<void> {
     writeLocalCache(normalizedMerged);
   } catch (e: unknown) {
     if (requestId !== activeRequestId) return;
-    events.value = [];
-    error.value = e instanceof Error ? e.message : 'Unknown error';
+    if (events.value.length === 0) {
+      error.value = e instanceof Error ? e.message : 'Unknown error';
+    }
   } finally {
     if (requestId === activeRequestId) {
       loading.value = false;
