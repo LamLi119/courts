@@ -44,13 +44,13 @@ const districtBySlug = new Map(HK_DISTRICTS.map((d) => [d.slug, d]));
 const STATION_TO_DISTRICT: Record<string, string> = {
   // Hong Kong Island — Central and Western
   'Kennedy Town': 'central-and-western',
-  HKU: 'central-and-western',
+  'HKU': 'central-and-western',
   'Sai Ying Pun': 'central-and-western',
   'Sheung Wan': 'central-and-western',
-  Central: 'central-and-western',
+  'Central': 'central-and-western',
   'Hong Kong': 'central-and-western',
   // Hong Kong Island — Wan Chai
-  Admiralty: 'wan-chai',
+  'Admiralty': 'wan-chai',
   'Wan Chai': 'wan-chai',
   'Causeway Bay': 'wan-chai',
   'Tin Hau': 'wan-chai',
@@ -72,17 +72,17 @@ const STATION_TO_DISTRICT: Record<string, string> = {
   // Kowloon — Yau Tsim Mong
   'Tsim Sha Tsui': 'yau-tsim-mong',
   'East Tsim Sha Tsui': 'yau-tsim-mong',
-  Jordan: 'yau-tsim-mong',
+  'Jordan': 'yau-tsim-mong',
   'Yau Ma Tei': 'yau-tsim-mong',
   'Mong Kok': 'yau-tsim-mong',
   'Prince Edward': 'yau-tsim-mong',
   'Mong Kok East': 'yau-tsim-mong',
-  Austin: 'yau-tsim-mong',
-  Kowloon: 'yau-tsim-mong',
-  Olympic: 'yau-tsim-mong',
+  'Austin': 'yau-tsim-mong',
+  'Kowloon': 'yau-tsim-mong',
+  'Olympic': 'yau-tsim-mong',
   'Hong Kong West Kowloon': 'yau-tsim-mong',
   // Kowloon — Kowloon City
-  Whampoa: 'kowloon-city',
+  'Whampoa': 'kowloon-city',
   'Ho Man Tin': 'kowloon-city',
   'To Kwa Wan': 'kowloon-city',
   'Sung Wong Toi': 'kowloon-city',
@@ -120,8 +120,8 @@ const STATION_TO_DISTRICT: Record<string, string> = {
   'Wu Kai Sha': 'sha-tin',
   'Sha Tin': 'sha-tin',
   'Fo Tan': 'sha-tin',
-  Racecourse: 'sha-tin',
-  University: 'sha-tin',
+  'Racecourse': 'sha-tin',
+  'University': 'sha-tin',
   // New Territories — Sai Kung
   'Tiu Keng Leng': 'sai-kung',
   'Tseung Kwan O': 'sai-kung',
@@ -132,7 +132,7 @@ const STATION_TO_DISTRICT: Record<string, string> = {
   'Tai Po Market': 'tai-po',
   'Tai Wo': 'tai-po',
   // New Territories — North
-  Fanling: 'north',
+  'Fanling': 'north',
   'Sheung Shui': 'north',
   'Lo Wu': 'north',
   // New Territories — Yuen Long
@@ -157,7 +157,7 @@ const STATION_TO_DISTRICT: Record<string, string> = {
   'Sunny Bay': 'islands',
   'Tung Chung': 'islands',
   'Disneyland Resort': 'islands',
-  Airport: 'islands',
+  'Airport': 'islands',
   'AsiaWorld-Expo': 'islands',
 };
 
