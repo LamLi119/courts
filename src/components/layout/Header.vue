@@ -1,11 +1,16 @@
 <script setup lang="ts">
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
+import { computed } from 'vue';
 import type { Language, AppTab } from '../../../types';
+
 const router = useRouter();
+const route = useRoute();
+
+const isHome = computed(() => route.name === 'home');
 
 const logoUrl = `${import.meta.env.BASE_URL}green-G.svg`;
 
-const props = defineProps<{
+defineProps<{
   language: Language;
   setLanguage: (l: Language) => void;
   isAdmin: boolean;
@@ -21,11 +26,14 @@ const props = defineProps<{
   setTab: (t: AppTab) => void;
   viewMode?: 'map' | 'list';
   setViewMode?: (mode: 'map' | 'list') => void;
-  /** When true (e.g. on venue detail page), hide Explore and Saved nav tabs */
   hideNavTabs?: boolean;
   filterSpecialOffer?: boolean;
   setFilterSpecialOffer?: (v: boolean) => void;
 }>();
+
+const goHome = () => {
+  router.push('/');
+};
 
 const openFindEvents = () => {
   window.open('https://www.theground.io', '_blank');
@@ -34,12 +42,12 @@ const openFindEvents = () => {
 
 <template>
   <header :class="[
-    'sticky top-0 z-[60] backdrop-blur-md border-b shadow-sm',
-    darkMode ? 'bg-gray-900/95 border-gray-800' : 'bg-white/95 border-gray-200'
+    'sticky top-0 z-[60] w-full backdrop-blur-md border-b shadow-sm',
+    darkMode ? 'bg-gray-900/80 border-gray-800' : 'bg-white/80 border-gray-200'
   ]">
-    <div class="container mx-auto px-4 py-3 flex items-center justify-between gap-3">
-      <div class="flex items-center gap-4 md:gap-8">
-        <div class="flex items-center gap-2.5 cursor-pointer group" @click="setTab('explore')">
+    <div class="w-full max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-4 md:gap-8 min-w-0">
+        <div class="flex items-center gap-2.5 cursor-pointer group shrink-0" @click="goHome">
           <div
             class="w-10 h-10 transition-transform duration-300 group-hover:rotate-12 group-active:scale-90 flex items-center justify-center">
             <img :src="logoUrl" alt="TheGround.io" class="w-10 h-10" />
@@ -50,15 +58,22 @@ const openFindEvents = () => {
         </div>
 
         <nav v-if="!hideNavTabs" class="hidden sm:flex items-center gap-3 md:gap-6">
+          <button
+            type="button"
+            class="btn btn-nav hidden sm:block"
+            :class="isHome ? 'btn-nav-active' : ''"
+            @click="goHome"
+          >
+            {{ t('home') }}
+          </button>
           <button type="button" class="btn btn-nav hidden sm:block"
-            :class="currentTab === 'explore' ? 'btn-nav-active' : ''" @click="setTab('explore')">
+            :class="!isHome && currentTab === 'explore' ? 'btn-nav-active' : ''" @click="setTab('explore')">
             {{ t('explore') }}
           </button>
           <button type="button" class="btn btn-nav hidden sm:block"
             :class="currentTab === 'saved' ? 'text-red-500' : ''" @click="setTab('saved')">
             {{ t('saved') }}
           </button>
-          <!-- TODO: Add sport type filter -->
           <a href="/search/pickleball"
             class="hidden text-[14px] font-[700] transition-all text-gray-400 hover:text-gray-600"
             @click.prevent="router.push('/search/pickleball'); setTab('explore');">
@@ -67,7 +82,7 @@ const openFindEvents = () => {
         </nav>
       </div>
 
-      <div class="flex items-center gap-2 md:gap-4">
+      <div class="flex items-center gap-2 md:gap-4 shrink-0">
         <button type="button" class="btn btn-nav-icon" @click="setDarkMode(!darkMode)">
           {{ darkMode ? '☀️' : '🌙' }}
         </button>

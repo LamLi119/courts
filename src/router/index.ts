@@ -4,6 +4,7 @@ import { slugify } from '../utils/slugify';
 
 export const routes = [
   { path: '/', name: 'home', meta: { title: 'Courts' } },
+  { path: '/explore', name: 'explore', meta: { title: 'Explore Courts' } },
   { path: '/venues/:slug', name: 'venue', meta: { title: 'Venue' } },
   { path: '/upcoming-events', name: 'upcoming-events', meta: { title: 'Upcoming Events' } },
   { path: '/search/:sport', name: 'search', meta: { title: 'Search' } },

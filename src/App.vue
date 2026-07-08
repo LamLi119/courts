@@ -4,8 +4,9 @@ import { useRoute, useRouter } from 'vue-router';
 import type { Venue, Language, AppTab } from '../types';
 import { translate } from './utils/translations';
 import { getStationCanonicalEn } from './utils/mtrStations';
+import { venueMatchesDistricts } from './utils/hkDistricts';
 import { slugify } from './utils/slugify';
-import { resetSeoToDefault, applySearchPageSeo } from './utils/seo';
+import { resetSeoToDefault, applySearchPageSeo, applyLandingPageSeo } from './utils/seo';
 import { useVenueSlug } from './router';
 import { db } from '../db';
 import Header from './components/layout/Header.vue';
@@ -21,7 +22,9 @@ import VenueDetail from './components/venue/VenueDetail.vue';
 import UpcomingEventsPage from './components/venue/UpcomingEventsPage.vue';
 import VenueForm from './components/admin/VenueForm.vue';
 import AdminPage from './components/admin/AdminPage.vue';
+import LandingPage from './components/landing/LandingPage.vue';
 import { useAuth } from './composables/auth';
+import { useIsMobile } from './composables/useIsMobile';
 import { useGrindUpcomingEvents } from './composables/useGrindUpcomingEvents';
 import {
   hydrateInitialVenueData,
@@ -77,6 +80,7 @@ const selectedVenue = ref<Venue | null>(null);
 const showDesktopDetail = ref(false);
 const searchQuery = ref('');
 const mtrFilter = ref<string[]>([]);
+const districtFilter = ref<string[]>([]);
 const distanceFilter = ref('');
 const sportFilter = ref<string[]>([]); // sport slugs (multi-select)
 const filterSpecialOffer = ref(false); // when true, only show venues with membership_enabled
@@ -84,7 +88,7 @@ const filterSavedOnly = ref(false); // explore tab: when true, only show saved v
 /** When set (after clicking a pin), list shows only venues at that location. */
 const locationVenueIds = ref<number[] | null>(null);
 const darkMode = ref(localStorage.getItem('pickleball_darkmode') === 'true');
-const isMobile = ref(typeof window !== 'undefined' ? window.innerWidth < 1024 : false);
+const isMobile = useIsMobile();
 
 const invalidateVenuesCache = () => {
   sessionStorage.removeItem('pickleball_venues_cache');
@@ -125,10 +129,6 @@ const loadData = async () => {
   }
 };
 
-const handleResize = () => {
-  isMobile.value = window.innerWidth < 1024;
-};
-
 const ADMIN_PATH = '/admin';
 
 function isAdminPath(): boolean {
@@ -159,12 +159,22 @@ watch(
       selectedVenue.value = null;
       showDesktopDetail.value = false;
       applySearchPageSeo(route.params.sport);
+    } else if (route.name === 'explore') {
+      selectedVenue.value = null;
+      showDesktopDetail.value = false;
+      resetSeoToDefault();
     } else if (route.name === 'home' || route.name === 'admin') {
       if (route.name === 'home') {
-        applyDefaultSportFilter();
-        if (prev?.name === 'venue') resetSeoToDefault();
+        sportFilter.value = [];
+        mtrFilter.value = [];
+        distanceFilter.value = '';
+        filterSpecialOffer.value = false;
+        filterSavedOnly.value = false;
         selectedVenue.value = null;
         showDesktopDetail.value = false;
+        if (venues.value.length > 0) {
+          applyLandingPageSeo(venues.value, sports.value, language.value);
+        }
       }
     }
   },
@@ -180,6 +190,18 @@ watch(
         selectedVenue.value = venue;
         showDesktopDetail.value = true;
       }
+    }
+    if (route.name === 'home' && venues.value.length > 0) {
+      applyLandingPageSeo(venues.value, sports.value, language.value);
+    }
+  }
+);
+
+watch(
+  () => language.value,
+  () => {
+    if (route.name === 'home' && venues.value.length > 0) {
+      applyLandingPageSeo(venues.value, sports.value, language.value);
     }
   }
 );
@@ -224,7 +246,6 @@ onMounted(() => {
   if (isAdminPath()) showAdminLogin.value = true;
   const onPopState = () => { showAdminLogin.value = isAdminPath(); };
   window.addEventListener('popstate', onPopState);
-  window.addEventListener('resize', handleResize);
   (window as any).__adminPopState = onPopState;
 
   const restoreAdminSession = async () => {
@@ -262,7 +283,6 @@ onUnmounted(() => {
     clearInterval(grindUpcomingPollTimer);
     grindUpcomingPollTimer = null;
   }
-  window.removeEventListener('resize', handleResize);
   const onPopState = (window as any).__adminPopState;
   if (onPopState) window.removeEventListener('popstate', onPopState);
 });
@@ -324,6 +344,7 @@ function applyDefaultSportFilter() {
 const clearFilters = () => {
   searchQuery.value = '';
   mtrFilter.value = [];
+  districtFilter.value = [];
   distanceFilter.value = '';
   applyDefaultSportFilter();
   filterSpecialOffer.value = false;
@@ -432,6 +453,7 @@ const filteredVenues = computed(() => {
     const venueStation = (((venue as any).mtrStation ?? '') as string).toString().trim();
     const venueStationKey = getStationCanonicalEn(venueStation);
     const mtrMatch = !mtrCanonicalSet || (venueStationKey && mtrCanonicalSet.has(venueStationKey));
+    const districtMatch = venueMatchesDistricts(venue, districtFilter.value);
     const wdRaw = (venue as any).walkingDistance;
     const wd = typeof wdRaw === 'number' ? wdRaw : parseFloat((wdRaw ?? '').toString());
     const distanceLimit = distanceFilter.value ? parseInt(distanceFilter.value) : NaN;
@@ -448,7 +470,7 @@ const filteredVenues = computed(() => {
       });
     }
     const specialOfferMatch = !filterSpecialOffer.value || Boolean((venue as Venue).membership_enabled);
-    return nameMatch && mtrMatch && distanceMatch && sportMatch && specialOfferMatch;
+    return nameMatch && mtrMatch && districtMatch && distanceMatch && sportMatch && specialOfferMatch;
   });
 });
 
@@ -509,6 +531,41 @@ const showVenuesAtLocation = (venueList: Venue[]) => {
 const clearVenuesAtLocation = () => {
   locationVenueIds.value = null;
 };
+
+function goToExplore(filters?: { mtr?: string; sport?: string; districts?: string[]; specialOffer?: boolean }) {
+  if (filters?.districts?.length) {
+    districtFilter.value = [...filters.districts];
+    mtrFilter.value = [];
+  } else if (filters?.mtr) {
+    mtrFilter.value = [filters.mtr];
+    districtFilter.value = [];
+  }
+  if (filters?.sport) {
+    sportFilter.value = [filters.sport];
+  } else if (sportFilter.value.length === 0) {
+    applyDefaultSportFilter();
+  }
+  if (filters?.specialOffer !== undefined) {
+    filterSpecialOffer.value = filters.specialOffer;
+  }
+  currentTab.value = 'explore';
+  selectedVenue.value = null;
+  showDesktopDetail.value = false;
+  router.push('/explore');
+}
+
+function goToLandingVenue(venue: Venue) {
+  router.push('/venues/' + useVenueSlug(venue));
+}
+
+function goBackFromVenue() {
+  resetSeoToDefault();
+  if (typeof window !== 'undefined' && window.history.length > 1) {
+    router.back();
+  } else {
+    router.push('/explore');
+  }
+}
 
 const toggleSaveVenue = (venueId: number) => {
   savedVenues.value = savedVenues.value.includes(venueId)
@@ -586,7 +643,7 @@ const handleSaveVenue = async (venueData: any) => {
 </script>
 
 <template>
-  <div :class="['min-h-screen pb-safe transition-colors', darkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900']">
+  <div :class="['min-h-screen w-full pb-safe transition-colors', darkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900']">
     <UserLoginPage
       v-if="route.name === 'login'"
       :language="language"
@@ -645,7 +702,8 @@ const handleSaveVenue = async (venueData: any) => {
       :setTab="(tab: AppTab) => {
         if (tab === 'admin' && !isAnyAdmin) showAdminLogin = true;
         else currentTab = tab;
-        if (tab === 'explore') { router.push('/'); resetSeoToDefault(); selectedVenue = null; showDesktopDetail = false; }
+        if (tab === 'explore') { goToExplore(); }
+        else if (tab === 'saved') { goToExplore(); currentTab = 'saved'; filterSavedOnly = true; }
         else { selectedVenue = null; showDesktopDetail = false; }
       }"
       :viewMode="mobileViewMode"
@@ -655,7 +713,11 @@ const handleSaveVenue = async (venueData: any) => {
       :hideNavTabs="!!selectedVenue && (route.name === 'venue' || showDesktopDetail)"
     />
 
-    <main v-if="route.name !== 'login' && route.name !== 'signup' && route.name !== 'token-login' && route.name !== 'complete-phone' && route.name !== 'upcoming-events'" class="h-full">
+    <main
+      v-if="route.name !== 'login' && route.name !== 'signup' && route.name !== 'token-login' && route.name !== 'complete-phone' && route.name !== 'upcoming-events'"
+      class="w-full"
+      :class="route.name === 'home' ? '' : 'h-full'"
+    >
       <AdminPage
         v-if="currentTab === 'admin' && isAnyAdmin && !selectedVenue"
         :venues="venues"
@@ -674,7 +736,7 @@ const handleSaveVenue = async (venueData: any) => {
         @notify="showAdminNotification"
       />
 
-      <div v-else class="flex flex-col flex-1 min-h-0">
+      <div v-else class="flex flex-col flex-1 min-h-0 w-full">
         <div
           v-if="isLoading"
           class="flex-1 p-4 md:p-6 animate-in fade-in duration-300"
@@ -713,8 +775,57 @@ const handleSaveVenue = async (venueData: any) => {
           </p>
         </div>
 
+        <LandingPage
+          v-else-if="route.name === 'home'"
+          :venues="venues"
+          :filteredVenues="filteredVenues"
+          :listVenues="listVenues"
+          :sports="sports"
+          :availableStations="availableStations"
+          :language="language"
+          :t="t"
+          :darkMode="darkMode"
+          :isMobile="isMobile"
+          :savedVenues="savedVenues"
+          :toggleSave="toggleSaveVenue"
+          :selectedVenue="selectedVenue"
+          :onSelectVenue="(v: Venue | null) => { selectedVenue = v; }"
+          :searchQuery="searchQuery"
+          :setSearchQuery="(s: string) => { searchQuery = s; }"
+          :mtrFilter="mtrFilter"
+          :setMtrFilter="(arr: string[]) => { mtrFilter = arr; }"
+          :districtFilter="districtFilter"
+          :setDistrictFilter="(arr: string[]) => { districtFilter = arr; }"
+          :distanceFilter="distanceFilter"
+          :setDistanceFilter="(s: string) => { distanceFilter = s; }"
+          :sportFilter="sportFilter"
+          :setSportFilter="(arr: string[]) => { sportFilter = arr; }"
+          :filterSpecialOffer="filterSpecialOffer"
+          :setFilterSpecialOffer="(v: boolean) => { filterSpecialOffer = v; }"
+          :filterSavedOnly="filterSavedOnly"
+          :setFilterSavedOnly="(v: boolean) => { filterSavedOnly = v; }"
+          :onClearFilters="clearFilters"
+          :onShowVenuesAtLocation="showVenuesAtLocation"
+          :hasLocationFilter="!!(locationVenueIds && locationVenueIds.length)"
+          :onClearLocationFilter="clearVenuesAtLocation"
+          :currentTab="currentTab"
+          :setTab="(tab: AppTab) => { currentTab = tab; }"
+          :isAdmin="isAnyAdmin"
+          :canEditVenue="canEditVenue"
+          :onAddVenue="() => { editingVenue = null; showVenueForm = true; }"
+          :onEditVenue="(id: number, v: Venue) => { editingVenue = v; showVenueForm = true; }"
+          :onDeleteVenue="(id: number) => {
+            const target = venues.find(v => v.id === id);
+            if (target) venueToDelete = target;
+          }"
+          :onViewVenue="goToLandingVenue"
+          :onViewDetail="(v: Venue) => { selectedVenue = v; showDesktopDetail = true; router.push('/venues/' + useVenueSlug(v)); }"
+          :onExplore="goToExplore"
+          :setLanguage="(l: Language) => { language = l; }"
+        />
+
         <MobileView
-          v-else-if="isMobile"
+          v-else-if="isMobile && (route.name === 'explore' || route.name === 'search' || route.name === 'venue')"
           :mode="mobileViewMode"
           :setMode="(m: 'map' | 'list') => { mobileViewMode = m; }"
           :venues="filteredVenues"
@@ -724,6 +835,8 @@ const handleSaveVenue = async (venueData: any) => {
           :setSearchQuery="(s: string) => { searchQuery = s; }"
           :mtrFilter="mtrFilter"
           :setMtrFilter="(arr: string[]) => { mtrFilter = arr; }"
+          :districtFilter="districtFilter"
+          :setDistrictFilter="(arr: string[]) => { districtFilter = arr; }"
           :distanceFilter="distanceFilter"
           :setDistanceFilter="(s: string) => { distanceFilter = s; }"
           :language="language"
@@ -745,14 +858,14 @@ const handleSaveVenue = async (venueData: any) => {
           :setFilterSavedOnly="(v: boolean) => { filterSavedOnly = v; }"
           :currentTab="currentTab"
           :onOpenDetail="(v: Venue) => { router.push('/venues/' + useVenueSlug(v)); }"
-          :onBackFromDetail="() => { resetSeoToDefault(); router.push('/'); }"
+          :onBackFromDetail="goBackFromVenue"
           :force-show-detail="route.name === 'venue' && !!selectedVenue"
         />
 
         <VenueDetail
           v-else-if="showDesktopDetail && selectedVenue"
           :venue="selectedVenue"
-          :onBack="() => { resetSeoToDefault(); selectedVenue = null; showDesktopDetail = false; router.push('/'); }"
+          :onBack="() => { selectedVenue = null; showDesktopDetail = false; goBackFromVenue(); }"
           :onPrevVenue="goToPrevVenue"
           :onNextVenue="goToNextVenue"
           :hasPrevVenue="!!prevVenue"
@@ -768,7 +881,7 @@ const handleSaveVenue = async (venueData: any) => {
         />
 
         <DesktopView
-          v-else
+          v-else-if="!isMobile && (route.name === 'explore' || route.name === 'search' || (route.name === 'venue' && !showDesktopDetail))"
           :venues="filteredVenues"
           :listVenues="listVenues"
           :onShowVenuesAtLocation="showVenuesAtLocation"
@@ -781,6 +894,8 @@ const handleSaveVenue = async (venueData: any) => {
           :setSearchQuery="(s: string) => { searchQuery = s; }"
           :mtrFilter="mtrFilter"
           :setMtrFilter="(arr: string[]) => { mtrFilter = arr; }"
+          :districtFilter="districtFilter"
+          :setDistrictFilter="(arr: string[]) => { districtFilter = arr; }"
           :distanceFilter="distanceFilter"
           :setDistanceFilter="(s: string) => { distanceFilter = s; }"
           :language="language"

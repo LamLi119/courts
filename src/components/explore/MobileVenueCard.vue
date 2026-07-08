@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue';
 import type { Venue, Language } from '../../../types';
 import { getStationDisplayName } from '../../utils/mtrStations';
+import { getVenueDistrictSlug, getDistrictDisplayName } from '../../utils/hkDistricts';
 import { getVenueImageAlt } from '../../utils/seo';
 import { slugify } from '../../utils/slugify';
 
@@ -18,6 +19,11 @@ const props = defineProps<{
 }>();
 
 const imageAlt = computed(() => getVenueImageAlt(props.venue));
+
+const districtName = computed(() => {
+  const slug = getVenueDistrictSlug(props.venue);
+  return slug ? getDistrictDisplayName(slug, props.language) : null;
+});
 
 const shareFeedback = ref<string | null>(null);
 const handleShare = async () => {
@@ -51,7 +57,7 @@ const handleShare = async () => {
 <template>
   <button type="button" class="w-full text-left" @click="onViewDetails">
     <div class="flex flex-col shadow-sm transition-all active:scale-[0.98]"
-      :class="darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'">
+      :class="darkMode ? 'border-gray-800' : 'border-gray-200'">
       <div class="flex items-center gap-4 px-4 pt-3 pb-2">
         <div class="relative w-20 h-20 rounded-[16px] overflow-hidden flex-shrink-0 bg-gray-200 dark:bg-gray-700">
           <img
@@ -73,15 +79,13 @@ const handleShare = async () => {
             :class="darkMode ? 'text-white' : 'text-gray-900'">
             {{ venue.name }}
           </h3>
-          <p v-if="venue.mtrStation" class="text-[13px] font-[400] truncate" :class="darkMode ? 'text-gray-400' : 'text-gray-500'">
-            🚇 {{ getStationDisplayName(venue.mtrStation, language) }}
-          </p>
-          <div v-if="venue.walkingDistance" class="flex items-center gap-2 mt-1 text-[12px]">
-            <span :class="darkMode ? 'text-gray-400' : 'text-gray-500'">
-              🚶 {{ venue.walkingDistance }} {{ t('min') }}
-            </span>
+          <div v-if="districtName" class="text-[13px] font-[400] truncate">
+            <span :class="darkMode ? 'text-gray-300' : 'text-gray-700'">📍 {{ districtName }}</span>
           </div>
-          <div v-if="venue.court_count != null && venue.court_count > 0" class="flex items-center gap-2 mt-1 text-[12px]">
+          <p v-if="venue.mtrStation || venue.walkingDistance" class="text-[13px] font-[400] truncate" :class="darkMode ? 'text-gray-400' : 'text-gray-500'">
+            <template v-if="venue.mtrStation">🚇 {{ getStationDisplayName(venue.mtrStation, language) }} </template><template v-if="venue.mtrStation && venue.walkingDistance"> • </template><template v-if="venue.walkingDistance"> {{ venue.walkingDistance }} {{ t('min') }}</template>
+          </p>
+          <div v-if="venue.court_count != null && venue.court_count > 0" class="flex items-center gap-2 text-[12px]">
             <span :class="darkMode ? 'text-gray-400' : 'text-gray-500'">
               🥅 {{ venue.court_count }} {{ venue.court_count === 1 ? t('venue') : t('venues') }}
             </span>

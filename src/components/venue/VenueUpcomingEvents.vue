@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch, nextTick } from 'vue';
+import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue';
 import type { Language } from '../../../types';
 import type { GrindEventRow } from '../../utils/grindEventFormat';
 import {
@@ -55,6 +55,38 @@ watch(
 
 const seeAllHref = computed(() => grindExploreEventsUrl());
 
+const EMPTY_DELAY_MS = 10_000;
+const showEmpty = ref(false);
+let emptyTimer: ReturnType<typeof setTimeout> | null = null;
+
+watch(
+  () => [props.loading, props.events.length, props.error] as const,
+  ([loading, len, err]) => {
+    if (emptyTimer) {
+      clearTimeout(emptyTimer);
+      emptyTimer = null;
+    }
+    if (loading || err || len > 0) {
+      showEmpty.value = false;
+      return;
+    }
+    emptyTimer = setTimeout(() => {
+      showEmpty.value = true;
+    }, EMPTY_DELAY_MS);
+  },
+  { immediate: true },
+);
+
+onUnmounted(() => {
+  if (emptyTimer) clearTimeout(emptyTimer);
+});
+
+const showSkeleton = computed(
+  () =>
+    (props.loading && props.events.length === 0) ||
+    (!props.loading && !props.error && props.events.length === 0 && !showEmpty.value),
+);
+
 function goingLabel(n: number): string {
   const tpl = props.t('attendeesGoing');
   return tpl.includes('{{n}}') ? tpl.replace(/\{\{n\}\}/g, String(n)) : `${n} ${tpl}`;
@@ -86,7 +118,7 @@ function goingLabel(n: number): string {
     </div>
 
     <div
-      v-if="loading"
+      v-if="showSkeleton"
       class="flex gap-3 overflow-x-auto pb-2 scrollbar-none"
       :class="standalone ? 'px-4 md:px-6' : ''"
     >
@@ -106,7 +138,7 @@ function goingLabel(n: number): string {
     </div>
 
     <div
-      v-else-if="error"
+      v-else-if="error && events.length === 0"
       class="py-6 text-center rounded-[14px] border"
       :class="[
         standalone ? 'mx-4 md:mx-6' : '',
@@ -126,14 +158,14 @@ function goingLabel(n: number): string {
     </div>
 
     <div
-      v-else-if="events.length === 0"
+      v-else-if="showEmpty"
       class="py-6 text-center text-[14px]"
       :class="[standalone ? 'px-4 md:px-6' : '', darkMode ? 'text-gray-500' : 'text-gray-500']"
     >
       {{ t('noUpcomingEvents') }}
     </div>
 
-    <div v-else class="group relative w-full" :class="standalone ? '' : '-mx-0.5'">
+    <div v-else-if="events.length > 0" class="group relative w-full" :class="standalone ? '' : '-mx-0.5'">
       <button
         v-show="canScrollLeft"
         type="button"
