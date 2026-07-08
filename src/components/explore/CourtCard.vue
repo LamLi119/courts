@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue';
 import type { Venue, Language } from '../../../types';
 import { getStationDisplayName } from '../../utils/mtrStations';
+import { getVenueDistrictSlug, getDistrictDisplayName } from '../../utils/hkDistricts';
 import { getVenueImageAlt } from '../../utils/seo';
 import { slugify } from '../../utils/slugify';
 
@@ -21,6 +22,11 @@ const props = defineProps<{
 
 const isExpanded = ref(false);
 const imageAlt = computed(() => getVenueImageAlt(props.venue));
+
+const districtName = computed(() => {
+  const slug = getVenueDistrictSlug(props.venue);
+  return slug ? getDistrictDisplayName(slug, props.language) : null;
+});
 
 const shareFeedback = ref<string | null>(null);
 const handleShare = async () => {
@@ -57,9 +63,9 @@ const toggleExpand = (e: MouseEvent) => {
 </script>
 
 <template>
-  <div v-if="isMobile">
+  <div v-if="isMobile" class="w-full min-w-0">
     <div
-      class="border rounded-[16px] overflow-hidden mb-4 transition-all duration-300 shadow-sm"
+      class="w-full border rounded-[16px] overflow-hidden mb-4 transition-all duration-300 shadow-sm"
       :class="darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'"
     >
       <div
@@ -88,10 +94,11 @@ const toggleExpand = (e: MouseEvent) => {
             {{ venue.name }}
           </h3>
           <p
+            v-if="venue.mtrStation || venue.walkingDistance > 0"
             class="text-[14px] font-[400] opacity-70"
             :class="darkMode ? 'text-gray-400' : 'text-gray-500'"
           >
-            🚇 {{ getStationDisplayName(venue.mtrStation, language) }}
+            <template v-if="venue.mtrStation">🚇 {{ getStationDisplayName(venue.mtrStation, language) }} </template><template v-if="venue.mtrStation && venue.walkingDistance > 0"> • </template><template v-if="venue.walkingDistance > 0"> {{ venue.walkingDistance }} {{ t('min') }}</template>
           </p>
         </div>
         <button
@@ -111,7 +118,8 @@ const toggleExpand = (e: MouseEvent) => {
           class="flex items-center gap-3 text-[12px] font-[400] mb-3"
           :class="darkMode ? 'text-gray-400' : 'text-gray-500'"
         >
-          <span>🚶 {{ venue.walkingDistance }} {{ t('min') }}</span>
+          <span>📍 {{ districtName }}</span>
+          <span>🚶 <template v-if="venue.mtrStation && venue.walkingDistance > 0"> • </template><template v-if="venue.walkingDistance > 0"> {{ venue.walkingDistance }} {{ t('min') }}</template></span>
           <span>⬆️ {{ venue.ceilingHeight }}m</span>
           <span class="ml-auto font-[900] text-[#007a67] text-[16px]">
             ${{ venue.startingPrice }}/hr
@@ -188,10 +196,10 @@ const toggleExpand = (e: MouseEvent) => {
         class="flex items-center gap-3 text-[14px] font-[400] mb-4"
         :class="darkMode ? 'text-gray-400' : 'text-gray-500'"
       >
-        <span v-if="venue.mtrStation" class="rounded-md px-2.5 py-0.5 text-xs font-medium shrink-0"
-        :class="darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'">🚇 {{ getStationDisplayName(venue.mtrStation, language) }}</span>
-        <span v-if="venue.walkingDistance > 0" class="rounded-md px-2.5 py-0.5 text-xs font-medium shrink-0"
-        :class="darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'">🚶 {{ venue.walkingDistance }} {{ t('min') }}</span>
+        <span v-if="districtName" class="rounded-md px-2.5 py-0.5 text-xs font-medium shrink-0"
+        :class="darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'">📍 {{ districtName }}</span>
+        <span v-if="venue.mtrStation || venue.walkingDistance > 0" class="rounded-md px-2.5 py-0.5 text-xs font-medium shrink-0"
+        :class="darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'"><template v-if="venue.mtrStation">🚇 {{ getStationDisplayName(venue.mtrStation, language) }} </template><template v-if="venue.mtrStation && venue.walkingDistance > 0"> • </template><template v-if="venue.walkingDistance > 0"> {{ venue.walkingDistance }} {{ t('min') }}</template></span>
         <span v-if="venue.court_count" class="rounded-md px-2.5 py-0.5 text-xs font-medium shrink-0"
         :class="darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'">🥅 {{ venue.court_count }} {{ venue.court_count === 1 ? t('court') : t('courts') }}</span>
       </div>

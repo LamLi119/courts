@@ -2,19 +2,28 @@
 import { ref, watch, computed, defineAsyncComponent, nextTick } from 'vue';
 import type { Venue, Language, AppTab } from '../../../types';
 import { getStationDisplayName } from '../../utils/mtrStations';
+import {
+  HK_DISTRICTS,
+  HK_REGION_LABELS,
+  getDistrictDisplayName,
+  type HkRegion,
+} from '../../utils/hkDistricts';
 import MobileVenueCard from './MobileVenueCard.vue';
 import VenueDetail from '../venue/VenueDetail.vue';
-import AppFooter from '../layout/AppFooter.vue';
 
 const MapView = defineAsyncComponent(() => import('./MapView.vue'));
 
 const showFilterPanel = ref(false);
 const showMtrDropdown = ref(false);
+const showDistrictDropdown = ref(false);
 const showSportDropdown = ref(false);
 const showDistanceDropdown = ref(false);
 const mtrSearchQuery = ref('');
+const districtSearchQuery = ref('');
 const draftMtrFilter = ref<string[]>([]);
+const draftDistrictFilter = ref<string[]>([]);
 const draftSportFilter = ref<string[]>([]);
+const REGION_ORDER: HkRegion[] = ['hk-island', 'kowloon', 'new-territories'];
 const mapViewRef = ref<{ clearPins?: () => void; syncPins?: () => void; resetView?: () => void } | null>(null);
 
 const props = defineProps<{
@@ -27,6 +36,8 @@ const props = defineProps<{
   setSearchQuery: (s: string) => void;
   mtrFilter: string[];
   setMtrFilter: (arr: string[]) => void;
+  districtFilter: string[];
+  setDistrictFilter: (arr: string[]) => void;
   distanceFilter: string;
   setDistanceFilter: (s: string) => void;
   language: Language;
@@ -55,16 +66,43 @@ const props = defineProps<{
   /** When set (e.g. after clicking a pin), list shows only these venues. */
   listVenues?: Venue[] | null;
   onShowVenuesAtLocation?: (venues: Venue[]) => void;
+  /** When true, used inside the landing page (fixed height, no footer). */
+  embedded?: boolean;
 }>();
+
+const mapShellClass = computed(() =>
+  props.embedded
+    ? [
+        'relative w-full min-w-0 max-w-full h-[min(80vh,720px)] overflow-hidden',
+        'max-lg:rounded-none max-lg:border-x-0',
+        'lg:rounded-2xl lg:border shadow-lg',
+        props.darkMode ? 'border-gray-700' : 'border-gray-200',
+      ]
+    : 'relative w-full min-w-0 h-[calc(100vh-64px)] overflow-hidden'
+);
+
+const listShellClass = computed(() =>
+  props.embedded
+    ? [
+        'w-full min-w-0 max-w-full h-[min(80vh,720px)] flex flex-col overflow-hidden',
+        'max-lg:rounded-none max-lg:border-x-0',
+        'lg:rounded-2xl lg:border shadow-lg',
+        props.darkMode ? 'border-gray-700' : 'border-gray-200',
+      ]
+    : 'w-full min-w-0 h-[calc(100vh-64px)] flex flex-col'
+);
 
 watch(
   () => showFilterPanel.value,
   (open) => {
     if (open) {
       draftMtrFilter.value = [...props.mtrFilter];
+      draftDistrictFilter.value = [...props.districtFilter];
       draftSportFilter.value = [...props.sportFilter];
       mtrSearchQuery.value = '';
+      districtSearchQuery.value = '';
       showMtrDropdown.value = false;
+      showDistrictDropdown.value = false;
       showSportDropdown.value = false;
       showDistanceDropdown.value = false;
     }
@@ -77,6 +115,81 @@ const toggleMtrStation = (station: string) => {
   } else {
     draftMtrFilter.value = [...draftMtrFilter.value, station];
   }
+};
+
+const toggleDistrict = (slug: string) => {
+  if (draftDistrictFilter.value.includes(slug)) {
+    draftDistrictFilter.value = draftDistrictFilter.value.filter((s) => s !== slug);
+  } else {
+    draftDistrictFilter.value = [...draftDistrictFilter.value, slug];
+  }
+};
+
+const filteredDistricts = computed(() => {
+  const query = districtSearchQuery.value.toLowerCase().trim();
+  if (!query) return HK_DISTRICTS;
+  return HK_DISTRICTS.filter((district) => {
+    const en = district.en.toLowerCase();
+    const zh = district.zh;
+    return en.includes(query) || zh.includes(query) || district.slug.includes(query);
+  });
+});
+
+const districtsByRegion = computed(() =>
+  REGION_ORDER.map((region) => ({
+    region,
+    label: props.language === 'zh' ? HK_REGION_LABELS[region].zh : HK_REGION_LABELS[region].en,
+    districts: filteredDistricts.value.filter((d) => d.region === region),
+  })).filter((group) => group.districts.length > 0)
+);
+
+const applyDraftFilters = async () => {
+  await mapViewRef.value?.clearPins?.();
+  props.setDistrictFilter([...draftDistrictFilter.value]);
+  props.setMtrFilter([...draftMtrFilter.value]);
+  if (draftDistrictFilter.value.length > 0) {
+    props.setMtrFilter([]);
+  } else if (draftMtrFilter.value.length > 0) {
+    props.setDistrictFilter([]);
+  }
+  props.setSportFilter([...draftSportFilter.value]);
+  showFilterPanel.value = false;
+  showMtrDropdown.value = false;
+  showDistrictDropdown.value = false;
+  showSportDropdown.value = false;
+  mtrSearchQuery.value = '';
+  districtSearchQuery.value = '';
+  await nextTick();
+  mapViewRef.value?.syncPins?.();
+};
+
+const applyDraftFiltersList = () => {
+  props.setDistrictFilter([...draftDistrictFilter.value]);
+  props.setMtrFilter([...draftMtrFilter.value]);
+  if (draftDistrictFilter.value.length > 0) {
+    props.setMtrFilter([]);
+  } else if (draftMtrFilter.value.length > 0) {
+    props.setDistrictFilter([]);
+  }
+  props.setSportFilter([...draftSportFilter.value]);
+  showFilterPanel.value = false;
+  showMtrDropdown.value = false;
+  showDistrictDropdown.value = false;
+  showSportDropdown.value = false;
+  mtrSearchQuery.value = '';
+  districtSearchQuery.value = '';
+};
+
+const resetDraftFilters = () => {
+  draftMtrFilter.value = [];
+  draftDistrictFilter.value = [];
+  draftSportFilter.value = [];
+  showFilterPanel.value = false;
+  showMtrDropdown.value = false;
+  showDistrictDropdown.value = false;
+  showSportDropdown.value = false;
+  mtrSearchQuery.value = '';
+  districtSearchQuery.value = '';
 };
 
 const toggleSport = (slug: string) => {
@@ -195,6 +308,18 @@ const currentIndex = computed(() => {
 
 const showStickyCard = computed(() => props.mode === 'map' && !!props.selectedVenue);
 
+const stickyCardClass = computed(() =>
+  props.embedded
+    ? 'absolute inset-x-0 bottom-1 z-40 px-3'
+    : 'fixed inset-x-0 bottom-4 z-40 pb-safe px-3'
+);
+
+const stickyCardSurfaceClass = computed(() =>
+  props.darkMode
+    ? 'bg-gray-900 border-gray-700 shadow-2xl'
+    : 'bg-white/70 border-gray-200 shadow-2xl'
+);
+
 const hasPrevVenue = computed(() => displayListVenues.value.length > 1 && currentIndex.value >= 0);
 const hasNextVenue = computed(() => displayListVenues.value.length > 1 && currentIndex.value >= 0);
 
@@ -210,14 +335,21 @@ watch(
     if (val === 'map') {
       selectInitialVenue();
     } else if (val === 'list') {
-      // If we're on a deep link (/venues/:slug), don't clear the selection/detail state.
-      // Otherwise mobile would stay on the list even though the route is a venue detail page.
       if (props.forceShowDetail) return;
       showDetailPage.value = false;
       props.onSelectVenue(null);
     }
   },
   { immediate: true }
+);
+
+watch(
+  () => props.embedded,
+  (embedded) => {
+    if (embedded && props.mode === 'list' && props.selectedVenue) {
+      props.onSelectVenue(null);
+    }
+  }
 );
 
 const goPrevVenue = () => {
@@ -288,7 +420,7 @@ const goNextVenueFromDetail = async () => {
 
   <div
     v-else-if="mode === 'map'"
-    class="relative h-[calc(100vh-64px)] overflow-hidden"
+    :class="mapShellClass"
   >
     <div
       class="absolute top-4 left-4 right-4 z-20 space-y-2 pointer-events-none transition-all duration-300"
@@ -460,6 +592,20 @@ const goNextVenueFromDetail = async () => {
         >
           {{ t('saved') }}
         </button>
+        <template v-for="slug in districtFilter" :key="`district-${slug}`">
+          <span
+            class="inline-flex items-center gap-1 rounded-[999px] pl-2.5 pr-1 py-1.5 text-[11px] font-bold bg-[#007a67] text-white shadow-md"
+          >
+            {{ getDistrictDisplayName(slug, language) }}
+            <button
+              type="button"
+              class="w-4 h-4 rounded-full flex items-center justify-center hover:bg-white/20 text-[12px] leading-none"
+              @click="setDistrictFilter(districtFilter.filter((s) => s !== slug))"
+            >
+              ×
+            </button>
+          </span>
+        </template>
         <template v-for="station in mtrFilter" :key="station">
           <span
             class="inline-flex items-center gap-1 rounded-[999px] pl-2.5 pr-1 py-1.5 text-[11px] font-bold bg-[#007a67] text-white shadow-md"
@@ -487,10 +633,75 @@ const goNextVenueFromDetail = async () => {
             type="button"
             class="text-[11px] font-bold px-3 py-1 rounded-[999px] border border-transparent hover:border-gray-400 transition-colors"
             :class="darkMode ? 'text-gray-200 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-100'"
-            @click="async () => { await mapViewRef?.clearPins?.(); setMtrFilter([...draftMtrFilter]); setSportFilter([...draftSportFilter]); showFilterPanel = false; showMtrDropdown = false; showSportDropdown = false; mtrSearchQuery = ''; await nextTick(); mapViewRef?.syncPins?.(); }"
+            @click="applyDraftFilters"
           >
             {{ language === 'en' ? 'Go search' : '開始搜尋' }}
           </button>
+        </div>
+        <!-- District dropdown -->
+        <div class="relative">
+          <button
+            type="button"
+            class="w-full flex items-center justify-between px-3 py-2.5 text-[11px] font-bold rounded-[8px] border transition-colors"
+            :class="darkMode ? 'bg-gray-900/60 border-gray-700 text-gray-200 hover:bg-gray-800' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-100'"
+            @click="showDistrictDropdown = !showDistrictDropdown; showMtrDropdown = false"
+          >
+            <span>{{ t('district') }}</span>
+            <span v-if="draftDistrictFilter.length > 0" class="text-[10px] opacity-80">({{ draftDistrictFilter.length }})</span>
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 opacity-70 transition-transform" :class="showDistrictDropdown ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          <div
+            v-if="showDistrictDropdown"
+            class="absolute top-full left-0 right-0 mt-1 p-2 rounded-[8px] border shadow-lg z-20 max-h-[220px] flex flex-col"
+            :class="darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'"
+          >
+            <div class="relative flex-shrink-0 mb-2">
+              <span class="absolute left-2 top-1/2 -translate-y-1/2 opacity-50 text-xs">🔍</span>
+              <input
+                type="text"
+                v-model="districtSearchQuery"
+                :placeholder="language === 'en' ? 'Search districts...' : '搜尋地區...'"
+                class="w-full pl-7 pr-3 py-2 text-[11px] border rounded-[8px] focus:ring-2 focus:ring-[#007a67] focus:outline-none"
+                :class="darkMode ? 'bg-gray-900/60 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-700'"
+                @click.stop
+              />
+            </div>
+            <div class="max-h-[150px] overflow-y-auto space-y-1 custom-scrollbar pr-1 flex-1 min-h-0">
+              <template v-for="group in districtsByRegion" :key="group.region">
+                <p class="px-2 pt-1 pb-0.5 text-[10px] font-bold uppercase tracking-wider opacity-60"
+                  :class="darkMode ? 'text-gray-400' : 'text-gray-500'">{{ group.label }}</p>
+                <button
+                  v-for="district in group.districts"
+                  :key="district.slug"
+                  type="button"
+                  class="w-full flex items-center gap-2 px-2.5 py-2 rounded-[8px] text-left text-[11px] font-bold transition-all"
+                  :class="draftDistrictFilter.includes(district.slug)
+                    ? 'bg-[#007a67] text-white'
+                    : (darkMode ? 'bg-gray-900/60 text-gray-200 hover:bg-gray-800' : 'bg-gray-100 text-gray-700 hover:bg-gray-200')"
+                  @click.stop="toggleDistrict(district.slug)"
+                >
+                  <div class="w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0"
+                    :class="draftDistrictFilter.includes(district.slug) ? 'bg-white border-white' : (darkMode ? 'border-gray-500' : 'border-gray-300')"
+                  >
+                    <svg v-if="draftDistrictFilter.includes(district.slug)" xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-[#007a67]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <span class="flex-1">{{ language === 'zh' ? district.zh : district.en }}</span>
+                </button>
+              </template>
+            </div>
+            <button
+              type="button"
+              class="flex-shrink-0 mt-2 w-full px-3 py-2 text-[11px] font-bold rounded-[8px]"
+              :class="darkMode ? 'text-gray-300 bg-gray-700 hover:bg-gray-600' : 'text-gray-600 bg-gray-200 hover:bg-gray-300'"
+              @click.stop="draftDistrictFilter = []; setDistrictFilter([]); districtSearchQuery = ''"
+            >
+              {{ t('clearAll') }}
+            </button>
+          </div>
         </div>
         <!-- MTR Station dropdown: trigger shows label only, items drop down -->
         <div class="relative">
@@ -607,7 +818,7 @@ const goNextVenueFromDetail = async () => {
             type="button"
             class="flex-1 px-3 py-2 text-[11px] font-bold rounded-[8px]"
             :class="darkMode ? 'text-gray-300 bg-gray-700 hover:bg-gray-600' : 'text-gray-600 bg-gray-200 hover:bg-gray-300'"
-            @click="onClearFilters(); draftMtrFilter = []; draftSportFilter = []; showFilterPanel = false; showMtrDropdown = false; showSportDropdown = false; mtrSearchQuery = ''; setFilterSpecialOffer?.(false)"
+            @click="onClearFilters(); resetDraftFilters(); setFilterSpecialOffer?.(false)"
           >
             {{ t('clearFilters') }}
           </button>
@@ -615,7 +826,7 @@ const goNextVenueFromDetail = async () => {
             type="button"
             class="flex-1 px-3 py-2 text-[11px] font-bold rounded-[8px]"
             :class="darkMode ? 'text-gray-300 bg-gray-700 hover:bg-gray-600' : 'text-gray-600 bg-gray-200 hover:bg-gray-300'"
-            @click="async () => { await mapViewRef?.clearPins?.(); setMtrFilter([...draftMtrFilter]); setSportFilter([...draftSportFilter]); showFilterPanel = false; showMtrDropdown = false; showSportDropdown = false; mtrSearchQuery = ''; await nextTick(); mapViewRef?.syncPins?.(); }"
+            @click="applyDraftFilters"
           >
             {{ language === 'en' ? 'Go search' : '開始搜尋' }}
           </button>
@@ -635,12 +846,6 @@ const goNextVenueFromDetail = async () => {
       :isMobile="true"
     />
 
-    <AppFooter
-      :language="language"
-      :t="t"
-      :darkMode="darkMode"
-      variant="overlay"
-    />
 
     <div
       v-if="showLocationPicker"
@@ -648,7 +853,7 @@ const goNextVenueFromDetail = async () => {
     >
       <div
         class="rounded-[16px] border shadow-xl overflow-hidden"
-        :class="darkMode ? 'bg-gray-900/95 border-gray-800 text-white backdrop-blur' : 'bg-white/95 border-gray-200 text-gray-900 backdrop-blur'"
+        :class="darkMode ? 'border-gray-800 text-white backdrop-blur' : 'border-gray-200 text-gray-900 backdrop-blur'"
       >
         <div class="flex items-center justify-between px-4 py-3 border-b"
           :class="darkMode ? 'border-gray-800' : 'border-gray-200'">
@@ -691,13 +896,16 @@ const goNextVenueFromDetail = async () => {
 
     <div
       v-if="showStickyCard && selectedVenue"
-      class="fixed inset-x-0 bottom-28 z-40 pb-safe px-3"
+      :class="stickyCardClass"
     >
       <div
-        class="rounded-[16px] shadow-[0_-10px_30px_rgba(0,0,0,0.25)] border mb-3"
-        :class="darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'"
+        class="rounded-[16px] border mb-1"
+        :class="stickyCardSurfaceClass"
       >
-      <div class="flex items-center justify-between px-4 pt-3 pb-1 text-[12px] font-[700] uppercase tracking-widest opacity-60">
+      <div
+        class="flex items-center justify-between px-4 pt-3 pb-1 text-[12px] font-[700] uppercase tracking-widest rounded-t-[16px]"
+        :class="darkMode ? 'text-gray-300' : 'text-gray-600'"
+      >
         <span>
           {{ language === 'en' ? 'Court' : '球場' }}
           <span v-if="currentIndex >= 0"> {{ currentIndex + 1 }}/{{ venues.length }}</span>
@@ -705,7 +913,7 @@ const goNextVenueFromDetail = async () => {
         <div class="flex items-center gap-2">
             <button
               class="w-8 h-8 rounded-full flex items-center justify-center text-[16px]"
-              :class="darkMode ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-500'"
+              :class="darkMode ? 'bg-gray-800/60 text-gray-200' : 'bg-gray-200/60 text-gray-700'"
               @click.stop="async () => { onSelectVenue(null); await nextTick(); mapViewRef?.resetView?.(); }"
             >
             ×
@@ -724,19 +932,22 @@ const goNextVenueFromDetail = async () => {
             :onViewDetails="() => { showDetailPage = true; if (selectedVenue) props.onOpenDetail?.(selectedVenue); }"
           />
         </div>
-        <div class="flex items-center justify-between px-4 pt-3 pb-1 text-[12px] font-[700] uppercase tracking-widest opacity-60">
+        <div
+          class="flex items-center justify-between px-4 pt-3 pb-1 text-[12px] font-[700] uppercase tracking-widest rounded-b-[16px]"
+          :class="darkMode ? 'text-gray-300' : 'text-gray-600'"
+        >
           <span></span>
           <div class="flex items-center gap-2">
             <button
               class="w-8 h-8 rounded-full flex items-center justify-center text-[16px]"
-              :class="darkMode ? 'bg-gray-800 text-gray-200' : 'bg-gray-100 text-gray-700'"
+              :class="darkMode ? 'bg-gray-800/60 text-gray-200' : 'bg-gray-200/60 text-gray-700'"
               @click.stop="goPrevVenue"
             >
               ‹
             </button>
             <button
               class="w-8 h-8 rounded-full flex items-center justify-center text-[16px]"
-              :class="darkMode ? 'bg-gray-800 text-gray-200' : 'bg-gray-100 text-gray-700'"
+              :class="darkMode ? 'bg-gray-800/60 text-gray-200' : 'bg-gray-200/60 text-gray-700'"
               @click.stop="goNextVenue"
             >
               ›
@@ -749,16 +960,16 @@ const goNextVenueFromDetail = async () => {
 
   <div
     v-else
-    class="h-[calc(100vh-64px)] flex flex-col"
+    :class="listShellClass"
   >
     <div
       class="px-4 pt-4 pb-3 space-y-3 border-b"
-      :class="darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'"
+      :class="darkMode ? 'bg-gray-800 border-gray-700' : 'border-gray-200'"
     >
       <!--<div class="flex items-center justify-between">
         <span class="text-[11px] font-[900] uppercase tracking-wider opacity-70" :class="darkMode ? 'text-gray-400' : 'text-gray-500'">{{ t('filter') }}</span>
         <button
-          v-if="onClearFilters && (mtrFilter.length > 0 || distanceFilter || sportFilter.length > 0)"
+          v-if="onClearFilters && (districtFilter.length > 0 || mtrFilter.length > 0 || distanceFilter || sportFilter.length > 0)"
           type="button"
           class="text-[10px] font-bold opacity-70 hover:opacity-100"
           :class="darkMode ? 'text-gray-400' : 'text-gray-500'"
@@ -933,6 +1144,20 @@ const goNextVenueFromDetail = async () => {
         >
           {{ t('saved') }}
         </button>
+        <template v-for="slug in districtFilter" :key="`district-${slug}`">
+          <span
+            class="inline-flex items-center gap-1 rounded-[999px] pl-2.5 pr-1 py-1.5 text-[11px] font-bold bg-[#007a67] text-white shadow-md"
+          >
+            {{ getDistrictDisplayName(slug, language) }}
+            <button
+              type="button"
+              class="w-4 h-4 rounded-full flex items-center justify-center hover:bg-white/20 text-[12px] leading-none"
+              @click="setDistrictFilter(districtFilter.filter((s) => s !== slug))"
+            >
+              ×
+            </button>
+          </span>
+        </template>
         <template v-for="station in mtrFilter" :key="station">
           <span
             class="inline-flex items-center gap-1 rounded-[999px] pl-3 pr-1.5 py-2 text-[12px] font-bold bg-[#007a67] text-white"
@@ -960,7 +1185,7 @@ const goNextVenueFromDetail = async () => {
             type="button"
             class="text-[11px] font-bold px-3 py-1 rounded-[999px] border border-transparent hover:border-gray-400 transition-colors"
             :class="darkMode ? 'text-gray-200 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-100'"
-            @click="() => { setMtrFilter([...draftMtrFilter]); setSportFilter([...draftSportFilter]); showFilterPanel = false; showMtrDropdown = false; showSportDropdown = false; mtrSearchQuery = ''; }"
+            @click="() => { applyDraftFiltersList(); }"
           >
             {{ language === 'en' ? 'Go search' : '開始搜尋' }}
           </button>
@@ -981,6 +1206,71 @@ const goNextVenueFromDetail = async () => {
               :class="filterSpecialOffer ? 'translate-x-4' : 'translate-x-0.5'"
             />
           </button>
+        </div>
+        <!-- District dropdown -->
+        <div class="relative">
+          <button
+            type="button"
+            class="w-full flex items-center justify-between px-3 py-2.5 text-[11px] font-bold rounded-[8px] border transition-colors"
+            :class="darkMode ? 'bg-gray-900/60 border-gray-700 text-gray-200 hover:bg-gray-800' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-100'"
+            @click="showDistrictDropdown = !showDistrictDropdown; showMtrDropdown = false"
+          >
+            <span>{{ t('district') }}</span>
+            <span v-if="draftDistrictFilter.length > 0" class="text-[10px] opacity-80">({{ draftDistrictFilter.length }})</span>
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 opacity-70 transition-transform" :class="showDistrictDropdown ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          <div
+            v-if="showDistrictDropdown"
+            class="absolute top-full left-0 right-0 mt-1 p-2 rounded-[8px] border shadow-lg z-20 max-h-[220px] flex flex-col"
+            :class="darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'"
+          >
+            <div class="relative flex-shrink-0 mb-2">
+              <span class="absolute left-2 top-1/2 -translate-y-1/2 opacity-50 text-xs">🔍</span>
+              <input
+                type="text"
+                v-model="districtSearchQuery"
+                :placeholder="language === 'en' ? 'Search districts...' : '搜尋地區...'"
+                class="w-full pl-7 pr-3 py-2 text-[11px] border rounded-[8px] focus:ring-2 focus:ring-[#007a67] focus:outline-none"
+                :class="darkMode ? 'bg-gray-900/60 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-700'"
+                @click.stop
+              />
+            </div>
+            <div class="max-h-[150px] overflow-y-auto space-y-1 custom-scrollbar pr-1 flex-1 min-h-0">
+              <template v-for="group in districtsByRegion" :key="group.region">
+                <p class="px-2 pt-1 pb-0.5 text-[10px] font-bold uppercase tracking-wider opacity-60"
+                  :class="darkMode ? 'text-gray-400' : 'text-gray-500'">{{ group.label }}</p>
+                <button
+                  v-for="district in group.districts"
+                  :key="district.slug"
+                  type="button"
+                  class="w-full flex items-center gap-2 px-2.5 py-2 rounded-[8px] text-left text-[11px] font-bold transition-all"
+                  :class="draftDistrictFilter.includes(district.slug)
+                    ? 'bg-[#007a67] text-white'
+                    : (darkMode ? 'bg-gray-900/60 text-gray-200 hover:bg-gray-800' : 'bg-gray-100 text-gray-700 hover:bg-gray-200')"
+                  @click.stop="toggleDistrict(district.slug)"
+                >
+                  <div class="w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0"
+                    :class="draftDistrictFilter.includes(district.slug) ? 'bg-white border-white' : (darkMode ? 'border-gray-500' : 'border-gray-300')"
+                  >
+                    <svg v-if="draftDistrictFilter.includes(district.slug)" xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-[#007a67]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <span class="flex-1">{{ language === 'zh' ? district.zh : district.en }}</span>
+                </button>
+              </template>
+            </div>
+            <button
+              type="button"
+              class="flex-shrink-0 mt-2 w-full px-3 py-2 text-[11px] font-bold rounded-[8px]"
+              :class="darkMode ? 'text-gray-300 bg-gray-700 hover:bg-gray-600' : 'text-gray-600 bg-gray-200 hover:bg-gray-300'"
+              @click.stop="draftDistrictFilter = []; setDistrictFilter([]); districtSearchQuery = ''"
+            >
+              {{ t('clearAll') }}
+            </button>
+          </div>
         </div>
         <!-- MTR Station dropdown: trigger shows label only, items drop down -->
         <div class="relative">
@@ -1097,7 +1387,7 @@ const goNextVenueFromDetail = async () => {
             type="button"
             class="flex-1 px-3 py-2 text-[11px] font-bold rounded-[8px]"
             :class="darkMode ? 'text-gray-300 bg-gray-800 hover:bg-gray-700' : 'text-gray-600 bg-gray-200 hover:bg-gray-300'"
-            @click="() => { onClearFilters(); draftMtrFilter = []; draftSportFilter = []; showFilterPanel = false; showMtrDropdown = false; showSportDropdown = false; mtrSearchQuery = ''; setFilterSpecialOffer?.(false); }"
+            @click="() => { onClearFilters(); resetDraftFilters(); setFilterSpecialOffer?.(false); }"
           >
             {{ t('clearFilters') }}
           </button>
@@ -1105,7 +1395,7 @@ const goNextVenueFromDetail = async () => {
             type="button"
             class="flex-1 px-3 py-2 text-[11px] font-bold rounded-[8px]"
             :class="darkMode ? 'text-gray-300 bg-gray-800 hover:bg-gray-700' : 'text-gray-600 bg-gray-200 hover:bg-gray-300'"
-            @click="() => { setMtrFilter([...draftMtrFilter]); setSportFilter([...draftSportFilter]); showFilterPanel = false; showMtrDropdown = false; showSportDropdown = false; mtrSearchQuery = ''; }"
+            @click="() => { applyDraftFiltersList(); }"
           >
             {{ language === 'en' ? 'Go search' : '開始搜尋' }}
           </button>
@@ -1135,7 +1425,7 @@ const goNextVenueFromDetail = async () => {
         class="space-y-3"
       >
         <MobileVenueCard
-          v-for="(venue, index) in venues"
+          v-for="(venue, index) in displayListVenues"
           :key="venue.id"
           :venue="venue"
           :priorityImage="index === 0"
@@ -1152,7 +1442,6 @@ const goNextVenueFromDetail = async () => {
         />
       </div>
 
-      <AppFooter :language="language" :t="t" :darkMode="darkMode" variant="inline" />
     </div>
   </div>
 </template>

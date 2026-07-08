@@ -21,11 +21,17 @@ See **[docs/README.md](docs/README.md)** for the full doc index:
 npm install
 ```
 
-Create `.env`:
+Create `.env` (see `.env.example`):
 
 ```env
 VITE_API_URL=http://localhost:3001
 VITE_GOOGLE_MAPS_API_KEY=your-key
+
+# Server only — for the landing courts form (Webflow proxy)
+WEBFLOW_API_TOKEN=your-webflow-site-api-token
+WEBFLOW_SITE_ID=64a3d87da25bdfc447bb9470
+WEBFLOW_FORM_NAME=Courts Form
+WEBFLOW_PAGE_ID=6a4cc976d5d448ff93b2b52c
 ```
 
 Terminal 1 — API:

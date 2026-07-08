@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import type { Venue, Language, OperatingHours, OperatingDayKey } from '../../../types';
 import { getStationDisplayName } from '../../utils/mtrStations';
+import { getVenueDistrictSlug, getDistrictDisplayName } from '../../utils/hkDistricts';
 import { applyVenueSeo, resetSeoToDefault, getSportTypeLabel, getVenueImageAlt } from '../../utils/seo';
 import { slugify } from '../../utils/slugify';
 import ImageCarousel from '../ui/ImageCarousel.vue';
@@ -245,6 +246,11 @@ onUnmounted(() => {
 
 const venueImageAlt = computed(() => getVenueImageAlt(props.venue, props.language));
 
+const districtName = computed(() => {
+  const slug = getVenueDistrictSlug(props.venue);
+  return slug ? getDistrictDisplayName(slug, props.language) : null;
+});
+
 const OPERATING_DAY_KEYS: OperatingDayKey[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 const OPERATING_DAY_LABELS: Record<OperatingDayKey, { en: string; zh: string }> = {
   mon: { en: 'Mon', zh: '週一' },
@@ -480,13 +486,10 @@ watch(
             </template>
             <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-[14px] font-[400]"
               :class="darkMode ? 'text-gray-400' : 'text-gray-600'">
-              <span v-if="venue.mtrStation" class="rounded-md px-2.5 py-0.5 text-xs font-medium shrink-0"
-                :class="darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'">🚇 {{
-                  getStationDisplayName(venue.mtrStation, language) }} ({{ venue.mtrExit }})</span>
-              <span v-if="venue.walkingDistance > 0" class="rounded-md px-2.5 py-0.5 text-xs font-medium shrink-0"
-                :class="darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'">
-                {{ venue.walkingDistance }} {{ t('min') }} {{ t('walk') }}
-              </span>
+              <span v-if="districtName" class="rounded-md px-2.5 py-0.5 text-xs font-medium shrink-0"
+                :class="darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'">📍 {{ districtName }}</span>
+              <span v-if="venue.mtrStation || venue.walkingDistance > 0" class="rounded-md px-2.5 py-0.5 text-xs font-medium shrink-0"
+                :class="darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'"><template v-if="venue.mtrStation">🚇 {{ getStationDisplayName(venue.mtrStation, language) }}<template v-if="venue.mtrExit"> ({{ venue.mtrExit }})</template> </template><template v-if="venue.mtrStation && venue.walkingDistance > 0"> • </template><template v-if="venue.walkingDistance > 0"> {{ venue.walkingDistance }} {{ t('min') }}</template></span>
               <span v-if="venue.ceilingHeight > 0" class="rounded-md px-2.5 py-0.5 text-xs font-medium shrink-0"
                 :class="darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'">
                 {{ venue.ceilingHeight }}m {{ t('ceilingHeight') }}

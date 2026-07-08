@@ -2,8 +2,68 @@ import type { Venue } from '../../types';
 import { slugify } from './slugify';
 
 const SITE_NAME = 'Courts';
+const HK_DISTRICT_COUNT = 18;
 const DEFAULT_KEYWORDS =
-  'pickleball courts hong kong, pickleball court hk, sports courts Hong Kong, court booking, MTR courts, 香港球場, 球場預訂, pickleball Hong Kong, 匹克球, 匹克球香港, pickleball 香港, pickleball 場地, 匹克球場地, 匹克球 租場, 匹克球場收費';
+  'pickleball courts hong kong, pickleball court hk, sports courts Hong Kong, court booking, Hong Kong 18 districts courts, 香港18區球場, 香港球場, 球場預訂, pickleball Hong Kong, 匹克球, 匹克球香港, pickleball 香港, pickleball 場地, 匹克球場地, 匹克球 租場, 匹克球場收費, Sha Tin courts, Kwun Tong pickleball, 沙田球場, 觀塘匹克球';
+
+export type SportVenueCount = {
+  slug: string;
+  name: string;
+  name_zh?: string | null;
+  count: number;
+};
+
+type SportOption = { name: string; name_zh?: string | null; slug: string };
+
+/** Whether a venue supports the given sport slug (matches explore filter logic). */
+export function venueMatchesSportSlug(venue: Venue, sportSlug: string): boolean {
+  const slug = (sportSlug || '').toLowerCase().trim();
+  if (!slug) return false;
+  const types = venue.sport_types;
+  const data = venue.sport_data;
+  const name = ((venue as { name?: string }).name ?? '').toString().toLowerCase();
+  const desc = ((venue as { description?: string }).description ?? '').toString().toLowerCase();
+  const hasSportBySlug = Array.isArray(data)
+    && data.some((d) => String(d.slug || '').toLowerCase().trim() === slug);
+  const hasSportByName = Array.isArray(types)
+    && types.some((t) => String(t).toLowerCase().trim() === slug);
+  return hasSportBySlug || hasSportByName || name.includes(slug) || desc.includes(slug);
+}
+
+export function countVenuesBySport(venues: Venue[], sports: SportOption[]): SportVenueCount[] {
+  return sports
+    .map((sport) => ({
+      slug: sport.slug,
+      name: sport.name,
+      name_zh: sport.name_zh,
+      count: venues.filter((v) => venueMatchesSportSlug(v, sport.slug)).length,
+    }))
+    .filter((s) => s.count > 0)
+    .sort((a, b) => b.count - a.count);
+}
+
+function sportLabel(item: SportVenueCount, lang: 'en' | 'zh'): string {
+  return lang === 'zh' && item.name_zh ? item.name_zh : item.name;
+}
+
+function buildLandingSportSummary(sportCounts: SportVenueCount[], lang: 'en' | 'zh', limit = 5): string {
+  return sportCounts
+    .slice(0, limit)
+    .map((s) => (lang === 'zh'
+      ? `${sportLabel(s, lang)} ${s.count}個`
+      : `${sportLabel(s, lang)} (${s.count})`))
+    .join(lang === 'zh' ? '、' : ', ');
+}
+
+function buildLandingKeywords(sportCounts: SportVenueCount[]): string {
+  const sportTerms = sportCounts.flatMap((s) => [
+    `${s.name} courts hong kong`,
+    `${s.name} court hk`,
+    s.name_zh ? `${s.name_zh}香港` : '',
+    `${s.name} ${HK_DISTRICT_COUNT} districts`,
+  ]);
+  return uniqueCsv([...sportTerms, DEFAULT_KEYWORDS]);
+}
 
 function cleanText(s: unknown): string {
   return typeof s === 'string' ? s.replace(/\s+/g, ' ').trim() : '';
@@ -148,8 +208,9 @@ function getReadableCurrentUrl(): string {
   }
 }
 
-const DEFAULT_TITLE = `Courts | Find Sports Courts in Hong Kong`;
-const DEFAULT_DESCRIPTION = `Find and book sports courts near MTR stations. Compare prices, amenities, and walking distance.`;
+const DEFAULT_TITLE = `Courts | Find Sports Courts in All ${HK_DISTRICT_COUNT} Hong Kong Districts`;
+const DEFAULT_DESCRIPTION =
+  `Search sports courts across all ${HK_DISTRICT_COUNT} Hong Kong districts. Filter by district and sport, compare prices and amenities, and book in minutes. 搜尋香港18區運動場地。`;
 /** Default share preview image (home page). Use absolute URL so crawlers see it when sharing site URL. */
 const DEFAULT_OG_IMAGE_PATH = '/gray-G.png';
 
@@ -189,6 +250,54 @@ export function applyVenueSeo(venue: Venue, baseUrl: string, lang: 'en' | 'zh' =
   }
 
   injectVenueJsonLd(venue, baseUrl);
+}
+
+/** Dynamic landing page SEO with per-sport venue counts. */
+export function applyLandingPageSeo(
+  venues: Venue[],
+  sports: SportOption[],
+  lang: 'en' | 'zh' = 'en',
+  baseUrl?: string,
+): void {
+  const total = venues.length;
+  const sportCounts = countVenuesBySport(venues, sports);
+  const sportSummary = buildLandingSportSummary(sportCounts, lang);
+  const origin = typeof window !== 'undefined' ? window.location.origin : (baseUrl || '').replace(/\/$/, '');
+  const homeUrl = origin ? `${origin}/` : (baseUrl || '');
+  const defaultImageUrl = origin ? new URL(DEFAULT_OG_IMAGE_PATH, origin).href : '';
+
+  const title = lang === 'zh'
+    ? `Courts`
+    : `Courts`;
+
+  const description = lang === 'zh'
+    ? `搜尋香港全部${HK_DISTRICT_COUNT}區運動場地，共${total}個場館${sportSummary ? `。${sportSummary}` : ''}。可搜尋所有地區或按區篩選，比較收費，快速預訂。`
+    : `Search sports courts across all ${HK_DISTRICT_COUNT} Hong Kong districts. ${total}+ venues${sportSummary ? `: ${sportSummary}` : ''}. Filter by district and sport, compare prices, and book in minutes.`;
+
+  const keywords = buildLandingKeywords(sportCounts);
+
+  document.title = title;
+  setMeta('description', description);
+  setMeta('keywords', keywords);
+  if (homeUrl) setCanonical(homeUrl);
+
+  setOgTag('og:title', title);
+  setOgTag('og:description', description);
+  setOgTag('og:type', 'website');
+  if (homeUrl) setOgTag('og:url', homeUrl);
+  setOgTag('og:site_name', SITE_NAME);
+
+  setMeta('twitter:card', 'summary_large_image');
+  setMeta('twitter:title', title);
+  setMeta('twitter:description', description);
+  if (homeUrl) setMeta('twitter:url', homeUrl);
+  if (defaultImageUrl) {
+    setOgTag('og:image', defaultImageUrl);
+    setOgTag('og:image:secure_url', defaultImageUrl);
+    setMeta('twitter:image', defaultImageUrl);
+  }
+
+  injectLandingJsonLd({ total, sportCounts, homeUrl, lang });
 }
 
 /** Reset to default meta when leaving venue detail. */
@@ -296,7 +405,60 @@ function injectVenueJsonLd(venue: Venue, baseUrl: string): void {
   document.head.appendChild(script);
 }
 
+function injectLandingJsonLd({
+  total,
+  sportCounts,
+  homeUrl,
+  lang,
+}: {
+  total: number;
+  sportCounts: SportVenueCount[];
+  homeUrl: string;
+  lang: 'en' | 'zh';
+}): void {
+  removeJsonLd();
+
+  const websiteLd: Record<string, unknown> = {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    name: SITE_NAME,
+    url: homeUrl,
+    description: lang === 'zh'
+      ? `搜尋香港${HK_DISTRICT_COUNT}區運動場地，共${total}個場館。`
+      : `Search ${total}+ sports venues across all ${HK_DISTRICT_COUNT} Hong Kong districts.`,
+    potentialAction: {
+      '@type': 'SearchAction',
+      target: `${homeUrl.replace(/\/$/, '')}/explore`,
+      'query-input': 'required name=search_term_string',
+    },
+  };
+
+  const itemListLd: Record<string, unknown> = {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    name: lang === 'zh' ? '香港運動場地（按運動類型）' : 'Hong Kong sports venues by type',
+    numberOfItems: sportCounts.length,
+    itemListElement: sportCounts.map((s, index) => ({
+      '@type': 'ListItem',
+      position: index + 1,
+      name: sportLabel(s, lang),
+      description: lang === 'zh'
+        ? `${s.count}個場館，可於香港${HK_DISTRICT_COUNT}區搜尋`
+        : `${s.count} venues searchable across ${HK_DISTRICT_COUNT} Hong Kong districts`,
+      url: `${homeUrl.replace(/\/$/, '')}/search/${s.slug}`,
+    })),
+  };
+
+  for (const payload of [websiteLd, itemListLd]) {
+    const script = document.createElement('script');
+    script.type = 'application/ld+json';
+    script.textContent = JSON.stringify(payload);
+    script.setAttribute('data-seo-landing', '1');
+    document.head.appendChild(script);
+  }
+}
+
 function removeJsonLd(): void {
-  document.querySelectorAll('script[data-seo-venue="1"]').forEach((el) => el.remove());
+  document.querySelectorAll('script[data-seo-venue="1"], script[data-seo-landing="1"]').forEach((el) => el.remove());
 }
 

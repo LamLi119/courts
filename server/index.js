@@ -5,6 +5,7 @@ import mysql from 'mysql2/promise';
 import crypto from 'crypto';
 import axios from 'axios';
 import { Storage } from '@google-cloud/storage';
+import { getCourtsFormConfig, submitCourtsForm } from './webflowCourtsForm.js';
 
 const app = express();
 // Venue form sends base64 images; keep payload limit high enough for multi-image saves.
@@ -691,12 +692,45 @@ app.use('/api', (req, res, next) => {
   if (req.method === 'GET' && req.path === '/events/public') {
     return next();
   }
+  // Public courts listing form (Webflow proxy).
+  if (req.path === '/courts-form/config' && req.method === 'GET') {
+    return next();
+  }
+  if (req.path === '/courts-form/submit' && req.method === 'POST') {
+    return next();
+  }
   const incoming = req.get('x-proxy-secret') || '';
   if (incoming !== PROXY_SECRET) return res.status(401).json({ error: 'Unauthorized' });
   return next();
 });
 
 // --- ROUTES ---
+
+app.get('/api/courts-form/config', async (_req, res) => {
+  try {
+    const config = await getCourtsFormConfig();
+    res.json({
+      formName: config.formName,
+      fields: config.fields,
+      source: config.source,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Failed to load courts form config' });
+  }
+});
+
+app.post('/api/courts-form/submit', async (req, res) => {
+  try {
+    const fields = req.body?.fields;
+    if (!fields || typeof fields !== 'object' || Array.isArray(fields)) {
+      return res.status(400).json({ error: 'fields object is required' });
+    }
+    const result = await submitCourtsForm(fields);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message || 'Failed to submit courts form' });
+  }
+});
 
 function isAllowedImageProxyUrl(rawUrl) {
   if (!rawUrl) return false;

@@ -70,6 +70,7 @@ export const MTR_STATIONS: { en: string; zh: string }[] = [
   { en: 'Wu Kai Sha', zh: '烏溪沙' },
   { en: 'Tuen Mun', zh: '屯門' },
   { en: 'Heng On', zh: '恒安' },
+  { en: 'Kennedy Town', zh: '堅尼地城'}
   
 ];
 

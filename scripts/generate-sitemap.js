@@ -214,9 +214,25 @@ async function loadData({ cacheOnly = false } = {}) {
   }
 }
 
+function venueMatchesSportSlug(venue, sportSlug) {
+  const slug = (sportSlug || '').toLowerCase().trim();
+  if (!slug) return false;
+  const types = venue?.sport_types;
+  const data = venue?.sport_data;
+  const name = String(venue?.name ?? '').toLowerCase();
+  const desc = String(venue?.description ?? '').toLowerCase();
+  const hasSportBySlug = Array.isArray(data)
+    && data.some((d) => String(d?.slug || '').toLowerCase().trim() === slug);
+  const hasSportByName = Array.isArray(types)
+    && types.some((t) => String(t).toLowerCase().trim() === slug);
+  return hasSportBySlug || hasSportByName || name.includes(slug) || desc.includes(slug);
+}
+
 function buildSitemap({ sports, venues }) {
   const urls = [];
   const seen = new Set();
+  const venueList = venues || [];
+  const sportList = sports || [];
 
   function add(loc, opts) {
     if (seen.has(loc)) return;
@@ -225,14 +241,18 @@ function buildSitemap({ sports, venues }) {
   }
 
   add(`${BASE_URL}/`, { changefreq: 'weekly', priority: '1.0' });
+  add(`${BASE_URL}/explore`, { changefreq: 'weekly', priority: '0.9' });
+  add(`${BASE_URL}/upcoming-events`, { changefreq: 'weekly', priority: '0.6' });
 
-  for (const sport of sports || []) {
+  for (const sport of sportList) {
     const slug = sport?.slug;
     if (!slug) continue;
+    const count = venueList.filter((v) => venueMatchesSportSlug(v, slug)).length;
+    if (count === 0) continue;
     add(`${BASE_URL}/search/${slug}`, { changefreq: 'weekly', priority: '0.8' });
   }
 
-  for (const venue of venues || []) {
+  for (const venue of venueList) {
     const slug = slugify(venue?.name);
     if (!slug) continue;
     add(`${BASE_URL}/venues/${slug}`, { changefreq: 'monthly', priority: '0.7' });
