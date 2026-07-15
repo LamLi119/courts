@@ -184,7 +184,13 @@ export const db = {
     const res = await apiFetch('/api/sports');
     if (!res.ok) return [];
     const data = await res.json();
-    return Array.isArray(data) ? data : [];
+    if (!Array.isArray(data)) return [];
+    return data.slice().sort((a: Sport, b: Sport) => {
+      const ao = a.sort_order ?? 9999;
+      const bo = b.sort_order ?? 9999;
+      if (ao !== bo) return ao - bo;
+      return String(a.name || '').localeCompare(String(b.name || ''));
+    });
   },
 
   async createSport(payload: { name_en: string; name_zh?: string }): Promise<Sport> {
@@ -215,6 +221,17 @@ export const db = {
 
   async deleteSport(id: number): Promise<void> {
     const res = await apiFetch(`/api/sports/${id}`, { method: 'DELETE' });
+    if (!res.ok && res.status !== 204) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(err.error || res.statusText);
+    }
+  },
+
+  async updateSportsOrder(orderedIds: number[]): Promise<void> {
+    const res = await apiFetch('/api/sports/order', {
+      method: 'PATCH',
+      body: JSON.stringify({ orderedIds }),
+    });
     if (!res.ok && res.status !== 204) {
       const err = await res.json().catch(() => ({ error: res.statusText }));
       throw new Error(err.error || res.statusText);

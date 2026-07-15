@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, ref } from 'vue';
 import type { Venue, Language, Sport } from '../../../types';
 import { db } from '../../../db';
 
-type SportItem = { id: number; name: string; name_zh?: string | null; slug: string };
+type SportItem = { id: number; name: string; name_zh?: string | null; slug: string; sort_order?: number | null };
 
 const props = defineProps<{
   venues: Venue[];
@@ -38,18 +38,33 @@ const isEditingSports = ref(false);
 const adminSportsList = computed<Sport[]>(() => props.sports as Sport[]);
 
 const draggedVenueId = ref<number | null>(null);
-const adminOrder = ref<number[]>([]);
 const isSortEditing = ref(false);
 const draftAdminOrder = ref<number[]>([]);
 
+const byGlobalSortOrder = (a: Venue, b: Venue) => {
+  const ao = a.sort_order ?? 9999;
+  const bo = b.sort_order ?? 9999;
+  if (ao !== bo) return ao - bo;
+  return String(a.name || '').localeCompare(String(b.name || ''));
+};
+
+const bySportSortOrder = (slug: string) => (a: Venue, b: Venue) => {
+  const ao = a.sport_orders?.[slug] ?? a.sport_data?.find((d: any) => (d.slug || '').toLowerCase() === slug)?.sort_order ?? 9999;
+  const bo = b.sport_orders?.[slug] ?? b.sport_data?.find((d: any) => (d.slug || '').toLowerCase() === slug)?.sort_order ?? 9999;
+  if (ao !== bo) return ao - bo;
+  return byGlobalSortOrder(a, b);
+};
+
 const adminVenues = computed(() => {
-  let list = props.venues;
+  let list = [...props.venues];
   if (props.adminStatus.type === 'court') {
-    return list.filter((v) => props.adminStatus.allowedIds.includes(v.id));
+    list = list.filter((v) => props.adminStatus.allowedIds.includes(v.id));
   }
-  if (adminSportFilter.value === 'all') return props.venues;
+  if (adminSportFilter.value === 'all') {
+    return list.sort(byGlobalSortOrder);
+  }
   const slug = adminSportFilter.value;
-  return props.venues
+  return list
     .filter((v) => {
       const types = v.sport_types;
       const data = v.sport_data;
@@ -57,23 +72,32 @@ const adminVenues = computed(() => {
       if (Array.isArray(types)) return types.some((t: string) => String(t).toLowerCase().replace(/\s+/g, '-') === slug);
       return false;
     })
-    .sort((a, b) => {
-      const ao = a.sport_orders?.[slug] ?? a.sport_data?.find((d: any) => (d.slug || '').toLowerCase() === slug)?.sort_order ?? 9999;
-      const bo = b.sport_orders?.[slug] ?? b.sport_data?.find((d: any) => (d.slug || '').toLowerCase() === slug)?.sort_order ?? 9999;
-      return ao - bo;
-    });
+    .sort(bySportSortOrder(slug));
 });
 
-const getBaseAdminOrder = (): number[] => {
-  if (adminSportFilter.value === 'all') return adminOrder.value.length ? [...adminOrder.value] : props.venues.map((v) => v.id);
-  return adminVenues.value.map((v) => v.id);
-};
+const getBaseAdminOrder = (): number[] => adminVenues.value.map((v) => v.id);
 
 const displayIndexById = computed(() => {
   const order = isSortEditing.value ? draftAdminOrder.value : getBaseAdminOrder();
   const map = new Map<number, number>();
   order.forEach((id, idx) => map.set(id, idx));
   return map;
+});
+
+/** While editing, list rows follow draft order so up/down and drag are visible. */
+const displayedAdminVenues = computed(() => {
+  if (!isSortEditing.value || !draftAdminOrder.value.length) return adminVenues.value;
+  const byId = new Map(adminVenues.value.map((v) => [v.id, v]));
+  const ordered: Venue[] = [];
+  for (const id of draftAdminOrder.value) {
+    const v = byId.get(id);
+    if (v) {
+      ordered.push(v);
+      byId.delete(id);
+    }
+  }
+  byId.forEach((v) => ordered.push(v));
+  return ordered;
 });
 
 const isDraftDirty = computed(() => {
@@ -85,42 +109,6 @@ const isDraftDirty = computed(() => {
     if (base[i] !== draft[i]) return true;
   }
   return false;
-});
-
-const saveAdminOrder = () => {
-  try {
-    localStorage.setItem('pickleball_admin_order', JSON.stringify(adminOrder.value));
-  } catch {
-    // ignore
-  }
-};
-
-const applyAdminOrder = () => {
-  if (!adminOrder.value.length) return;
-  const idToVenue = new Map(props.venues.map((v) => [v.id, v]));
-  const ordered: Venue[] = [];
-  adminOrder.value.forEach((id) => {
-    const v = idToVenue.get(id);
-    if (v) {
-      ordered.push(v);
-      idToVenue.delete(id);
-    }
-  });
-  idToVenue.forEach((v) => ordered.push(v));
-  emit('update:venues', ordered);
-};
-
-onMounted(() => {
-  try {
-    const raw = localStorage.getItem('pickleball_admin_order');
-    adminOrder.value = raw ? JSON.parse(raw) : [];
-  } catch {
-    adminOrder.value = [];
-  }
-  if (props.venues.length && !adminOrder.value.length) {
-    adminOrder.value = props.venues.map((v) => v.id);
-    saveAdminOrder();
-  }
 });
 
 const handleDragStart = (id: number) => {
@@ -183,19 +171,14 @@ const saveSortEdit = async () => {
   const next = draftAdminOrder.value.length ? [...draftAdminOrder.value] : getBaseAdminOrder();
   const sportSlug = adminSportFilter.value;
   const sportId = sportSlug === 'all' ? undefined : props.sports.find((s) => s.slug === sportSlug)?.id;
-  if (sportSlug === 'all') {
-    adminOrder.value = next;
-    saveAdminOrder();
-    applyAdminOrder();
-  }
   try {
     await db.updateVenueOrder(next, sportId);
+    emit('reloadVenues');
   } catch (err) {
     console.error('Failed to persist order:', err);
   } finally {
     cancelSortEdit();
   }
-  if (sportSlug !== 'all') emit('reloadVenues');
 };
 
 const handleAddSport = async () => {
@@ -255,6 +238,32 @@ const deleteSportApiCall = async (sportId: number) => {
     isEditingSports.value = false;
   } catch (err: any) {
     alert(err?.message || 'Failed to delete sport');
+  }
+};
+
+const isReorderingSports = ref(false);
+
+const moveSportType = async (sportId: number, direction: -1 | 1) => {
+  if (isReorderingSports.value) return;
+  const list = [...props.sports];
+  const idx = list.findIndex((x) => x.id === sportId);
+  const j = idx + direction;
+  if (idx < 0 || j < 0 || j >= list.length) return;
+  [list[idx], list[j]] = [list[j], list[idx]];
+  const withOrder = list.map((s, i) => ({ ...s, sort_order: i }));
+  emit('update:sports', withOrder);
+  isReorderingSports.value = true;
+  try {
+    await db.updateSportsOrder(withOrder.map((s) => s.id));
+    emit('notify', 'success', props.language === 'en' ? 'Sport order saved.' : '運動類型順序已儲存。');
+  } catch (err: any) {
+    emit('notify', 'error', err?.message || (props.language === 'en' ? 'Failed to save sport order.' : '儲存運動類型順序失敗。'));
+    try {
+      const fresh = await db.getSports();
+      if (fresh?.length) emit('update:sports', fresh);
+    } catch (_) {}
+  } finally {
+    isReorderingSports.value = false;
   }
 };
 </script>
@@ -340,8 +349,37 @@ const deleteSportApiCall = async (sportId: number) => {
           </button>
         </div>
         <div v-if="isSuperAdmin && isEditingSports" class="grid gap-2 mt-4 p-4 rounded-xl border" :class="darkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-100 border-gray-200'">
-          <p class="text-xs font-bold uppercase tracking-wider opacity-70">Edit sport names</p>
-          <div v-for="s in adminSportsList" :key="s.id" class="flex flex-wrap gap-2 items-center">
+          <p class="text-xs font-bold uppercase tracking-wider opacity-70">
+            {{ language === 'en' ? 'Edit sport names & order' : '編輯運動名稱與順序' }}
+          </p>
+          <div
+            v-for="(s, sIdx) in adminSportsList"
+            :key="s.id"
+            class="flex flex-wrap gap-2 items-center"
+          >
+            <div class="flex flex-col items-center gap-0.5 flex-shrink-0">
+              <button
+                type="button"
+                class="p-1.5 rounded-lg text-xs transition-colors"
+                :class="sIdx === 0 || isReorderingSports ? 'opacity-30 cursor-not-allowed' : (darkMode ? 'hover:bg-gray-700 text-gray-300' : 'hover:bg-gray-200 text-gray-600')"
+                :disabled="sIdx === 0 || isReorderingSports"
+                :aria-label="language === 'en' ? 'Move sport up' : '上移運動類型'"
+                @click="moveSportType(s.id, -1)"
+              >
+                ▲
+              </button>
+              <span class="text-[10px] font-black tabular-nums opacity-50">{{ sIdx + 1 }}</span>
+              <button
+                type="button"
+                class="p-1.5 rounded-lg text-xs transition-colors"
+                :class="sIdx === adminSportsList.length - 1 || isReorderingSports ? 'opacity-30 cursor-not-allowed' : (darkMode ? 'hover:bg-gray-700 text-gray-300' : 'hover:bg-gray-200 text-gray-600')"
+                :disabled="sIdx === adminSportsList.length - 1 || isReorderingSports"
+                :aria-label="language === 'en' ? 'Move sport down' : '下移運動類型'"
+                @click="moveSportType(s.id, 1)"
+              >
+                ▼
+              </button>
+            </div>
             <input v-model="s.name" type="text" class="px-3 py-2 rounded-lg text-sm border max-w-[140px]" :class="darkMode ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-300'" placeholder="Name" />
             <input v-model="s.name_zh" type="text" class="px-3 py-2 rounded-lg text-sm border max-w-[120px]" :class="darkMode ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-300'" placeholder="中文" />
             <button type="button" class="px-3 py-2 rounded-lg text-sm font-bold bg-[#007a67] text-white" @click="updateSportApiCall(s)">Save</button>
@@ -394,7 +432,7 @@ const deleteSportApiCall = async (sportId: number) => {
     </div>
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       <div
-        v-for="(v, index) in adminVenues"
+        v-for="(v, index) in displayedAdminVenues"
         :key="v.id"
         class="p-4 border rounded-3xl shadow-md flex items-center justify-between group transition-all hover:shadow-xl gap-2"
         :class="darkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-200'"
@@ -424,8 +462,8 @@ const deleteSportApiCall = async (sportId: number) => {
             <button
               type="button"
               class="p-2 rounded-lg transition-colors touch-manipulation"
-              :class="!isSortEditing ? 'opacity-30 cursor-not-allowed' : ((displayIndexById.get(v.id) ?? index) === adminVenues.length - 1 ? 'opacity-30 cursor-not-allowed' : (darkMode ? 'hover:bg-gray-700 text-gray-300' : 'hover:bg-gray-200 text-gray-600'))"
-              :disabled="!isSortEditing || (displayIndexById.get(v.id) ?? index) === adminVenues.length - 1"
+              :class="!isSortEditing ? 'opacity-30 cursor-not-allowed' : ((displayIndexById.get(v.id) ?? index) === displayedAdminVenues.length - 1 ? 'opacity-30 cursor-not-allowed' : (darkMode ? 'hover:bg-gray-700 text-gray-300' : 'hover:bg-gray-200 text-gray-600'))"
+              :disabled="!isSortEditing || (displayIndexById.get(v.id) ?? index) === displayedAdminVenues.length - 1"
               :aria-label="language === 'en' ? 'Move down' : '下移'"
               @click.stop="handleMoveDown(v.id)"
             >

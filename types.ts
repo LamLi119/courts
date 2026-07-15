@@ -3,6 +3,8 @@ export interface Sport {
   name: string;
   name_zh?: string | null;
   slug: string;
+  /** Global display order for sport type lists (lower first). */
+  sort_order?: number | null;
 }
 
 export interface VenueSport {
