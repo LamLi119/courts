@@ -1128,18 +1128,63 @@ app.post('/api/auth/logout', (req, res) => {
   return res.json({ success: true });
 });
 
+let sportsSortOrderEnsured = false;
+
+/** Ensure sports.sort_order exists; seed by name if column was just added. */
+async function ensureSportsSortOrderColumn(db) {
+  if (sportsSortOrderEnsured) return true;
+  try {
+    await db.execute('SELECT sort_order FROM sports LIMIT 1');
+    sportsSortOrderEnsured = true;
+    return true;
+  } catch (e) {
+    if (!e || e.code !== 'ER_BAD_FIELD_ERROR') return false;
+    try {
+      await db.execute(
+        'ALTER TABLE sports ADD COLUMN sort_order INT NULL DEFAULT NULL COMMENT \'Display order for sport type lists (lower first)\' AFTER slug'
+      );
+      // Seed existing rows; id order is stable when name-window functions are unavailable.
+      await db.execute('UPDATE sports SET sort_order = id WHERE sort_order IS NULL');
+      sportsSortOrderEnsured = true;
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+}
+
+async function listSportsRows(db) {
+  await ensureSportsSortOrderColumn(db);
+  try {
+    const [rows] = await db.execute(
+      'SELECT id, name, name_zh, slug, sort_order FROM sports ORDER BY sort_order IS NULL, sort_order ASC, name ASC'
+    );
+    return rows || [];
+  } catch (e) {
+    if (e.code === 'ER_BAD_FIELD_ERROR' && e.message && e.message.includes('sort_order')) {
+      try {
+        const [rows] = await db.execute('SELECT id, name, name_zh, slug FROM sports ORDER BY name ASC');
+        return (rows || []).map((s) => ({ ...s, sort_order: null }));
+      } catch (e2) {
+        if (e2.code === 'ER_BAD_FIELD_ERROR') {
+          const [r] = await db.execute('SELECT id, name, slug FROM sports ORDER BY name ASC');
+          return (r || []).map((s) => ({ ...s, name_zh: null, sort_order: null }));
+        }
+        throw e2;
+      }
+    }
+    if (e.code === 'ER_BAD_FIELD_ERROR') {
+      const [r] = await db.execute('SELECT id, name, slug FROM sports ORDER BY name ASC');
+      return (r || []).map((s) => ({ ...s, name_zh: null, sort_order: null }));
+    }
+    throw e;
+  }
+}
+
 app.get('/api/sports', async (req, res) => {
   try {
     const db = getPool();
-    let rows;
-    try {
-      [rows] = await db.execute('SELECT id, name, name_zh, slug FROM sports ORDER BY name ASC');
-    } catch (e) {
-      if (e.code === 'ER_BAD_FIELD_ERROR') {
-        const [r] = await db.execute('SELECT id, name, slug FROM sports ORDER BY name ASC');
-        rows = (r || []).map((s) => ({ ...s, name_zh: null }));
-      } else throw e;
-    }
+    const rows = await listSportsRows(db);
     res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=3600');
     res.json(rows);
   } catch (err) {
@@ -1161,20 +1206,74 @@ app.post('/api/sports', async (req, res) => {
     if (!n) return res.status(400).json({ error: 'name or name_en required' });
     const zh = (name_zh || '').toString().trim() || null;
     const slug = slugify(n) || 'sport';
-    // Avoid duplicate slug insert (uq_sports_slug): if exists, update it.
-    const [result] = await db.execute(
-      'INSERT INTO sports (name, name_zh, slug) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE name = VALUES(name), name_zh = VALUES(name_zh)',
-      [n, zh, slug]
-    );
+    const hasSort = await ensureSportsSortOrderColumn(db);
+    let nextOrder = null;
+    if (hasSort) {
+      try {
+        const [maxRows] = await db.execute('SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_order FROM sports');
+        nextOrder = maxRows?.[0]?.next_order ?? 0;
+      } catch (_) {
+        nextOrder = null;
+      }
+    }
 
-    // If it was an update, insertId may be 0; fetch current row id.
-    const [rows] = await db.execute('SELECT id FROM sports WHERE slug = ?', [slug]);
-    const id = rows?.[0]?.id;
-    return res.status(201).json({ id, name: n, name_zh: zh, slug });
+    if (hasSort && nextOrder != null) {
+      try {
+        await db.execute(
+          'INSERT INTO sports (name, name_zh, slug, sort_order) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE name = VALUES(name), name_zh = VALUES(name_zh)',
+          [n, zh, slug, nextOrder]
+        );
+      } catch (err) {
+        if (err.code === 'ER_BAD_FIELD_ERROR' && err.message && err.message.includes('name_zh')) {
+          return res.status(500).json({ error: 'Run migration: add name_zh to sports. See scripts/add-sports-name_zh.sql' });
+        }
+        throw err;
+      }
+    } else {
+      await db.execute(
+        'INSERT INTO sports (name, name_zh, slug) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE name = VALUES(name), name_zh = VALUES(name_zh)',
+        [n, zh, slug]
+      );
+    }
+
+    const listed = await listSportsRows(db);
+    const row = listed.find((s) => s.slug === slug);
+    if (!row) return res.status(500).json({ error: 'Failed to create sport' });
+    return res.status(201).json(row);
   } catch (err) {
     if (err.code === 'ER_BAD_FIELD_ERROR' && err.message && err.message.includes('name_zh')) {
       return res.status(500).json({ error: 'Run migration: add name_zh to sports. See scripts/add-sports-name_zh.sql' });
     }
+    res.status(500).json({ error: dbErrorMessage(err) });
+  }
+});
+
+app.patch('/api/sports/order', async (req, res) => {
+  try {
+    const db = getPool();
+    const { orderedIds } = req.body || {};
+    if (!Array.isArray(orderedIds)) return res.status(400).json({ error: 'orderedIds array required' });
+    const hasSort = await ensureSportsSortOrderColumn(db);
+    if (!hasSort) {
+      return res.status(500).json({ error: 'Run migration: add sort_order to sports. See sql/add_sports_sort_order.sql' });
+    }
+    const connection = await db.getConnection();
+    try {
+      await connection.beginTransaction();
+      for (let i = 0; i < orderedIds.length; i++) {
+        const sid = parseInt(orderedIds[i], 10);
+        if (Number.isNaN(sid)) continue;
+        await connection.execute('UPDATE sports SET sort_order = ? WHERE id = ?', [i, sid]);
+      }
+      await connection.commit();
+      return res.status(204).send();
+    } catch (err) {
+      await connection.rollback().catch(() => {});
+      throw err;
+    } finally {
+      connection.release();
+    }
+  } catch (err) {
     res.status(500).json({ error: dbErrorMessage(err) });
   }
 });
@@ -1210,19 +1309,11 @@ app.put('/api/sports/:id', async (req, res) => {
       }
     }
 
-    // Return updated row (support both schemas: with/without name_zh).
-    try {
-      const [rows] = await db.execute('SELECT id, name, name_zh, slug FROM sports WHERE id = ?', [id]);
-      return res.json(rows?.[0] ?? null);
-    } catch (err) {
-      if (err && err.code === 'ER_BAD_FIELD_ERROR' && err.message && err.message.includes('name_zh')) {
-        const [rows] = await db.execute('SELECT id, name, slug FROM sports WHERE id = ?', [id]);
-        const r = rows?.[0] ?? null;
-        if (!r) return res.status(404).json({ error: 'Sport not found' });
-        return res.json({ ...r, name_zh: null });
-      }
-      throw err;
-    }
+    // Return updated row (support both schemas: with/without name_zh / sort_order).
+    const rows = await listSportsRows(db);
+    const found = (rows || []).find((r) => Number(r.id) === id);
+    if (!found) return res.status(404).json({ error: 'Sport not found' });
+    return res.json(found);
   } catch (err) {
     if (err && err.message && err.message.includes("Duplicate entry") && err.message.includes('uq_sports_slug')) {
       return res.status(409).json({ error: 'Slug already exists for another sport type' });

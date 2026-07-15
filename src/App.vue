@@ -444,7 +444,7 @@ const filteredVenues = computed(() => {
 
   const selectedSlugs = sportFilter.value.map((s) => (s || '').toLowerCase().trim()).filter(Boolean);
 
-  return source.filter(venue => {
+  const filtered = source.filter(venue => {
     const query = (searchQuery.value || '').toLowerCase();
     const name = ((venue as any).name ?? '').toString().toLowerCase();
     const station = ((venue as any).mtrStation ?? '').toString().toLowerCase();
@@ -471,6 +471,25 @@ const filteredVenues = computed(() => {
     }
     const specialOfferMatch = !filterSpecialOffer.value || Boolean((venue as Venue).membership_enabled);
     return nameMatch && mtrMatch && districtMatch && distanceMatch && sportMatch && specialOfferMatch;
+  });
+
+  const venueSortKey = (v: Venue, slug?: string) => {
+    if (slug) {
+      const fromOrders = v.sport_orders?.[slug];
+      if (typeof fromOrders === 'number') return fromOrders;
+      const fromData = v.sport_data?.find((d: any) => String(d.slug || '').toLowerCase().trim() === slug)?.sort_order;
+      if (typeof fromData === 'number') return fromData;
+    }
+    return v.sort_order ?? 9999;
+  };
+
+  // Single sport → per-sport order; none/multi → global venues.sort_order
+  const sortSlug = selectedSlugs.length === 1 ? selectedSlugs[0] : undefined;
+  return filtered.slice().sort((a, b) => {
+    const ao = venueSortKey(a as Venue, sortSlug);
+    const bo = venueSortKey(b as Venue, sortSlug);
+    if (ao !== bo) return ao - bo;
+    return String((a as Venue).name || '').localeCompare(String((b as Venue).name || ''));
   });
 });
 
