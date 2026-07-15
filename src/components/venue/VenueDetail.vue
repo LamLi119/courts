@@ -490,7 +490,14 @@ watch(
                 :class="darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'">📍 {{ districtName }}</span>
               <span v-if="venue.mtrStation || venue.walkingDistance > 0" class="rounded-md px-2.5 py-0.5 text-xs font-medium shrink-0"
                 :class="darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'"><template v-if="venue.mtrStation">🚇 {{ getStationDisplayName(venue.mtrStation, language) }}<template v-if="venue.mtrExit"> ({{ venue.mtrExit }})</template> </template><template v-if="venue.mtrStation && venue.walkingDistance > 0"> • </template><template v-if="venue.walkingDistance > 0"> {{ venue.walkingDistance }} {{ t('min') }}</template></span>
-              <span v-if="venue.ceilingHeight > 0" class="rounded-md px-2.5 py-0.5 text-xs font-medium shrink-0"
+                <span
+  v-if="getSportTypeLabel(venue, language) && getSportTypeLabel(venue, language) !== 'Court'"
+  class="rounded-md px-2.5 py-0.5 text-xs font-medium shrink-0"
+  :class="darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'"
+>
+  🏸 {{ getSportTypeLabel(venue, language) }}
+</span>
+                <span v-if="venue.ceilingHeight > 0" class="rounded-md px-2.5 py-0.5 text-xs font-medium shrink-0"
                 :class="darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'">
                 {{ venue.ceilingHeight }}m {{ t('ceilingHeight') }}
               </span>
