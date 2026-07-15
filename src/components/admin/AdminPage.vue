@@ -166,6 +166,26 @@ const cancelSortEdit = () => {
   draggedVenueId.value = null;
 };
 
+/** Switch All / sport filter; if sort-editing, discard dirty draft and continue edit on the new filter. */
+const setAdminSportFilter = (slug: string) => {
+  if (slug === adminSportFilter.value) return;
+  if (isSortEditing.value) {
+    if (isDraftDirty.value) {
+      const ok = confirm(
+        props.language === 'en'
+          ? 'Discard unsaved sort changes and switch sport type?'
+          : '放棄未儲存的排序並切換運動類型？'
+      );
+      if (!ok) return;
+    }
+    cancelSortEdit();
+    adminSportFilter.value = slug;
+    startSortEdit();
+    return;
+  }
+  adminSportFilter.value = slug;
+};
+
 const saveSortEdit = async () => {
   if (!isSortEditing.value) return;
   const next = draftAdminOrder.value.length ? [...draftAdminOrder.value] : getBaseAdminOrder();
@@ -192,7 +212,7 @@ const handleAddSport = async () => {
     newSportName.value = '';
     newSportNameZh.value = '';
     showAddSportInput.value = false;
-    adminSportFilter.value = created.slug;
+    setAdminSportFilter(created.slug);
     emit('notify', 'success', props.language === 'en' ? 'Sport type added.' : '運動類型已新增。');
   } catch (err: any) {
     addSportError.value = err?.message || 'Failed to add sport.';
@@ -234,7 +254,7 @@ const deleteSportApiCall = async (sportId: number) => {
       'update:sports',
       props.sports.filter((x) => x.id !== sportId)
     );
-    if (adminSportFilter.value === slug) adminSportFilter.value = 'all';
+    if (adminSportFilter.value === slug) setAdminSportFilter('all');
     isEditingSports.value = false;
   } catch (err: any) {
     alert(err?.message || 'Failed to delete sport');
@@ -279,7 +299,7 @@ const moveSportType = async (sportId: number, direction: -1 | 1) => {
             type="button"
             class="px-3 py-2 rounded-lg font-bold text-sm transition-all"
             :class="adminSportFilter === 'all' ? 'bg-[#007a67] text-white' : (darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300')"
-            @click="adminSportFilter = 'all'"
+            @click="setAdminSportFilter('all')"
           >
             All
           </button>
@@ -289,7 +309,7 @@ const moveSportType = async (sportId: number, direction: -1 | 1) => {
             type="button"
             class="px-3 py-2 rounded-lg font-bold text-sm transition-all"
             :class="adminSportFilter === s.slug ? 'bg-[#007a67] text-white' : (darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300')"
-            @click="adminSportFilter = s.slug"
+            @click="setAdminSportFilter(s.slug)"
           >
             {{ sportDisplayName(s) }}
           </button>
