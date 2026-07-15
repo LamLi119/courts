@@ -593,6 +593,54 @@ function attachHasAdminPassword(row, includePassword = false) {
   return row;
 }
 
+/** Next list position for a sport (append to end of that sport's admin order). */
+async function getNextVenueSortOrderForSport(db, sportId) {
+  try {
+    const [rows] = await db.execute(
+      'SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_order FROM venue_sports WHERE sport_id = ?',
+      [sportId]
+    );
+    return Number(rows?.[0]?.next_order) || 0;
+  } catch (_) {
+    return 0;
+  }
+}
+
+/**
+ * Replace venue_sports for a venue.
+ * Preserves existing per-sport list sort_order (admin list position).
+ * New sport links append at the end of that sport's list.
+ * Does NOT use form sport_data[].sort_order as list position (that is form-local only).
+ */
+async function syncVenueSportsPreservingOrder(db, venueId, sportData) {
+  if (!Array.isArray(sportData)) return;
+  const existing = {};
+  try {
+    const [rows] = await db.execute(
+      'SELECT sport_id, sort_order FROM venue_sports WHERE venue_id = ?',
+      [venueId]
+    );
+    (rows || []).forEach((r) => {
+      existing[Number(r.sport_id)] = r.sort_order;
+    });
+  } catch (_) {}
+
+  await db.execute('DELETE FROM venue_sports WHERE venue_id = ?', [venueId]);
+
+  for (let i = 0; i < sportData.length; i++) {
+    const sid = Number(sportData[i]?.sport_id);
+    if (Number.isNaN(sid) || sid <= 0) continue;
+    let sortOrder = existing[sid];
+    if (sortOrder == null || sortOrder === '') {
+      sortOrder = await getNextVenueSortOrderForSport(db, sid);
+    }
+    await db.execute(
+      'INSERT INTO venue_sports (venue_id, sport_id, sort_order) VALUES (?, ?, ?)',
+      [venueId, sid, sortOrder]
+    );
+  }
+}
+
 /** Fetch a single venue by id with sport_data populated (name, name_zh, slug, sort_order). */
 async function getVenueWithSports(db, venueId, includePassword = false) {
   const [rows] = await db.execute('SELECT * FROM venues WHERE id = ?', [venueId]);
@@ -1441,13 +1489,15 @@ app.post('/api/venues', async (req, res) => {
     const sportData = req.body?.sport_data;
     if (Array.isArray(sportData)) {
       try {
-        await db.execute('DELETE FROM venue_sports WHERE venue_id = ?', [venueId]);
-        for (let i = 0; i < sportData.length; i++) {
-          const sid = Number(sportData[i]?.sport_id);
-          if (!Number.isNaN(sid) && sid > 0) {
-            await db.execute('INSERT INTO venue_sports (venue_id, sport_id, sort_order) VALUES (?, ?, ?)', [venueId, sid, sportData[i].sort_order ?? i]);
-          }
-        }
+        await syncVenueSportsPreservingOrder(db, venueId, sportData);
+      } catch (_) {}
+    }
+    // Place new venue at end of global All list when sort_order not set.
+    if (row.sort_order == null) {
+      try {
+        const [maxRows] = await db.execute('SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_order FROM venues');
+        const next = Number(maxRows?.[0]?.next_order) || 0;
+        await db.execute('UPDATE venues SET sort_order = ? WHERE id = ?', [next, venueId]);
       } catch (_) {}
     }
     const adminSession = getAdminSession(req);
@@ -1490,7 +1540,13 @@ app.put('/api/venues/:id', async (req, res) => {
       prepareRowForDb(row);
 
       const keys = Object.keys(row);
+      const sportData = req.body?.sport_data;
       if (keys.length === 0) {
+        if (Array.isArray(sportData)) {
+          try {
+            await syncVenueSportsPreservingOrder(db, id, sportData);
+          } catch (_) {}
+        }
         const out = await getVenueWithSports(db, id, includePasswords);
         return res.json(out || { id, ...row });
       }
@@ -1498,16 +1554,9 @@ app.put('/api/venues/:id', async (req, res) => {
       const values = [...Object.values(row), id];
 
       await db.execute(`UPDATE venues SET ${setClause} WHERE id = ?`, values);
-      const sportData = req.body?.sport_data;
       if (Array.isArray(sportData)) {
         try {
-          await db.execute('DELETE FROM venue_sports WHERE venue_id = ?', [id]);
-          for (let i = 0; i < sportData.length; i++) {
-            const sid = Number(sportData[i]?.sport_id);
-            if (!Number.isNaN(sid) && sid > 0) {
-              await db.execute('INSERT INTO venue_sports (venue_id, sport_id, sort_order) VALUES (?, ?, ?)', [id, sid, sportData[i].sort_order ?? i]);
-            }
-          }
+          await syncVenueSportsPreservingOrder(db, id, sportData);
         } catch (_) {}
       }
       const out = await getVenueWithSports(db, id, includePasswords);
