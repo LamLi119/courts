@@ -7,6 +7,9 @@ import axios from 'axios';
 import { Storage } from '@google-cloud/storage';
 import { getCourtsFormConfig, submitCourtsForm } from './webflowCourtsForm.js';
 import { buildSitemapXml } from '../lib/sitemap.js';
+import { loadPublicCatalog } from '../lib/catalogData.js';
+import { notifyIndexNowForVenue, submitIndexNowUrls, getSiteBaseUrl } from '../lib/indexnow.js';
+import { buildOkfBundle } from '../lib/okf.js';
 
 const app = express();
 // Venue form sends base64 images; keep payload limit high enough for multi-image saves.
@@ -605,6 +608,26 @@ setInterval(() => {
   void prewarmPublicEventsCache();
 }, 60 * 1000);
 
+const OKF_CACHE_TTL_MS = 1000 * 300;
+let okfCache = { at: 0, bundle: null };
+
+function invalidateOkfCache() {
+  okfCache = { at: 0, bundle: null };
+}
+
+async function getOkfBundle(db) {
+  const now = Date.now();
+  if (okfCache.bundle && now - okfCache.at < OKF_CACHE_TTL_MS) return okfCache.bundle;
+  const { sports, venues } = await loadPublicCatalog(db, { listSportsRows });
+  const bundle = buildOkfBundle({
+    sports,
+    venues,
+    baseUrl: getSiteBaseUrl(),
+  });
+  okfCache = { at: now, bundle };
+  return bundle;
+}
+
 function attachHasAdminPassword(row, includePassword = false) {
   if (!row || typeof row !== 'object') return row;
   const pwd = row.admin_password;
@@ -752,6 +775,10 @@ app.use('/api', (req, res, next) => {
   if (req.path === '/image-proxy') return next();
   // Live sitemap (Vercel rewrites /sitemap.xml here; no proxy secret).
   if (req.method === 'GET' && req.path === '/sitemap.xml') return next();
+  // Discoverability: IndexNow key, OKF bundle (Vercel rewrites from courts.theground.io).
+  if (req.method === 'GET' && (req.path === '/indexnow/key.txt' || req.path === '/okf.tar.gz' || req.path.startsWith('/okf/'))) {
+    return next();
+  }
   // Admin login/session (browser credentials; no x-proxy-secret).
   if (
     (req.method === 'POST' && (req.path === '/auth/login' || req.path === '/auth/logout'))
@@ -1321,6 +1348,7 @@ app.post('/api/sports', async (req, res) => {
     const listed = await listSportsRows(db);
     const row = listed.find((s) => s.slug === slug);
     if (!row) return res.status(500).json({ error: 'Failed to create sport' });
+    invalidateOkfCache();
     return res.status(201).json(row);
   } catch (err) {
     if (err.code === 'ER_BAD_FIELD_ERROR' && err.message && err.message.includes('name_zh')) {
@@ -1395,6 +1423,7 @@ app.put('/api/sports/:id', async (req, res) => {
     const rows = await listSportsRows(db);
     const found = (rows || []).find((r) => Number(r.id) === id);
     if (!found) return res.status(404).json({ error: 'Sport not found' });
+    invalidateOkfCache();
     return res.json(found);
   } catch (err) {
     if (err && err.message && err.message.includes("Duplicate entry") && err.message.includes('uq_sports_slug')) {
@@ -1410,6 +1439,7 @@ app.delete('/api/sports/:id', async (req, res) => {
     const id = req.params.id;
     await db.execute('DELETE FROM venue_sports WHERE sport_id = ?', [id]);
     await db.execute('DELETE FROM sports WHERE id = ?', [id]);
+    invalidateOkfCache();
     return res.status(204).send();
   } catch (err) {
     res.status(500).json({ error: dbErrorMessage(err) });
@@ -1487,62 +1517,57 @@ app.get('/api/venues', async (req, res) => {
 app.get('/api/sitemap.xml', async (req, res) => {
   try {
     const db = getPool();
-    let sports = [];
-    try {
-      sports = await listSportsRows(db);
-    } catch (err) {
-      if (err.code !== 'ER_NO_SUCH_TABLE') throw err;
-    }
-
-    const [venues] = await db.execute(
-      `SELECT * FROM venues ORDER BY sort_order IS NULL, sort_order ASC, name ASC`
-    );
-    try {
-      let sportsRows = sports;
-      if (!sportsRows.length) {
-        try {
-          [sportsRows] = await db.execute('SELECT id, name, name_zh, slug FROM sports ORDER BY name');
-        } catch (_) {
-          const [r] = await db.execute('SELECT id, name, slug FROM sports ORDER BY name').catch(() => [[]]);
-          sportsRows = (r || []).map((s) => ({ ...s, name_zh: null }));
-        }
-      }
-      const [vsRows] = await db.execute('SELECT venue_id, sport_id, sort_order FROM venue_sports');
-      const sportsById = Object.fromEntries((sportsRows || []).map((s) => [s.id, s]));
-      const byVenue = {};
-      (vsRows || []).forEach((vs) => {
-        if (!byVenue[vs.venue_id]) byVenue[vs.venue_id] = [];
-        const s = sportsById[vs.sport_id];
-        if (s) {
-          byVenue[vs.venue_id].push({
-            sport_id: s.id,
-            name: s.name,
-            name_zh: s.name_zh ?? null,
-            slug: s.slug,
-            sort_order: vs.sort_order,
-          });
-        }
-      });
-      (venues || []).forEach((r) => {
-        r.sport_data = byVenue[r.id] || [];
-        delete r.admin_password;
-      });
-    } catch (_) {
-      (venues || []).forEach((r) => {
-        delete r.admin_password;
-      });
-    }
-
+    const { sports, venues } = await loadPublicCatalog(db, { listSportsRows });
     const xml = buildSitemapXml({
       sports,
-      venues: venues || [],
-      baseUrl: process.env.SITEMAP_BASE_URL || 'https://courts.theground.io',
+      venues,
+      baseUrl: getSiteBaseUrl(),
     });
     res.setHeader('Content-Type', 'application/xml; charset=utf-8');
     res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=3600');
     res.send(xml);
   } catch (err) {
     res.status(500).type('text/plain').send(`Failed to generate sitemap: ${dbErrorMessage(err)}`);
+  }
+});
+
+/** IndexNow ownership key (proxied at courts.theground.io/indexnow-key.txt). */
+app.get('/api/indexnow/key.txt', (req, res) => {
+  const key = (process.env.INDEXNOW_KEY || '').trim();
+  if (!key) return res.status(404).type('text/plain').send('IndexNow not configured');
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  res.send(key);
+});
+
+/** OKF bundle archive for agents (proxied at courts.theground.io/okf.tar.gz). */
+app.get('/api/okf.tar.gz', async (req, res) => {
+  try {
+    const db = getPool();
+    const { tarGz } = await getOkfBundle(db);
+    res.setHeader('Content-Type', 'application/gzip');
+    res.setHeader('Content-Disposition', 'attachment; filename="okf.tar.gz"');
+    res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=3600');
+    res.send(tarGz);
+  } catch (err) {
+    res.status(500).type('text/plain').send(`Failed to generate OKF bundle: ${dbErrorMessage(err)}`);
+  }
+});
+
+/** Browsable OKF markdown tree (proxied at courts.theground.io/okf/...). */
+app.get(/^\/api\/okf(?:\/(.*))?$/, async (req, res) => {
+  try {
+    const rel = (req.params[0] || '').replace(/^\/+/, '');
+    const db = getPool();
+    const { byPath } = await getOkfBundle(db);
+    const key = rel ? `okf/${rel}` : 'okf/index.md';
+    const content = byPath[key];
+    if (!content) return res.status(404).type('text/plain').send('Not found');
+    res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=3600');
+    res.send(content);
+  } catch (err) {
+    res.status(500).type('text/plain').send(`Failed to serve OKF: ${dbErrorMessage(err)}`);
   }
 });
 
@@ -1600,6 +1625,8 @@ app.post('/api/venues', async (req, res) => {
     const adminSession = getAdminSession(req);
     const includePasswords = adminSession && adminSession.type === 'super';
     const out = await getVenueWithSports(db, venueId, includePasswords);
+    invalidateOkfCache();
+    notifyIndexNowForVenue(out || { id: venueId, ...row, sport_data: sportData });
     res.status(201).json(out || { id: venueId, ...row });
   } catch (err) {
     console.error('POST Error:', err.message);
@@ -1645,6 +1672,8 @@ app.put('/api/venues/:id', async (req, res) => {
           } catch (_) {}
         }
         const out = await getVenueWithSports(db, id, includePasswords);
+        invalidateOkfCache();
+        notifyIndexNowForVenue(out || { id, ...row });
         return res.json(out || { id, ...row });
       }
       const setClause = keys.map((k) => `\`${k}\` = ?`).join(', ');
@@ -1657,6 +1686,8 @@ app.put('/api/venues/:id', async (req, res) => {
         } catch (_) {}
       }
       const out = await getVenueWithSports(db, id, includePasswords);
+      invalidateOkfCache();
+      notifyIndexNowForVenue(out || { id, ...row });
       res.json(out || { id, ...row });
   } catch (err) {
     res.status(500).json({ error: dbErrorMessage(err) });
@@ -1701,7 +1732,11 @@ app.delete('/api/venues/:id', async (req, res) => {
   try {
     const db = getPool();
     const id = req.params.id;
+    const existing = await getVenueWithSports(db, id, false);
     await db.execute('DELETE FROM venues WHERE id = ?', [id]);
+    invalidateOkfCache();
+    if (existing) notifyIndexNowForVenue(existing);
+    else void submitIndexNowUrls([`${getSiteBaseUrl()}/explore`]);
     res.status(204).send();
   } catch (err) {
     res.status(500).json({ error: dbErrorMessage(err) });
