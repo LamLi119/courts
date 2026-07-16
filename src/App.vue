@@ -30,6 +30,7 @@ import {
   hydrateInitialVenueData,
   setVenuesCache,
 } from './utils/venuesBootstrap';
+import { courtApiUrl } from './utils/courtApiUrl';
 
 const initialVenueData = hydrateInitialVenueData();
 
@@ -250,9 +251,7 @@ onMounted(() => {
 
   const restoreAdminSession = async () => {
     try {
-      const API_BASE = import.meta.env.VITE_API_URL ?? '';
-      const base = API_BASE.replace(/\/$/, '');
-      const res = await fetch(`${base}/api/auth/session`, { method: 'GET', credentials: 'include' });
+      const res = await fetch(courtApiUrl('/api/auth/session'), { method: 'GET', credentials: 'include' });
       if (!res.ok) throw new Error('No admin session');
       const data = await res.json();
       adminStatus.value = { type: data.type === 'super' ? 'super' : 'court', allowedIds: data.allowedVenueIds || [] };
@@ -352,14 +351,21 @@ const clearFilters = () => {
   locationVenueIds.value = null;
 };
 
+async function readApiErrorMessage(res: Response): Promise<string> {
+  try {
+    const data = await res.json();
+    if (data && typeof data.error === 'string' && data.error.trim()) return data.error.trim();
+  } catch {
+    // ignore non-JSON
+  }
+  return `HTTP ${res.status}`;
+}
+
 const handleAdminLogin = async () => {
   if (isAdminLoggingIn.value) return;
   isAdminLoggingIn.value = true;
   try {
-    const API_BASE = (import.meta.env.VITE_API_URL ?? '').trim();
-    const base = API_BASE.replace(/\/+$/, '').replace(/(?:\/api)+$/, '');
-    const url = `${base}/api/auth/login`;
-    const res = await fetch(url, {
+    const res = await fetch(courtApiUrl('/api/auth/login'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -374,10 +380,12 @@ const handleAdminLogin = async () => {
       invalidateVenuesCache();
       await loadData();
     } else {
-      alert('Incorrect password');
+      const msg = await readApiErrorMessage(res);
+      alert(msg === 'Invalid password' ? 'Incorrect password' : `Login failed: ${msg}`);
     }
   } catch (e) {
-    alert('Login failed');
+    const detail = e instanceof Error && e.message ? e.message : 'network error';
+    alert(`Login failed: ${detail}\nAPI: ${courtApiUrl('/api/auth/login')}`);
   } finally {
     isAdminLoggingIn.value = false;
   }
@@ -389,10 +397,7 @@ const handleAdminLoginFromUserLoginPage = async (password: string) => {
   const pwd = (password || '').toString();
 
   try {
-    const API_BASE = import.meta.env.VITE_API_URL ?? '';
-    const base = API_BASE.replace(/\/$/, '');
-    const url = `${base}/api/auth/login`;
-    const res = await fetch(url, {
+    const res = await fetch(courtApiUrl('/api/auth/login'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -406,10 +411,12 @@ const handleAdminLoginFromUserLoginPage = async (password: string) => {
       await loadData();
       router.push('/admin');
     } else {
-      alert('Incorrect password');
+      const msg = await readApiErrorMessage(res);
+      alert(msg === 'Invalid password' ? 'Incorrect password' : `Login failed: ${msg}`);
     }
-  } catch {
-    alert('Login failed');
+  } catch (e) {
+    const detail = e instanceof Error && e.message ? e.message : 'network error';
+    alert(`Login failed: ${detail}\nAPI: ${courtApiUrl('/api/auth/login')}`);
   } finally {
     isAdminLoggingIn.value = false;
   }
@@ -417,9 +424,7 @@ const handleAdminLoginFromUserLoginPage = async (password: string) => {
 
 const handleAdminLogout = async () => {
   try {
-    const API_BASE = import.meta.env.VITE_API_URL ?? '';
-    const base = API_BASE.replace(/\/$/, '');
-    await fetch(`${base}/api/auth/logout`, { method: 'POST', credentials: 'include' });
+    await fetch(courtApiUrl('/api/auth/logout'), { method: 'POST', credentials: 'include' });
   } catch {
     // ignore logout request failure; clear local state anyway
   }

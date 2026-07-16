@@ -288,26 +288,45 @@ function getAdminSession(req) {
   return { sid, ...session };
 }
 
+function adminCookieOptions(req) {
+  const forwardedProto = (req.get('x-forwarded-proto') || '').split(',')[0].trim();
+  const secure = req.secure || forwardedProto === 'https';
+  // Preview (*.vercel.app) → API is cross-site; Lax cookies are dropped by the browser.
+  // SameSite=None; Secure keeps the session cookie for credentialed cross-origin calls.
+  const origin = (req.get('origin') || '').trim();
+  let sameSite = 'lax';
+  if (origin && secure) {
+    try {
+      const originHost = new URL(origin).hostname.toLowerCase();
+      const apiHost = String(req.get('host') || '').split(':')[0].toLowerCase();
+      if (originHost && apiHost && originHost !== apiHost) {
+        sameSite = 'none';
+      }
+    } catch (_) {
+      // keep lax
+    }
+  }
+  return {
+    httpOnly: true,
+    sameSite,
+    secure: sameSite === 'none' ? true : secure,
+    maxAge: ADMIN_SESSION_TTL_MS,
+    path: '/',
+  };
+}
+
 function setAdminSession(res, req, payload) {
   cleanupAdminSessions();
   const sid = crypto.randomBytes(32).toString('hex');
   const expiresAt = Date.now() + ADMIN_SESSION_TTL_MS;
   adminSessions.set(sid, { ...payload, expiresAt });
-  const forwardedProto = (req.get('x-forwarded-proto') || '').split(',')[0].trim();
-  const secure = req.secure || forwardedProto === 'https';
-  res.cookie(ADMIN_SESSION_COOKIE, sid, {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure,
-    maxAge: ADMIN_SESSION_TTL_MS,
-    path: '/',
-  });
+  res.cookie(ADMIN_SESSION_COOKIE, sid, adminCookieOptions(req));
 }
 
 function clearAdminSession(req, res) {
   const sid = parseCookies(req)[ADMIN_SESSION_COOKIE];
   if (sid) adminSessions.delete(sid);
-  res.clearCookie(ADMIN_SESSION_COOKIE, { path: '/' });
+  res.clearCookie(ADMIN_SESSION_COOKIE, adminCookieOptions(req));
 }
 
 function trimTrailingSlash(input) {
@@ -723,6 +742,7 @@ app.use((req, res, next) => {
 
 // Optional: protect API when running behind a proxy (e.g. Vercel).
 // If PROXY_SECRET is set on the server, require callers to send matching x-proxy-secret.
+// Browser calls the API directly now — keep public read + admin auth allowlisted.
 const PROXY_SECRET = process.env.PROXY_SECRET || '';
 app.use('/api', (req, res, next) => {
   if (!PROXY_SECRET) return next();
@@ -730,6 +750,19 @@ app.use('/api', (req, res, next) => {
   // Public, allowlisted image proxy used by the frontend to avoid GCS CORS.
   // Safe because `/api/image-proxy` only allows storage.googleapis.com URLs.
   if (req.path === '/image-proxy') return next();
+  // Live sitemap (Vercel rewrites /sitemap.xml here; no proxy secret).
+  if (req.method === 'GET' && req.path === '/sitemap.xml') return next();
+  // Admin login/session (browser credentials; no x-proxy-secret).
+  if (
+    (req.method === 'POST' && (req.path === '/auth/login' || req.path === '/auth/logout'))
+    || (req.method === 'GET' && req.path === '/auth/session')
+  ) {
+    return next();
+  }
+  // Public catalog reads used by the SPA.
+  if (req.method === 'GET' && (req.path === '/sports' || req.path === '/venues' || /^\/venues\/[^/]+$/.test(req.path))) {
+    return next();
+  }
   // Public read-only proxy for venue detail "upcoming events" (browser-facing).
   if (
     req.method === 'GET'
