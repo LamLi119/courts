@@ -7,6 +7,7 @@ import axios from 'axios';
 import { Storage } from '@google-cloud/storage';
 import { getCourtsFormConfig, submitCourtsForm } from './webflowCourtsForm.js';
 import { buildSitemapXml } from '../lib/sitemap.js';
+import { notifyIndexNowForVenue, submitIndexNowUrls, venuePublicUrl } from '../lib/indexnow.js';
 
 const app = express();
 // Venue form sends base64 images; keep payload limit high enough for multi-image saves.
@@ -1600,6 +1601,7 @@ app.post('/api/venues', async (req, res) => {
     const adminSession = getAdminSession(req);
     const includePasswords = adminSession && adminSession.type === 'super';
     const out = await getVenueWithSports(db, venueId, includePasswords);
+    notifyIndexNowForVenue(out || { id: venueId, ...row });
     res.status(201).json(out || { id: venueId, ...row });
   } catch (err) {
     console.error('POST Error:', err.message);
@@ -1645,6 +1647,7 @@ app.put('/api/venues/:id', async (req, res) => {
           } catch (_) {}
         }
         const out = await getVenueWithSports(db, id, includePasswords);
+        notifyIndexNowForVenue(out || { id, ...row });
         return res.json(out || { id, ...row });
       }
       const setClause = keys.map((k) => `\`${k}\` = ?`).join(', ');
@@ -1657,6 +1660,7 @@ app.put('/api/venues/:id', async (req, res) => {
         } catch (_) {}
       }
       const out = await getVenueWithSports(db, id, includePasswords);
+      notifyIndexNowForVenue(out || { id, ...row });
       res.json(out || { id, ...row });
   } catch (err) {
     res.status(500).json({ error: dbErrorMessage(err) });
@@ -1701,7 +1705,10 @@ app.delete('/api/venues/:id', async (req, res) => {
   try {
     const db = getPool();
     const id = req.params.id;
+    const existing = await getVenueWithSports(db, id, false);
+    const deletedUrl = existing ? venuePublicUrl(existing) : null;
     await db.execute('DELETE FROM venues WHERE id = ?', [id]);
+    if (deletedUrl) submitIndexNowUrls([deletedUrl]).catch(() => {});
     res.status(204).send();
   } catch (err) {
     res.status(500).json({ error: dbErrorMessage(err) });
