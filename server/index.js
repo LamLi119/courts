@@ -6,6 +6,7 @@ import crypto from 'crypto';
 import axios from 'axios';
 import { Storage } from '@google-cloud/storage';
 import { getCourtsFormConfig, submitCourtsForm } from './webflowCourtsForm.js';
+import { buildSitemapXml } from '../lib/sitemap.js';
 
 const app = express();
 // Venue form sends base64 images; keep payload limit high enough for multi-image saves.
@@ -1446,6 +1447,69 @@ app.get('/api/venues', async (req, res) => {
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: dbErrorMessage(err) });
+  }
+});
+
+/** Live sitemap from current DB venues/sports (proxied at courts.theground.io/sitemap.xml). */
+app.get('/api/sitemap.xml', async (req, res) => {
+  try {
+    const db = getPool();
+    let sports = [];
+    try {
+      sports = await listSportsRows(db);
+    } catch (err) {
+      if (err.code !== 'ER_NO_SUCH_TABLE') throw err;
+    }
+
+    const [venues] = await db.execute(
+      `SELECT * FROM venues ORDER BY sort_order IS NULL, sort_order ASC, name ASC`
+    );
+    try {
+      let sportsRows = sports;
+      if (!sportsRows.length) {
+        try {
+          [sportsRows] = await db.execute('SELECT id, name, name_zh, slug FROM sports ORDER BY name');
+        } catch (_) {
+          const [r] = await db.execute('SELECT id, name, slug FROM sports ORDER BY name').catch(() => [[]]);
+          sportsRows = (r || []).map((s) => ({ ...s, name_zh: null }));
+        }
+      }
+      const [vsRows] = await db.execute('SELECT venue_id, sport_id, sort_order FROM venue_sports');
+      const sportsById = Object.fromEntries((sportsRows || []).map((s) => [s.id, s]));
+      const byVenue = {};
+      (vsRows || []).forEach((vs) => {
+        if (!byVenue[vs.venue_id]) byVenue[vs.venue_id] = [];
+        const s = sportsById[vs.sport_id];
+        if (s) {
+          byVenue[vs.venue_id].push({
+            sport_id: s.id,
+            name: s.name,
+            name_zh: s.name_zh ?? null,
+            slug: s.slug,
+            sort_order: vs.sort_order,
+          });
+        }
+      });
+      (venues || []).forEach((r) => {
+        r.sport_data = byVenue[r.id] || [];
+        delete r.admin_password;
+      });
+    } catch (_) {
+      (venues || []).forEach((r) => {
+        delete r.admin_password;
+      });
+    }
+
+    const xml = buildSitemapXml({
+      sports,
+      venues: venues || [],
+      baseUrl: process.env.SITEMAP_BASE_URL || 'https://courts.theground.io',
+    });
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=3600');
+    res.send(xml);
+  } catch (err) {
+    res.status(500).type('text/plain').send(`Failed to generate sitemap: ${dbErrorMessage(err)}`);
   }
 });
 
