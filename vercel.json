@@ -12,7 +12,11 @@
   ],
   "rewrites": [
     {
-      "source": "/((?!assets/|sw\\.js|workbox-|manifest\\.webmanifest|sitemap\\.xml|robots\\.txt|venues-bootstrap\\.json).*)",
+      "source": "/sitemap.xml",
+      "destination": "https://courts.api.theground.io/api/sitemap.xml"
+    },
+    {
+      "source": "/((?!assets/|sw\\.js|workbox-|manifest\\.webmanifest|robots\\.txt|venues-bootstrap\\.json).*)",
       "destination": "/index.html"
     }
   ]
