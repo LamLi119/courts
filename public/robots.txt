@@ -1,4 +1,5 @@
 User-agent: *
 Allow: /
 
+# LLMs: https://courts.theground.io/llms.txt
 Sitemap: https://courts.theground.io/sitemap.xml
