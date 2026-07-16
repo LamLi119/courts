@@ -16,18 +16,6 @@
       "destination": "https://courts.api.theground.io/api/sitemap.xml"
     },
     {
-      "source": "/okf.tar.gz",
-      "destination": "https://courts.api.theground.io/api/okf.tar.gz"
-    },
-    {
-      "source": "/okf",
-      "destination": "https://courts.api.theground.io/api/okf"
-    },
-    {
-      "source": "/okf/:path*",
-      "destination": "https://courts.api.theground.io/api/okf/:path*"
-    },
-    {
       "source": "/((?!assets/|sw\\.js|workbox-|manifest\\.webmanifest|robots\\.txt|llms\\.txt|venues-bootstrap\\.json|a7f3c9e2b18d4f6a0e5c2b9d7f1a8e3c\\.txt).*)",
       "destination": "/index.html"
     }

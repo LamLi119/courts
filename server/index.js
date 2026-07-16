@@ -8,8 +8,6 @@ import { Storage } from '@google-cloud/storage';
 import { getCourtsFormConfig, submitCourtsForm } from './webflowCourtsForm.js';
 import { buildSitemapXml } from '../lib/sitemap.js';
 import { notifyIndexNowForVenue, submitIndexNowUrls, venuePublicUrl } from '../lib/indexnow.js';
-import { loadPublicCatalog } from '../lib/catalogData.js';
-import { buildOkfBundle } from '../lib/okf.js';
 
 const app = express();
 // Venue form sends base64 images; keep payload limit high enough for multi-image saves.
@@ -24,30 +22,9 @@ const adminSessions = new Map();
 const PUBLIC_EVENTS_CACHE_TTL_MS = 1000 * 90; // 90s short cache
 const publicEventsCache = new Map();
 const publicEventsInflight = new Map();
-const OKF_CACHE_TTL_MS = 1000 * 60 * 5;
-let okfCache = null;
 const PUBLIC_EVENTS_PREWARM_QS = [
   'order=ASC&tab=upcoming&page=1&pageSize=8',
 ];
-
-function invalidateOkfCache() {
-  okfCache = null;
-}
-
-async function getOkfBundle(db) {
-  const now = Date.now();
-  if (okfCache && now - okfCache.createdAt < OKF_CACHE_TTL_MS) {
-    return okfCache.bundle;
-  }
-  const { sports, venues } = await loadPublicCatalog(db, { listSportsRows });
-  const bundle = buildOkfBundle({
-    sports,
-    venues,
-    baseUrl: process.env.SITEMAP_BASE_URL || 'https://courts.theground.io',
-  });
-  okfCache = { createdAt: now, bundle };
-  return bundle;
-}
 
 /** SSL only when cert files exist (e.g. Cloud SQL); otherwise connect without SSL for local MySQL. */
 function getSslOptions() {
@@ -1345,7 +1322,6 @@ app.post('/api/sports', async (req, res) => {
     const listed = await listSportsRows(db);
     const row = listed.find((s) => s.slug === slug);
     if (!row) return res.status(500).json({ error: 'Failed to create sport' });
-    invalidateOkfCache();
     return res.status(201).json(row);
   } catch (err) {
     if (err.code === 'ER_BAD_FIELD_ERROR' && err.message && err.message.includes('name_zh')) {
@@ -1373,7 +1349,6 @@ app.patch('/api/sports/order', async (req, res) => {
         await connection.execute('UPDATE sports SET sort_order = ? WHERE id = ?', [i, sid]);
       }
       await connection.commit();
-      invalidateOkfCache();
       return res.status(204).send();
     } catch (err) {
       await connection.rollback().catch(() => {});
@@ -1421,7 +1396,6 @@ app.put('/api/sports/:id', async (req, res) => {
     const rows = await listSportsRows(db);
     const found = (rows || []).find((r) => Number(r.id) === id);
     if (!found) return res.status(404).json({ error: 'Sport not found' });
-    invalidateOkfCache();
     return res.json(found);
   } catch (err) {
     if (err && err.message && err.message.includes("Duplicate entry") && err.message.includes('uq_sports_slug')) {
@@ -1437,7 +1411,6 @@ app.delete('/api/sports/:id', async (req, res) => {
     const id = req.params.id;
     await db.execute('DELETE FROM venue_sports WHERE sport_id = ?', [id]);
     await db.execute('DELETE FROM sports WHERE id = ?', [id]);
-    invalidateOkfCache();
     return res.status(204).send();
   } catch (err) {
     res.status(500).json({ error: dbErrorMessage(err) });
@@ -1515,7 +1488,51 @@ app.get('/api/venues', async (req, res) => {
 app.get('/api/sitemap.xml', async (req, res) => {
   try {
     const db = getPool();
-    const { sports, venues } = await loadPublicCatalog(db, { listSportsRows });
+    let sports = [];
+    try {
+      sports = await listSportsRows(db);
+    } catch (err) {
+      if (err.code !== 'ER_NO_SUCH_TABLE') throw err;
+    }
+
+    const [venues] = await db.execute(
+      `SELECT * FROM venues ORDER BY sort_order IS NULL, sort_order ASC, name ASC`
+    );
+    try {
+      let sportsRows = sports;
+      if (!sportsRows.length) {
+        try {
+          [sportsRows] = await db.execute('SELECT id, name, name_zh, slug FROM sports ORDER BY name');
+        } catch (_) {
+          const [r] = await db.execute('SELECT id, name, slug FROM sports ORDER BY name').catch(() => [[]]);
+          sportsRows = (r || []).map((s) => ({ ...s, name_zh: null }));
+        }
+      }
+      const [vsRows] = await db.execute('SELECT venue_id, sport_id, sort_order FROM venue_sports');
+      const sportsById = Object.fromEntries((sportsRows || []).map((s) => [s.id, s]));
+      const byVenue = {};
+      (vsRows || []).forEach((vs) => {
+        if (!byVenue[vs.venue_id]) byVenue[vs.venue_id] = [];
+        const s = sportsById[vs.sport_id];
+        if (s) {
+          byVenue[vs.venue_id].push({
+            sport_id: s.id,
+            name: s.name,
+            name_zh: s.name_zh ?? null,
+            slug: s.slug,
+            sort_order: vs.sort_order,
+          });
+        }
+      });
+      (venues || []).forEach((r) => {
+        r.sport_data = byVenue[r.id] || [];
+        delete r.admin_password;
+      });
+    } catch (_) {
+      (venues || []).forEach((r) => {
+        delete r.admin_password;
+      });
+    }
 
     const xml = buildSitemapXml({
       sports,
@@ -1527,36 +1544,6 @@ app.get('/api/sitemap.xml', async (req, res) => {
     res.send(xml);
   } catch (err) {
     res.status(500).type('text/plain').send(`Failed to generate sitemap: ${dbErrorMessage(err)}`);
-  }
-});
-
-/** Browsable Open Knowledge Format generated from the public venue catalog. */
-app.get('/api/okf.tar.gz', async (req, res) => {
-  try {
-    const db = getPool();
-    const bundle = await getOkfBundle(db);
-    res.setHeader('Content-Type', 'application/gzip');
-    res.setHeader('Content-Disposition', 'inline; filename="okf.tar.gz"');
-    res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=3600');
-    res.send(bundle.tarGz);
-  } catch (err) {
-    res.status(500).type('text/plain').send(`Failed to generate OKF bundle: ${dbErrorMessage(err)}`);
-  }
-});
-
-app.get(/^\/api\/okf(?:\/(.*))?$/, async (req, res) => {
-  try {
-    const rel = (req.params[0] || '').replace(/^\/+/, '');
-    const key = rel ? `okf/${rel}` : 'okf/index.md';
-    const db = getPool();
-    const bundle = await getOkfBundle(db);
-    const content = bundle.byPath[key];
-    if (!content) return res.status(404).type('text/plain').send('OKF path not found');
-    res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
-    res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=3600');
-    res.send(content);
-  } catch (err) {
-    res.status(500).type('text/plain').send(`Failed to load OKF path: ${dbErrorMessage(err)}`);
   }
 });
 
@@ -1614,7 +1601,6 @@ app.post('/api/venues', async (req, res) => {
     const adminSession = getAdminSession(req);
     const includePasswords = adminSession && adminSession.type === 'super';
     const out = await getVenueWithSports(db, venueId, includePasswords);
-    invalidateOkfCache();
     notifyIndexNowForVenue(out || { id: venueId, ...row });
     res.status(201).json(out || { id: venueId, ...row });
   } catch (err) {
@@ -1661,7 +1647,6 @@ app.put('/api/venues/:id', async (req, res) => {
           } catch (_) {}
         }
         const out = await getVenueWithSports(db, id, includePasswords);
-        invalidateOkfCache();
         notifyIndexNowForVenue(out || { id, ...row });
         return res.json(out || { id, ...row });
       }
@@ -1675,7 +1660,6 @@ app.put('/api/venues/:id', async (req, res) => {
         } catch (_) {}
       }
       const out = await getVenueWithSports(db, id, includePasswords);
-      invalidateOkfCache();
       notifyIndexNowForVenue(out || { id, ...row });
       res.json(out || { id, ...row });
   } catch (err) {
@@ -1701,7 +1685,6 @@ app.patch('/api/venues/order', async (req, res) => {
             );
           }
           await connection.commit();
-          invalidateOkfCache();
           return res.status(204).send();
         }
       }
@@ -1709,7 +1692,6 @@ app.patch('/api/venues/order', async (req, res) => {
         await connection.execute('UPDATE venues SET sort_order = ? WHERE id = ?', [i, orderedIds[i]]);
       }
       await connection.commit();
-      invalidateOkfCache();
       return res.status(204).send();
     } finally {
       connection.release();
@@ -1726,7 +1708,6 @@ app.delete('/api/venues/:id', async (req, res) => {
     const existing = await getVenueWithSports(db, id, false);
     const deletedUrl = existing ? venuePublicUrl(existing) : null;
     await db.execute('DELETE FROM venues WHERE id = ?', [id]);
-    invalidateOkfCache();
     if (deletedUrl) submitIndexNowUrls([deletedUrl]).catch(() => {});
     res.status(204).send();
   } catch (err) {
