@@ -10,6 +10,7 @@ import {
 } from '../../utils/hkDistricts';
 import CourtCard from './CourtCard.vue';
 import ListingSeoPanel from '../seo/ListingSeoPanel.vue';
+import ListingSeoIntro from '../seo/ListingSeoIntro.vue';
 const props = defineProps<{
   venues: Venue[];
   selectedVenue: Venue | null;
@@ -262,6 +263,18 @@ const leftListVenues = computed(() =>
 </script>
 
 <template>
+  <div class="flex flex-col h-full min-h-0 w-full">
+    <ListingSeoIntro
+      v-if="listingSeo"
+      :language="language"
+      :t="t"
+      :dark-mode="darkMode"
+      :mode="listingSeo.mode"
+      :sport-name="listingSeo.sportName"
+      :sport-slug="listingSeo.sportSlug"
+      :district-slug="listingSeo.districtSlug"
+      :venue-count="listingSeo.venueCount"
+    />
   <div :class="shellClass">
     <div
       :class="[
@@ -645,5 +658,6 @@ const leftListVenues = computed(() =>
         </div>
       </div>
     </div>
+  </div>
   </div>
 </template>

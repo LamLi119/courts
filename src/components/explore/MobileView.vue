@@ -11,6 +11,7 @@ import {
 import MobileVenueCard from './MobileVenueCard.vue';
 import VenueDetail from '../venue/VenueDetail.vue';
 import ListingSeoPanel from '../seo/ListingSeoPanel.vue';
+import ListingSeoIntro from '../seo/ListingSeoIntro.vue';
 
 const MapView = defineAsyncComponent(() => import('./MapView.vue'));
 
@@ -431,8 +432,21 @@ const goNextVenueFromDetail = async () => {
     v-else-if="mode === 'map'"
     :class="mapShellClass"
   >
+    <ListingSeoIntro
+      v-if="listingSeo"
+      class="relative z-30 shrink-0"
+      :language="language"
+      :t="t"
+      :dark-mode="darkMode"
+      :mode="listingSeo.mode"
+      :sport-name="listingSeo.sportName"
+      :sport-slug="listingSeo.sportSlug"
+      :district-slug="listingSeo.districtSlug"
+      :venue-count="listingSeo.venueCount"
+    />
     <div
       class="absolute top-4 left-4 right-4 z-20 space-y-2 pointer-events-none transition-all duration-300"
+      :class="listingSeo ? 'top-28' : ''"
     >
       <div class="pointer-events-auto space-y-2">
         <div class="pointer-events-auto flex items-center gap-2">

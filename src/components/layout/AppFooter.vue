@@ -16,6 +16,8 @@ const shareFeedback = ref<string | null>(null);
 
 const footerLinks = [
   { key: 'aboutUs', href: '/about' },
+  { key: 'footerCourtsDirectory', href: 'https://courts.theground.io/' },
+  { key: 'footerTheGround', href: 'https://theground.io/' },
   { key: 'termsOfService', href: 'https://join.theground.io/terms' },
   { key: 'privacyPolicy', href: 'https://join.theground.io/privacy' },
 ] as const;
@@ -62,6 +64,9 @@ function toggleLanguage() {
         <div class="shrink-0">
           <p class="text-lg md:text-xl font-black text-white tracking-tight">
             {{ t('footerBrand') }}
+          </p>
+          <p class="mt-1 text-xs text-gray-500">
+            {{ language === 'zh' ? 'Courts by The Ground · courts.theground.io' : 'Courts by The Ground · courts.theground.io' }}
           </p>
           <p class="mt-2 text-xs md:text-sm text-gray-400">
             {{ t('footerCopyright') }}

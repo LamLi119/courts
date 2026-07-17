@@ -9,6 +9,7 @@ Ongoing checks after technical/content SEO ships. Run these on a schedule; do no
 | `npm run seo:check-discovery` | Live `/llms.txt`, AI catalog, robots, IndexNow key, sitemap, OKF |
 | `npm run seo:check-sitemap` | Every sitemap URL → HTTP 200 and not `noindex`; lastmod diversity |
 | `npm run seo:check-content` | Thin venue copy, near-duplicate pairs, district×sport doorway risk |
+| `npm run seo:check-serp` | SERP query checklist + GSC pointers (manual rank tracking) |
 | `npm run seo:submit-indexnow` | Bulk-submit sitemap URLs to IndexNow (`--dry-run` supported) |
 | `npm run seo:monitor` | Discovery + sitemap + content (full Phase 4 automated suite) |
 

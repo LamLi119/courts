@@ -104,6 +104,14 @@ const districtsForSelectedSport = computed(() =>
 const popularDistricts = computed(() => districtsForSelectedSport.value.slice(0, 4));
 const remainingDistricts = computed(() => districtsForSelectedSport.value.slice(4));
 
+function districtSearchHref(districtSlug: string) {
+  return `/search/${selectedSportSlug.value}/${districtSlug}`;
+}
+
+function sportSearchHref(slug: string) {
+  return `/search/${slug}`;
+}
+
 function goDistrictExplore(districtSlug: string) {
   props.onExplore({ sport: selectedSportSlug.value, districts: [districtSlug] });
 }
@@ -506,37 +514,49 @@ function goNextPartnership() {
         </div>
 
         <!-- Sport type: dropdown on mobile, tabs on desktop -->
-        <select
-          v-model="selectedSportSlug"
-          class="md:hidden w-full px-4 py-3 rounded-xl text-sm font-bold border appearance-none cursor-pointer transition-colors"
-          :class="darkMode
-            ? 'bg-gray-800 border-gray-600 text-gray-100'
-            : 'bg-white border-gray-200 text-gray-800'"
-          :aria-label="t('sportType')"
-        >
-          <option
-            v-for="item in sportVenueCounts"
-            :key="item.slug"
-            :value="item.slug"
+        <div class="relative md:hidden">
+          <select
+            v-model="selectedSportSlug"
+            class="w-full px-4 py-3 pr-10 rounded-xl text-sm font-bold border appearance-none cursor-pointer transition-colors"
+            :class="darkMode
+              ? 'bg-gray-800 border-gray-600 text-gray-100'
+              : 'bg-white border-gray-200 text-gray-800'"
+            :aria-label="t('sportType')"
           >
-            {{ sportCountLabel(item) }}
-          </option>
-        </select>
+            <option
+              v-for="item in sportVenueCounts"
+              :key="item.slug"
+              :value="item.slug"
+            >
+              {{ sportCountLabel(item) }}
+            </option>
+          </select>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 opacity-50"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            aria-hidden="true"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
         <div class="hidden md:flex flex-wrap gap-2">
-          <button
+          <a
             v-for="item in sportVenueCounts"
             :key="item.slug"
-            type="button"
-            class="px-4 py-2 rounded-full text-sm font-bold border transition-colors"
+            :href="sportSearchHref(item.slug)"
+            class="px-4 py-2 rounded-full text-sm font-bold border transition-colors no-underline min-h-[44px] inline-flex items-center"
             :class="item.slug === selectedSportSlug
               ? 'bg-[#007a67] text-white border-[#007a67]'
               : (darkMode
                   ? 'bg-transparent border-gray-600 text-gray-300 hover:border-[#007a67] hover:text-[#79d8c7]'
                   : 'bg-gray-100 border-gray-200 text-gray-700 hover:border-[#007a67] hover:text-[#007a67]')"
-            @click="selectedSportSlug = item.slug"
+            @click.prevent="selectedSportSlug = item.slug"
           >
             {{ sportCountLabel(item) }}
-          </button>
+          </a>
         </div>
 
         <!-- Popular districts — top 4 large cards -->
@@ -557,13 +577,13 @@ function goNextPartnership() {
             </button>
           </div>
           <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <button
+            <a
               v-for="d in popularDistricts"
               :key="d.slug"
-              type="button"
-              class="text-left rounded-2xl border p-4 transition-all hover:border-[#007a67] hover:shadow-md group"
+              :href="districtSearchHref(d.slug)"
+              class="text-left rounded-2xl border p-4 transition-all hover:border-[#007a67] hover:shadow-md group no-underline block"
               :class="darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'"
-              @click="goDistrictExplore(d.slug)"
+              @click.prevent="goDistrictExplore(d.slug)"
             >
               <div
                 class="w-8 h-1 rounded-full mb-3"
@@ -581,7 +601,7 @@ function goNextPartnership() {
               >
                 {{ districtVenueCountLabel(d.count) }}
               </span>
-            </button>
+            </a>
           </div>
         </div>
 
@@ -593,14 +613,14 @@ function goNextPartnership() {
         >
           <ul class="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-2">
             <li v-for="d in remainingDistricts" :key="d.slug">
-              <button
-                type="button"
-                class="w-full text-left text-sm font-medium transition-colors"
+              <a
+                :href="districtSearchHref(d.slug)"
+                class="w-full text-left text-sm font-medium transition-colors no-underline block min-h-[44px] py-1"
                 :class="darkMode ? 'text-gray-300 hover:text-[#79d8c7]' : 'text-gray-600 hover:text-[#007a67]'"
-                @click="goDistrictExplore(d.slug)"
+                @click.prevent="goDistrictExplore(d.slug)"
               >
                 {{ d.name }} ({{ d.count }})
-              </button>
+              </a>
             </li>
           </ul>
         </div>

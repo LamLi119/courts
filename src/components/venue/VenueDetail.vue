@@ -8,7 +8,9 @@ import { applyVenueSeo, resetSeoToDefault, getSportTypeLabel, getVenueImageAlt }
 import {
   eventMatchesVenue,
   googleMapsDirectionsUrl,
+  googleMapsEmbedUrl,
 } from '../../utils/venueContent';
+import VenueSeoSections from '../seo/VenueSeoSections.vue';
 import { slugify } from '../../utils/slugify';
 import ImageCarousel from '../ui/ImageCarousel.vue';
 import VenueUpcomingEvents from './VenueUpcomingEvents.vue';
@@ -383,9 +385,25 @@ const venueAmenities = computed(() =>
     : [],
 );
 
+const mapEmbedUrl = computed(() => googleMapsEmbedUrl(props.venue));
+const showMapEmbed = ref(false);
+
+const showVenueRating = computed(() => {
+  const rv = props.venue.rating_value;
+  const rc = props.venue.review_count;
+  return rv != null && rc != null && rc >= 1 && rv >= 1 && rv <= 5;
+});
+
 onMounted(() => {
   void refreshUpcoming();
 });
+
+watch(
+  () => props.venue.id,
+  () => {
+    showMapEmbed.value = false;
+  },
+);
 
 watch(
   () => [props.venue.id, hasDescriptionText.value, hasPricingDetail.value, hasOperatingDetail.value] as const,
@@ -499,6 +517,12 @@ watch(
                 :alt="venueImageAlt" fetchpriority="high" />
               <span>{{ venue.name }}</span>
             </h2>
+            <p
+              v-if="showVenueRating"
+              class="text-sm font-bold text-[#007a67]"
+            >
+              ★ {{ venue.rating_value }} · {{ venue.review_count }} {{ t('venueReviews') }}
+            </p>
             <template v-if="socialLinksList().length > 0">
             </template>
             <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-[14px] font-[400]"
@@ -656,24 +680,50 @@ watch(
               <!-- Mobile: Location -->
               <div v-if="venue.address && venue.address.trim() !== ''"
                 class="lg:hidden pt-4 mt-2 mb-4 border-t border-gray-300">
-                <div class="flex justify-between w-full">
+                <div class="flex justify-between w-full items-start">
                   <h3 class="uppercase tracking-widest font-bold opacity-90"
                     :class="language === 'en' ? 'text-[12px]' : 'text-[14px]'">
                     {{ t('location') }}
                   </h3>
 
-                  <button type="button" id="google-maps-button" class="btn btn-text btn-sm w-1/2"
-                    @click="openGoogleMaps">
-                    📍 {{ t('getDirections') }}
-                  </button>
+                  <div class="w-1/2 flex flex-col items-end gap-1">
+                    <button type="button" id="google-maps-button" class="btn btn-text btn-sm"
+                      @click="openGoogleMaps">
+                      📍 {{ t('getDirections') }}
+                    </button>
+                    
+                  </div>
 
                 </div>
-                <div class="p-4 rounded-[16px] border w-full"
-                  :class="darkMode ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-gray-50 border-gray-100 text-gray-700'">
-                  <p class="text-[14px] leading-relaxed" :class="darkMode ? 'text-gray-300' : 'text-gray-700'">
+                <div
+                  class="p-4 rounded-[16px] border w-full relative"
+                  :class="darkMode ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-gray-50 border-gray-100 text-gray-700'"
+                >
+                  <p class="text-[14px] leading-relaxed pr-24" :class="darkMode ? 'text-gray-300' : 'text-gray-700'">
                     {{ venue.address }}
                   </p>
-
+                  <button
+                    v-if="mapEmbedUrl"
+                    type="button"
+                    class="absolute bottom-3 right-3 btn btn-text btn-sm"
+                    @click="showMapEmbed = !showMapEmbed"
+                  >
+                    🗺️ {{ showMapEmbed ? t('hideMap') : t('showMap') }}
+                  </button>
+                </div>
+                <div
+                  v-if="mapEmbedUrl && showMapEmbed"
+                  class="mt-3 rounded-2xl overflow-hidden border aspect-video w-full"
+                  :class="darkMode ? 'border-gray-700' : 'border-gray-200'"
+                >
+                  <iframe
+                    :src="mapEmbedUrl"
+                    :title="`${venue.name} map`"
+                    loading="lazy"
+                    class="w-full h-full border-0"
+                    referrerpolicy="no-referrer-when-downgrade"
+                    allowfullscreen
+                  />
                 </div>
               </div>
               <div class="lg:hidden mt-6 space-y-6">
@@ -882,25 +932,51 @@ watch(
             </div>
             <!-- Desktop: location -->
             <div class="space-y-4">
-              <div v-if="venue.address && venue.address.trim() !== ''" class="flex justify-between w-full">
+              <div v-if="venue.address && venue.address.trim() !== ''" class="flex justify-between w-full items-start">
                 <h3 class="uppercase tracking-widest font-bold opacity-90"
                   :class="language === 'en' ? 'text-[14px]' : 'text-[16px]'">
                   {{ t('location') }}
                 </h3>
 
-                <button type="button"
-                  class="text-[12px] font-[700] text-[#007a67] uppercase w-1/2 text-right hover:font-bold hover:underline"
-                  @click="openGoogleMaps">
-                  📍 {{ t('getDirections') }}
-                </button>
+                <div class="w-1/2 flex flex-col items-end gap-1">
+                  <button type="button"
+                    class="text-[12px] font-[700] text-[#007a67] uppercase hover:font-bold hover:underline"
+                    @click="openGoogleMaps">
+                    📍 {{ t('getDirections') }}
+                  </button>
+                  
+                </div>
 
               </div>
-              <div class="p-4 rounded-[16px] border w-full"
-                :class="darkMode ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-gray-50 border-gray-100 text-gray-700'">
-                <p class="text-[14px] leading-relaxed" :class="darkMode ? 'text-gray-300' : 'text-gray-700'">
+              <div
+                class="p-4 rounded-[16px] border w-full relative"
+                :class="darkMode ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-gray-50 border-gray-100 text-gray-700'"
+              >
+                <p class="text-[14px] leading-relaxed pr-24" :class="darkMode ? 'text-gray-300' : 'text-gray-700'">
                   {{ venue.address }}
                 </p>
-
+                <button
+                  v-if="mapEmbedUrl"
+                  type="button"
+                  class="absolute bottom-3 right-3 text-[12px] font-[700] text-[#007a67] uppercase hover:font-bold hover:underline"
+                  @click="showMapEmbed = !showMapEmbed"
+                >
+                  🗺️ {{ showMapEmbed ? t('hideMap') : t('showMap') }}
+                </button>
+              </div>
+              <div
+                v-if="mapEmbedUrl && showMapEmbed"
+                class="rounded-2xl overflow-hidden border aspect-video w-full"
+                :class="darkMode ? 'border-gray-700' : 'border-gray-200'"
+              >
+                <iframe
+                  :src="mapEmbedUrl"
+                  :title="`${venue.name} map`"
+                  loading="lazy"
+                  class="w-full h-full border-0"
+                  referrerpolicy="no-referrer-when-downgrade"
+                  allowfullscreen
+                />
               </div>
             </div>
             <!-- Desktop: membership -->
@@ -948,6 +1024,15 @@ watch(
     </div>
 
     <AppFooter :language="language" :t="t" :darkMode="darkMode" variant="inline" />
+
+    <VenueSeoSections
+      :venue="venue"
+      :language="language"
+      :dark-mode="darkMode"
+      :t="t"
+      :can-see-special-offer="canSeeSpecialOffer"
+      :sanitize-description="sanitizeDescription"
+    />
 
     <!-- Mobile: fixed bar – price + Join membership -->
     <div v-if="venue.startingPrice > 0" class="fixed bottom-0 left-0 right-0 z-50 p-4 border-t lg:hidden"

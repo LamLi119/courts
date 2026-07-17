@@ -14,8 +14,9 @@
     "seo:check-discovery": "node scripts/seo-check-discovery.js",
     "seo:check-sitemap": "node scripts/seo-check-sitemap.js",
     "seo:check-content": "node scripts/seo-check-content.js",
+    "seo:check-serp": "node scripts/seo-check-serp.js",
     "seo:submit-indexnow": "node scripts/seo-submit-indexnow.js",
-    "seo:monitor": "node scripts/seo-check-discovery.js && node scripts/seo-check-sitemap.js && node scripts/seo-check-content.js"
+    "seo:monitor": "node scripts/seo-check-discovery.js && node scripts/seo-check-sitemap.js && node scripts/seo-check-content.js && node scripts/seo-check-serp.js"
   },
   "dependencies": {
     "@google-cloud/storage": "^7.19.0",

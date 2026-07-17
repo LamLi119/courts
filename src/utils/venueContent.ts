@@ -107,9 +107,13 @@ export function buildVenueSeoSections(venue: Venue, lang: Language): VenueSeoSec
   const amenities = Array.isArray(venue.amenities)
     ? venue.amenities.map((a) => clean(a)).filter(Boolean)
     : [];
+  const customDesc = stripHtml(venue.description);
 
   if (lang === 'zh') {
     const overview: string[] = [];
+    if (customDesc.length > 40) {
+      overview.push(customDesc);
+    }
     overview.push(
       `${venue.name}位於香港${district || '市區'}，提供${sport}場地服務。`
       + (addr ? `場館地址為${addr}。` : '')
@@ -154,6 +158,9 @@ export function buildVenueSeoSections(venue: Venue, lang: Language): VenueSeoSec
   }
 
   const overview: string[] = [];
+  if (customDesc.length > 40) {
+    overview.push(customDesc);
+  }
   overview.push(
     `${venue.name} is a ${sport.toLowerCase()} venue`
     + (district ? ` in ${district}, Hong Kong` : ' in Hong Kong')
@@ -269,4 +276,18 @@ export function googleMapsDirectionsUrl(venue: Venue): string {
     return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addr)}`;
   }
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(venue.name)}`;
+}
+
+/** iframe embed URL (no Maps JS API key required). */
+export function googleMapsEmbedUrl(venue: Venue): string | null {
+  const lat = numOrNull(venue.coordinates?.lat);
+  const lng = numOrNull(venue.coordinates?.lng);
+  if (lat != null && lng != null) {
+    return `https://maps.google.com/maps?q=${lat},${lng}&z=16&output=embed`;
+  }
+  const addr = clean(venue.address);
+  if (addr) {
+    return `https://maps.google.com/maps?q=${encodeURIComponent(addr)}&z=16&output=embed`;
+  }
+  return null;
 }
