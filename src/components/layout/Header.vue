@@ -47,29 +47,33 @@ const openFindEvents = () => {
   ]">
     <div class="w-full max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
       <div class="flex items-center gap-4 md:gap-8 min-w-0">
-        <div class="flex items-center gap-2.5 cursor-pointer group shrink-0" @click="goHome">
+        <a href="/" class="flex items-center gap-2.5 cursor-pointer group shrink-0 no-underline" @click.prevent="goHome">
           <div
             class="w-10 h-10 transition-transform duration-300 group-hover:rotate-12 group-active:scale-90 flex items-center justify-center">
             <img :src="logoUrl" alt="TheGround.io" class="w-10 h-10" />
           </div>
-          <h1 class="hidden sm:block text-[20px] font-[900] tracking-tighter text-[#007a67]">
+          <span class="hidden sm:block text-[20px] font-[900] tracking-tighter text-[#007a67]">
             Courts
-          </h1>
-        </div>
+          </span>
+        </a>
 
         <nav v-if="!hideNavTabs" class="hidden sm:flex items-center gap-3 md:gap-6">
-          <button
-            type="button"
-            class="btn btn-nav hidden sm:block"
+          <a
+            href="/"
+            class="btn btn-nav hidden sm:block no-underline"
             :class="isHome ? 'btn-nav-active' : ''"
-            @click="goHome"
+            @click.prevent="goHome"
           >
             {{ t('home') }}
-          </button>
-          <button type="button" class="btn btn-nav hidden sm:block"
-            :class="!isHome && currentTab === 'explore' ? 'btn-nav-active' : ''" @click="setTab('explore')">
+          </a>
+          <a
+            href="/explore"
+            class="btn btn-nav hidden sm:block no-underline"
+            :class="!isHome && currentTab === 'explore' ? 'btn-nav-active' : ''"
+            @click.prevent="setTab('explore')"
+          >
             {{ t('explore') }}
-          </button>
+          </a>
           <button type="button" class="btn btn-nav hidden sm:block"
             :class="currentTab === 'saved' ? 'text-red-500' : ''" @click="setTab('saved')">
             {{ t('saved') }}

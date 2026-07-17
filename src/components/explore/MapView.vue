@@ -501,13 +501,9 @@ function isGcsPublicUrl(url: string): boolean {
   }
 }
 
-/** GCS CORS is configured for production + localhost; Vercel previews need bucket CORS or image-proxy. */
+/** GCS CORS allows origin *; prefer direct GCS for map icon canvas reads. */
 function shouldTryDirectGcsFirst(): boolean {
-  if (typeof window === 'undefined') return false;
-  const host = window.location.hostname.toLowerCase();
-  if (host === 'localhost' || host === '127.0.0.1') return true;
-  if (host === 'courts.theground.io') return true;
-  return false;
+  return typeof window !== 'undefined';
 }
 
 async function imageUrlToPngDataUrl(imageUrl: string, size = 96): Promise<string> {

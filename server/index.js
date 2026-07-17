@@ -1228,7 +1228,7 @@ app.post('/api/auth/login', async (req, res) => {
 
 app.get('/api/auth/session', (_req, res) => {
   const session = getAdminSession(_req);
-  if (!session) return res.status(401).json({ error: 'Not logged in' });
+  if (!session) return res.json({ type: 'none', allowedVenueIds: [] });
   return res.json({ type: session.type, allowedVenueIds: session.allowedIds || [] });
 });
 

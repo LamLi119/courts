@@ -19,6 +19,7 @@ const props = defineProps<{
 }>();
 
 const imageAlt = computed(() => getVenueImageAlt(props.venue));
+const venueHref = computed(() => `/venues/${slugify(props.venue.name)}`);
 
 const districtName = computed(() => {
   const slug = getVenueDistrictSlug(props.venue);
@@ -28,7 +29,7 @@ const districtName = computed(() => {
 const shareFeedback = ref<string | null>(null);
 const handleShare = async () => {
   const url = typeof window !== 'undefined'
-    ? `${window.location.origin}/venues/${slugify(props.venue.name)}`
+    ? `${window.location.origin}${venueHref.value}`
     : '';
   const title = props.venue.name;
   try {
@@ -52,10 +53,16 @@ const handleShare = async () => {
     }
   }
 };
+
+function navigateVenue(e: MouseEvent) {
+  if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+  e.preventDefault();
+  props.onViewDetails();
+}
 </script>
 
 <template>
-  <button type="button" class="w-full text-left" @click="onViewDetails">
+  <a :href="venueHref" class="w-full text-left block no-underline" @click="navigateVenue">
     <div class="flex flex-col shadow-sm transition-all active:scale-[0.98]"
       :class="darkMode ? 'border-gray-800' : 'border-gray-200'">
       <div class="flex items-center gap-4 px-4 pt-3 pb-2">
@@ -126,5 +133,5 @@ const handleShare = async () => {
       </div>
       </div>
     </div>
-  </button>
+  </a>
 </template>

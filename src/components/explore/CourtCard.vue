@@ -22,6 +22,7 @@ const props = defineProps<{
 
 const isExpanded = ref(false);
 const imageAlt = computed(() => getVenueImageAlt(props.venue));
+const venueHref = computed(() => `/venues/${slugify(props.venue.name)}`);
 
 const districtName = computed(() => {
   const slug = getVenueDistrictSlug(props.venue);
@@ -31,7 +32,7 @@ const districtName = computed(() => {
 const shareFeedback = ref<string | null>(null);
 const handleShare = async () => {
   const url = typeof window !== 'undefined'
-    ? `${window.location.origin}/venues/${slugify(props.venue.name)}`
+    ? `${window.location.origin}${venueHref.value}`
     : '';
   const title = props.venue.name;
   try {
@@ -60,6 +61,14 @@ const toggleExpand = (e: MouseEvent) => {
   e.stopPropagation();
   isExpanded.value = !isExpanded.value;
 };
+
+/** Keep SPA navigation, but preserve real href for crawlers / open-in-new-tab. */
+function navigateVenue(e: MouseEvent, preferDetail = true) {
+  if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+  e.preventDefault();
+  if (preferDetail && props.onViewDetail) props.onViewDetail();
+  else props.onClick();
+}
 </script>
 
 <template>
@@ -68,9 +77,10 @@ const toggleExpand = (e: MouseEvent) => {
       class="w-full border rounded-[16px] overflow-hidden mb-4 transition-all duration-300 shadow-sm"
       :class="darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'"
     >
-      <div
-        class="flex items-center p-4 cursor-pointer gap-4"
-        @click="onClick"
+      <a
+        :href="venueHref"
+        class="flex items-center p-4 cursor-pointer gap-4 no-underline"
+        @click="navigateVenue($event, false)"
       >
         <div class="relative w-16 h-16 rounded-[16px] overflow-hidden flex-shrink-0">
           <img
@@ -102,13 +112,14 @@ const toggleExpand = (e: MouseEvent) => {
           </p>
         </div>
         <button
+          type="button"
           class="p-2 rounded-full transition-transform"
           :class="[isExpanded ? 'rotate-180' : '', darkMode ? 'bg-gray-700' : 'bg-gray-50']"
           @click.stop="toggleExpand"
         >
           ▼
         </button>
-      </div>
+      </a>
 
       <div
         v-if="isExpanded"
@@ -127,29 +138,31 @@ const toggleExpand = (e: MouseEvent) => {
         </div>
         <div class="flex gap-2">
           <button
+            type="button"
             class="flex-1 py-2.5 rounded-[8px] font-bold text-xs flex items-center justify-center gap-2 transition-all"
             :class="isSaved ? 'bg-red-500 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-500'"
             @click.stop="onToggleSave"
           >
             {{ isSaved ? '❤️ Saved' : '🤍 Save' }}
           </button>
-          <button
-            class="flex-[2] py-2.5 bg-[#007a67] text-white rounded-[8px] font-[900] text-xs shadow-md"
-            @click="onViewDetail ?? onClick"
+          <a
+            :href="venueHref"
+            class="flex-[2] py-2.5 bg-[#007a67] text-white rounded-[8px] font-[900] text-xs shadow-md text-center no-underline"
+            @click="navigateVenue($event, true)"
           >
             {{ t('viewDetails') }}
-          </button>
+          </a>
         </div>
       </div>
     </div>
   </div>
 
-  <div
+  <a
     v-else
-    class="group cursor-pointer rounded-[16px] overflow-hidden border transition-all duration-300 shadow-sm hover:shadow-lg"
+    :href="venueHref"
+    class="group cursor-pointer rounded-[16px] overflow-hidden border transition-all duration-300 shadow-sm hover:shadow-lg block no-underline"
     :class="darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'"
-    @click="onClick"
-    role="button"
+    @click="navigateVenue($event, true)"
   >
       <div class="relative h-44 overflow-hidden">
       <img
@@ -176,6 +189,7 @@ const toggleExpand = (e: MouseEvent) => {
       </div>
       <div class="absolute top-2 right-2">
         <button
+          type="button"
           class="p-2.5 rounded-full shadow-lg transition-all active:scale-90 rounded-[999px]"
           :class="isSaved ? 'bg-red-500 text-white' : 'bg-white/90 text-gray-500'"
           @click.stop="onToggleSave"
@@ -222,14 +236,12 @@ const toggleExpand = (e: MouseEvent) => {
             </span>
           </div>
         </div>
-        <button
-          class="px-4 py-2 bg-[#007a67] text-white rounded-[8px] font-bold text-sm shadow-md group-hover:brightness-110 rounded-[8px]"
-          @click.stop="onViewDetail ? onViewDetail() : onClick()"
+        <span
+          class="px-4 py-2 bg-[#007a67] text-white rounded-[8px] font-bold text-sm shadow-md group-hover:brightness-110"
         >
           {{ t('viewDetails') }}
-        </button>
+        </span>
       </div>
     </div>
-  </div>
+  </a>
 </template>
-

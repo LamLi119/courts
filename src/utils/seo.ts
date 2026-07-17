@@ -2,6 +2,7 @@ import type { Venue } from '../../types';
 import { slugify } from './slugify';
 
 const SITE_NAME = 'Courts';
+const BRAND = 'Courts by The Ground';
 const HK_DISTRICT_COUNT = 18;
 const DEFAULT_KEYWORDS =
   'pickleball courts hong kong, pickleball court hk, sports courts Hong Kong, court booking, Hong Kong 18 districts courts, 香港18區球場, 香港球場, 球場預訂, pickleball Hong Kong, 匹克球, 匹克球香港, pickleball 香港, pickleball 場地, 匹克球場地, 匹克球 租場, 匹克球場收費, Sha Tin courts, Kwun Tong pickleball, 沙田球場, 觀塘匹克球';
@@ -14,6 +15,14 @@ export type SportVenueCount = {
 };
 
 type SportOption = { name: string; name_zh?: string | null; slug: string };
+
+export const HOME_TITLE_EN = `${BRAND} | Find Sports Courts Across All ${HK_DISTRICT_COUNT} Hong Kong Districts`;
+export const HOME_TITLE_ZH = `運動場地搜尋 全港${HK_DISTRICT_COUNT}區 80+場館 | ${BRAND}`;
+const DEFAULT_TITLE = HOME_TITLE_EN;
+const DEFAULT_DESCRIPTION =
+  `Search sports courts across all ${HK_DISTRICT_COUNT} Hong Kong districts. Filter by district and sport, compare prices and amenities, and book in minutes. 搜尋香港18區運動場地。`;
+/** Default share preview image (home page). Use absolute URL so crawlers see it when sharing site URL. */
+const DEFAULT_OG_IMAGE_PATH = '/gray-G.png';
 
 /** Whether a venue supports the given sport slug (matches explore filter logic). */
 export function venueMatchesSportSlug(venue: Venue, sportSlug: string): boolean {
@@ -208,12 +217,6 @@ function getReadableCurrentUrl(): string {
   }
 }
 
-const DEFAULT_TITLE = `Courts | Find Sports Courts in All ${HK_DISTRICT_COUNT} Hong Kong Districts`;
-const DEFAULT_DESCRIPTION =
-  `Search sports courts across all ${HK_DISTRICT_COUNT} Hong Kong districts. Filter by district and sport, compare prices and amenities, and book in minutes. 搜尋香港18區運動場地。`;
-/** Default share preview image (home page). Use absolute URL so crawlers see it when sharing site URL. */
-const DEFAULT_OG_IMAGE_PATH = '/gray-G.png';
-
 /** Apply dynamic meta and OG tags for a venue (detail page). Call when venue is shown. */
 export function applyVenueSeo(venue: Venue, baseUrl: string, lang: 'en' | 'zh' = 'en'): void {
   const title = getVenueTitle(venue, lang);
@@ -266,9 +269,7 @@ export function applyLandingPageSeo(
   const homeUrl = origin ? `${origin}/` : (baseUrl || '');
   const defaultImageUrl = origin ? new URL(DEFAULT_OG_IMAGE_PATH, origin).href : '';
 
-  const title = lang === 'zh'
-    ? `Courts`
-    : `Courts`;
+  const title = lang === 'zh' ? HOME_TITLE_ZH : HOME_TITLE_EN;
 
   const description = lang === 'zh'
     ? `搜尋香港全部${HK_DISTRICT_COUNT}區運動場地，共${total}個場館${sportSummary ? `。${sportSummary}` : ''}。可搜尋所有地區或按區篩選，比較收費，快速預訂。`
@@ -298,6 +299,55 @@ export function applyLandingPageSeo(
   }
 
   injectLandingJsonLd({ total, sportCounts, homeUrl, lang });
+}
+
+/** Explore page SEO with CollectionPage + ItemList of venues. */
+export function applyExplorePageSeo(
+  venues: Venue[],
+  lang: 'en' | 'zh' = 'en',
+  baseUrl?: string,
+): void {
+  const origin = typeof window !== 'undefined' ? window.location.origin : (baseUrl || '').replace(/\/$/, '');
+  const pageUrl = origin ? `${origin}/explore` : `${baseUrl || ''}/explore`;
+  const defaultImageUrl = origin ? new URL(DEFAULT_OG_IMAGE_PATH, origin).href : '';
+  const total = venues.length;
+
+  const title = lang === 'zh'
+    ? `探索全港${HK_DISTRICT_COUNT}區運動場地 | ${BRAND}`
+    : `Explore Sports Courts Across Hong Kong | ${BRAND}`;
+  const description = lang === 'zh'
+    ? `在地圖或列表中瀏覽香港${total}+個運動場館，按地區、運動類型及港鐵站篩選。`
+    : `Browse ${total}+ Hong Kong sports venues on map or list. Filter by district, sport, and MTR station.`;
+
+  document.title = title;
+  setMeta('description', description);
+  setMeta('keywords', DEFAULT_KEYWORDS);
+  if (pageUrl) setCanonical(pageUrl);
+
+  setOgTag('og:title', title);
+  setOgTag('og:description', description);
+  setOgTag('og:type', 'website');
+  if (pageUrl) setOgTag('og:url', pageUrl);
+  setOgTag('og:site_name', SITE_NAME);
+
+  setMeta('twitter:card', 'summary_large_image');
+  setMeta('twitter:title', title);
+  setMeta('twitter:description', description);
+  if (pageUrl) setMeta('twitter:url', pageUrl);
+  if (defaultImageUrl) {
+    setOgTag('og:image', defaultImageUrl);
+    setMeta('twitter:image', defaultImageUrl);
+  }
+
+  injectListingJsonLd({
+    pageUrl,
+    title,
+    description,
+    listName: lang === 'zh' ? '香港運動場地列表' : 'Hong Kong sports venues',
+    venues,
+    origin: origin || (baseUrl || '').replace(/\/$/, ''),
+    marker: 'data-seo-listing',
+  });
 }
 
 /** Reset to default meta when leaving venue detail. */
@@ -330,12 +380,33 @@ export function resetSeoToDefault(baseUrl?: string): void {
 }
 
 /** Category page SEO: /search/:sport */
-export function applySearchPageSeo(sportSlug: string, baseUrl?: string): void {
-  const sport = sportSlug.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-  const title = `${sport} Courts Hong Kong | ${SITE_NAME}`;
-  const description = `Find ${sport.toLowerCase()} courts near MTR stations. Compare prices, amenities, and book today.`;
+export function applySearchPageSeo(
+  sportSlug: string,
+  venues: Venue[] = [],
+  sports: SportOption[] = [],
+  lang: 'en' | 'zh' = 'en',
+  baseUrl?: string,
+): void {
+  const origin = typeof window !== 'undefined' ? window.location.origin : (baseUrl || '').replace(/\/$/, '');
+  const sportMeta = sports.find((s) => s.slug === sportSlug);
+  const sport = sportMeta
+    ? sportLabel({ slug: sportMeta.slug, name: sportMeta.name, name_zh: sportMeta.name_zh, count: 0 }, lang)
+    : sportSlug.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  const filtered = venues.filter((v) => venueMatchesSportSlug(v, sportSlug));
+  const total = filtered.length;
+  const title = lang === 'zh'
+    ? `${sport}場地 香港 | ${BRAND}`
+    : `${sport} Courts Hong Kong | ${BRAND}`;
+  const description = lang === 'zh'
+    ? `搜尋香港${sport}場地，共${total}個場館。比較收費、設施及港鐵步行距離，快速預訂。`
+    : `Find ${sport.toLowerCase()} courts in Hong Kong (${total} venues). Compare prices, amenities, and MTR walking distance.`;
   const keywords = uniqueCsv([`${sport} courts hong kong`, `${sport} court hk`, `${sport} courts near mtr`, DEFAULT_KEYWORDS]);
-  const searchUrl = typeof window !== 'undefined' ? window.location.href : `${baseUrl || ''}/search/${sportSlug}`;
+  const searchUrl = origin
+    ? `${origin}/search/${sportSlug}`
+    : typeof window !== 'undefined'
+      ? window.location.href
+      : `${baseUrl || ''}/search/${sportSlug}`;
+  const defaultImageUrl = origin ? new URL(DEFAULT_OG_IMAGE_PATH, origin).href : '';
 
   document.title = title;
   setMeta('description', description);
@@ -346,12 +417,25 @@ export function applySearchPageSeo(sportSlug: string, baseUrl?: string): void {
   setOgTag('og:description', description);
   setOgTag('og:type', 'website');
   if (searchUrl) setOgTag('og:url', searchUrl);
+  setOgTag('og:site_name', SITE_NAME);
 
   setMeta('twitter:title', title);
   setMeta('twitter:description', description);
   if (searchUrl) setMeta('twitter:url', searchUrl);
+  if (defaultImageUrl) {
+    setOgTag('og:image', defaultImageUrl);
+    setMeta('twitter:image', defaultImageUrl);
+  }
 
-  removeJsonLd();
+  injectListingJsonLd({
+    pageUrl: searchUrl,
+    title,
+    description,
+    listName: lang === 'zh' ? `香港${sport}場地` : `${sport} courts in Hong Kong`,
+    venues: filtered,
+    origin: origin || (baseUrl || '').replace(/\/$/, ''),
+    marker: 'data-seo-listing',
+  });
 }
 
 /** Schema.org SportsActivityLocation JSON-LD */
@@ -458,7 +542,58 @@ function injectLandingJsonLd({
   }
 }
 
+function injectListingJsonLd({
+  pageUrl,
+  title,
+  description,
+  listName,
+  venues,
+  origin,
+  marker,
+}: {
+  pageUrl: string;
+  title: string;
+  description: string;
+  listName: string;
+  venues: Venue[];
+  origin: string;
+  marker: 'data-seo-listing';
+}): void {
+  removeJsonLd();
+  const base = origin.replace(/\/$/, '');
+  const collectionLd: Record<string, unknown> = {
+    '@context': 'https://schema.org',
+    '@type': 'CollectionPage',
+    name: title,
+    url: pageUrl,
+    description,
+    isPartOf: { '@type': 'WebSite', name: SITE_NAME, url: `${base}/` },
+  };
+  const itemListLd: Record<string, unknown> = {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    name: listName,
+    numberOfItems: venues.length,
+    itemListElement: venues.slice(0, 80).map((venue, index) => ({
+      '@type': 'ListItem',
+      position: index + 1,
+      name: venue.name,
+      url: `${base}/venues/${slugify(venue.name)}`,
+    })),
+  };
+
+  for (const payload of [collectionLd, itemListLd]) {
+    const script = document.createElement('script');
+    script.type = 'application/ld+json';
+    script.textContent = JSON.stringify(payload);
+    script.setAttribute(marker, '1');
+    document.head.appendChild(script);
+  }
+}
+
 function removeJsonLd(): void {
-  document.querySelectorAll('script[data-seo-venue="1"], script[data-seo-landing="1"]').forEach((el) => el.remove());
+  document
+    .querySelectorAll('script[data-seo-venue="1"], script[data-seo-landing="1"], script[data-seo-listing="1"]')
+    .forEach((el) => el.remove());
 }
 

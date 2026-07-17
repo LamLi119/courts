@@ -339,13 +339,13 @@ function goNextPartnership() {
           {{ t('landingMapSubtitle') }}
         </p>
         </div>
-        <button
-          type="button"
-          class="text-sm font-bold text-[#007a67] hover:underline shrink-0 self-start sm:self-auto"
-          @click="handleSeeAllCourts"
+        <a
+          href="/explore"
+          class="text-sm font-bold text-[#007a67] hover:underline shrink-0 self-start sm:self-auto no-underline"
+          @click.prevent="handleSeeAllCourts"
         >
           {{ t('viewAllVenues') }} →
-        </button>
+        </a>
       </div>
       
 
@@ -445,7 +445,7 @@ function goNextPartnership() {
       <p>{{ t('landingSeoAllDistricts') }}</p>
       <ul>
         <li v-for="item in sportVenueCounts" :key="item.slug">
-          {{ sportCountLabel(item) }}
+          <a :href="`/search/${item.slug}`">{{ sportCountLabel(item) }}</a>
         </li>
       </ul>
     </section>

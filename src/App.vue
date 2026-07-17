@@ -6,7 +6,7 @@ import { translate } from './utils/translations';
 import { getStationCanonicalEn } from './utils/mtrStations';
 import { venueMatchesDistricts } from './utils/hkDistricts';
 import { slugify } from './utils/slugify';
-import { resetSeoToDefault, applySearchPageSeo, applyLandingPageSeo } from './utils/seo';
+import { resetSeoToDefault, applySearchPageSeo, applyLandingPageSeo, applyExplorePageSeo } from './utils/seo';
 import { useVenueSlug } from './router';
 import { db } from '../db';
 import Header from './components/layout/Header.vue';
@@ -159,11 +159,15 @@ watch(
       sportFilter.value = [route.params.sport];
       selectedVenue.value = null;
       showDesktopDetail.value = false;
-      applySearchPageSeo(route.params.sport);
+      applySearchPageSeo(route.params.sport, venues.value, sports.value, language.value);
     } else if (route.name === 'explore') {
       selectedVenue.value = null;
       showDesktopDetail.value = false;
-      resetSeoToDefault();
+      if (venues.value.length > 0) {
+        applyExplorePageSeo(venues.value, language.value);
+      } else {
+        resetSeoToDefault();
+      }
     } else if (route.name === 'home' || route.name === 'admin') {
       if (route.name === 'home') {
         sportFilter.value = [];
@@ -195,6 +199,12 @@ watch(
     if (route.name === 'home' && venues.value.length > 0) {
       applyLandingPageSeo(venues.value, sports.value, language.value);
     }
+    if (route.name === 'explore' && venues.value.length > 0) {
+      applyExplorePageSeo(venues.value, language.value);
+    }
+    if (route.name === 'search' && typeof route.params.sport === 'string') {
+      applySearchPageSeo(route.params.sport, venues.value, sports.value, language.value);
+    }
   }
 );
 
@@ -203,6 +213,12 @@ watch(
   () => {
     if (route.name === 'home' && venues.value.length > 0) {
       applyLandingPageSeo(venues.value, sports.value, language.value);
+    }
+    if (route.name === 'explore' && venues.value.length > 0) {
+      applyExplorePageSeo(venues.value, language.value);
+    }
+    if (route.name === 'search' && typeof route.params.sport === 'string') {
+      applySearchPageSeo(route.params.sport, venues.value, sports.value, language.value);
     }
   }
 );
@@ -250,10 +266,19 @@ onMounted(() => {
   (window as any).__adminPopState = onPopState;
 
   const restoreAdminSession = async () => {
+    // Avoid a guaranteed 401 for anonymous visitors (no admin cookie).
+    const hasAdminCookie =
+      typeof document !== 'undefined' &&
+      document.cookie.split(';').some((c) => c.trim().startsWith('courts_admin_session='));
+    if (!hasAdminCookie) {
+      adminStatus.value = { type: 'none', allowedIds: [] };
+      return;
+    }
     try {
       const res = await fetch(courtApiUrl('/api/auth/session'), { method: 'GET', credentials: 'include' });
       if (!res.ok) throw new Error('No admin session');
       const data = await res.json();
+      if (!data?.type || data.type === 'none') throw new Error('No admin session');
       adminStatus.value = { type: data.type === 'super' ? 'super' : 'court', allowedIds: data.allowedVenueIds || [] };
       if (isAdminPath()) currentTab.value = 'admin';
     } catch {
