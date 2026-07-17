@@ -7,6 +7,7 @@ import {
   isValidDistrictSlug,
   venueMatchesDistricts,
 } from './hkDistricts';
+import { flattenVenueSeoForMeta } from './venueContent';
 import { slugify } from './slugify';
 
 const BRAND = 'Courts';
@@ -249,8 +250,11 @@ function buildVenueBreadcrumbLd(
   };
 }
 
-/** Meta description: booking + location + key attributes */
+/** Meta description: venue SEO prose (hidden on-page) with short booking fallback. */
 export function getVenueDescription(venue: Venue, lang: 'en' | 'zh' = 'en'): string {
+  const rich = flattenVenueSeoForMeta(venue, lang, 320);
+  if (rich) return rich;
+
   const sport = getSportTypeLabel(venue, lang);
   const mtr = cleanText(venue.mtrStation);
   const exit = cleanText(venue.mtrExit);
@@ -258,7 +262,7 @@ export function getVenueDescription(venue: Venue, lang: 'en' | 'zh' = 'en'): str
   const walkingDistance = numOrNull((venue as any).walkingDistance);
   const wd = walkingDistance != null && walkingDistance > 0 ? `${walkingDistance} min walk` : '';
   const mtrPart = mtr ? `near ${mtr}${exit ? ` (${exit})` : ''}` : '';
-  const where =  mtrPart ? ` in ${mtrPart}` : '';
+  const where = mtrPart ? ` in ${mtrPart}` : '';
   const courtCount = numOrNull((venue as any).court_count);
   const courts = courtCount != null && courtCount > 0 ? `${courtCount} courts` : '';
   const ceilingHeight = numOrNull((venue as any).ceilingHeight);
@@ -266,7 +270,6 @@ export function getVenueDescription(venue: Venue, lang: 'en' | 'zh' = 'en'): str
   const startingPrice = numOrNull((venue as any).startingPrice);
   const price = startingPrice != null && startingPrice > 0 ? `Starting from $${startingPrice}/hr` : '';
   const contact = cleanText(venue.whatsapp) ? 'WhatsApp to book' : '';
-
 
   const parts = [
     `Book ${venue.name}${where}.`,
@@ -393,9 +396,16 @@ export function applyLandingPageSeo(
 
   const title = lang === 'zh' ? HOME_TITLE_ZH : HOME_TITLE_EN;
 
-  const description = lang === 'zh'
-    ? `搜尋香港全部${HK_DISTRICT_COUNT}區運動場地，共${total}個場館${sportSummary ? `。${sportSummary}` : ''}。可搜尋所有地區或按區篩選，比較收費，快速預訂。`
-    : `Search sports courts across all ${HK_DISTRICT_COUNT} Hong Kong districts. ${total}+ venues${sportSummary ? `: ${sportSummary}` : ''}. Filter by district and sport, compare prices, and book in minutes.`;
+  const aboutMeta = lang === 'zh'
+    ? 'Courts by The Ground 是香港運動場地目錄，資料來自營運商提交及編輯覆核。可按地區、運動類型及港鐵站搜尋場地，再聯絡場館預訂。'
+    : 'Courts by The Ground is a Hong Kong sports-venue directory curated from operator-submitted and editor-reviewed details. Find courts by district, sport, and MTR — then contact venues to book.';
+
+  const descriptionRaw = lang === 'zh'
+    ? `搜尋香港全部${HK_DISTRICT_COUNT}區運動場地，共${total}個場館${sportSummary ? `。${sportSummary}` : ''}。可搜尋所有地區或按區篩選，比較收費，快速預訂。${aboutMeta}`
+    : `Search sports courts across all ${HK_DISTRICT_COUNT} Hong Kong districts. ${total}+ venues${sportSummary ? `: ${sportSummary}` : ''}. Filter by district and sport, compare prices, and book in minutes. ${aboutMeta}`;
+  const description = descriptionRaw.length > 320
+    ? `${descriptionRaw.slice(0, 319).replace(/\s+\S*$/, '').trimEnd()}…`
+    : descriptionRaw;
 
   const keywords = buildLandingKeywords(sportCounts);
 
@@ -671,19 +681,43 @@ function injectVenueJsonLd(venue: Venue, baseUrl: string): void {
   if (venue.whatsapp) {
     jsonLd.telephone = venue.whatsapp.replace(/[^0-9+]/g, '');
   }
-  const extra: string[] = [];
-  if (cleanText(venue.mtrStation)) extra.push(`MTR: ${cleanText(venue.mtrStation)}${cleanText(venue.mtrExit) ? ` (${cleanText(venue.mtrExit)})` : ''}`);
-  if (typeof venue.walkingDistance === 'number' && venue.walkingDistance > 0) extra.push(`Walking distance: ${venue.walkingDistance} min`);
-  if (typeof venue.ceilingHeight === 'number' && venue.ceilingHeight > 0) extra.push(`Ceiling height: ${venue.ceilingHeight} m`);
-  if (venue.court_count != null && venue.court_count > 0) extra.push(`Court count: ${venue.court_count}`);
-  if (extra.length) {
-    (jsonLd as Record<string, unknown>).description = `${sport} venue. ` + extra.join(' · ');
+  const richDescription = flattenVenueSeoForMeta(venue, 'en', 500);
+  if (richDescription) {
+    jsonLd.description = richDescription;
+  } else {
+    const extra: string[] = [];
+    if (cleanText(venue.mtrStation)) extra.push(`MTR: ${cleanText(venue.mtrStation)}${cleanText(venue.mtrExit) ? ` (${cleanText(venue.mtrExit)})` : ''}`);
+    if (typeof venue.walkingDistance === 'number' && venue.walkingDistance > 0) extra.push(`Walking distance: ${venue.walkingDistance} min`);
+    if (typeof venue.ceilingHeight === 'number' && venue.ceilingHeight > 0) extra.push(`Ceiling height: ${venue.ceilingHeight} m`);
+    if (venue.court_count != null && venue.court_count > 0) extra.push(`Court count: ${venue.court_count}`);
+    if (extra.length) {
+      jsonLd.description = `${sport} venue. ` + extra.join(' · ');
+    }
   }
   if (venue.coordinates?.lat != null && venue.coordinates?.lng != null) {
     (jsonLd as Record<string, unknown>).geo = {
       '@type': 'GeoCoordinates',
       latitude: venue.coordinates.lat,
       longitude: venue.coordinates.lng,
+    };
+  }
+
+  // AggregateRating only when real review data exists (Phase 4 — never fabricate).
+  const ratingValue = numOrNull(venue.rating_value);
+  const reviewCount = numOrNull(venue.review_count);
+  if (
+    ratingValue != null
+    && reviewCount != null
+    && ratingValue >= 1
+    && ratingValue <= 5
+    && reviewCount >= 1
+  ) {
+    jsonLd.aggregateRating = {
+      '@type': 'AggregateRating',
+      ratingValue,
+      reviewCount,
+      bestRating: 5,
+      worstRating: 1,
     };
   }
 

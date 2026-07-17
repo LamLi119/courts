@@ -3,4 +3,6 @@ Allow: /
 
 # LLMs: https://courts.theground.io/llms.txt
 # AI catalog: https://courts.theground.io/.well-known/ai-catalog.json
+# OKF: https://courts.theground.io/okf
+# Monitoring: npm run seo:monitor (see docs/SEO_MONITORING.md)
 Sitemap: https://courts.theground.io/sitemap.xml

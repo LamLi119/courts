@@ -24,7 +24,6 @@ import VenueForm from './components/admin/VenueForm.vue';
 import AdminPage from './components/admin/AdminPage.vue';
 import LandingPage from './components/landing/LandingPage.vue';
 import AboutPage from './components/about/AboutPage.vue';
-import ListingSeoPanel from './components/seo/ListingSeoPanel.vue';
 import { useAuth } from './composables/auth';
 import { useIsMobile } from './composables/useIsMobile';
 import { useGrindUpcomingEvents } from './composables/useGrindUpcomingEvents';
@@ -215,6 +214,7 @@ watch(
       }
     } else if (route.name === 'home' || route.name === 'admin') {
       if (route.name === 'home') {
+        currentTab.value = 'explore';
         sportFilter.value = [];
         districtFilter.value = [];
         mtrFilter.value = [];
@@ -226,6 +226,8 @@ watch(
         if (venues.value.length > 0) {
           applyLandingPageSeo(venues.value, sports.value, language.value);
         }
+      } else {
+        currentTab.value = 'admin';
       }
     }
   },
@@ -532,6 +534,9 @@ const handleAdminLogout = async () => {
   }
   adminStatus.value = { type: 'none', allowedIds: [] };
   currentTab.value = 'explore';
+  if (route.name === 'admin') {
+    await router.push('/');
+  }
   invalidateVenuesCache();
   await loadData();
 };
@@ -674,6 +679,17 @@ const listingSeoDistrictSlug = computed(() =>
   typeof route.params.district === 'string' ? route.params.district : '',
 );
 
+const listingSeoProps = computed(() => {
+  if (!showListingSeoPanel.value) return null;
+  return {
+    mode: listingSeoMode.value,
+    sportName: listingSeoSport.value.name || undefined,
+    sportSlug: listingSeoSport.value.slug || undefined,
+    districtSlug: listingSeoDistrictSlug.value || undefined,
+    venueCount: filteredVenues.value.length,
+  };
+});
+
 const showVenuesAtLocation = (venueList: Venue[]) => {
   locationVenueIds.value = venueList.map((v) => v.id);
 };
@@ -793,7 +809,7 @@ const handleSaveVenue = async (venueData: any) => {
 </script>
 
 <template>
-  <div :class="['min-h-screen w-full pb-safe transition-colors', isMobile ? 'pb-20' : '', darkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900']">
+  <div :class="['min-h-screen w-full pb-safe transition-colors', darkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900']">
     <UserLoginPage
       v-if="route.name === 'login'"
       :language="language"
@@ -850,8 +866,18 @@ const handleSaveVenue = async (venueData: any) => {
       :t="t"
       :currentTab="currentTab"
       :setTab="(tab: AppTab) => {
-        if (tab === 'admin' && !isAnyAdmin) showAdminLogin = true;
-        else currentTab = tab;
+        if (tab === 'admin' && !isAnyAdmin) {
+          showAdminLogin = true;
+          return;
+        }
+        if (tab === 'admin') {
+          currentTab = 'admin';
+          selectedVenue = null;
+          showDesktopDetail = false;
+          router.push('/admin');
+          return;
+        }
+        currentTab = tab;
         if (tab === 'explore') { goToExplore(); }
         else if (tab === 'saved') { goToExplore(); currentTab = 'saved'; filterSavedOnly = true; }
         else { selectedVenue = null; showDesktopDetail = false; }
@@ -869,7 +895,7 @@ const handleSaveVenue = async (venueData: any) => {
       :class="route.name === 'home' ? '' : 'h-full'"
     >
       <AdminPage
-        v-if="currentTab === 'admin' && isAnyAdmin && !selectedVenue"
+        v-if="route.name === 'admin' && isAnyAdmin && !selectedVenue"
         :venues="venues"
         :sports="sports"
         :language="language"
@@ -1020,17 +1046,7 @@ const handleSaveVenue = async (venueData: any) => {
           :onOpenDetail="(v: Venue) => { router.push('/venues/' + useVenueSlug(v)); }"
           :onBackFromDetail="goBackFromVenue"
           :force-show-detail="route.name === 'venue' && !!selectedVenue"
-        />
-        <ListingSeoPanel
-          v-if="showListingSeoPanel && mobileViewMode === 'list' && route.name !== 'venue'"
-          :language="language"
-          :t="t"
-          :dark-mode="darkMode"
-          :mode="listingSeoMode"
-          :sport-name="listingSeoSport.name"
-          :sport-slug="listingSeoSport.slug"
-          :district-slug="listingSeoDistrictSlug"
-          :venue-count="filteredVenues.length"
+          :listing-seo="listingSeoProps"
         />
         </template>
 
@@ -1096,17 +1112,7 @@ const handleSaveVenue = async (venueData: any) => {
           :setFilterSavedOnly="(v: boolean) => { filterSavedOnly = v; }"
           :currentTab="currentTab"
           :setTab="(t: AppTab) => { currentTab = t; }"
-        />
-        <ListingSeoPanel
-          v-if="showListingSeoPanel"
-          :language="language"
-          :t="t"
-          :dark-mode="darkMode"
-          :mode="listingSeoMode"
-          :sport-name="listingSeoSport.name"
-          :sport-slug="listingSeoSport.slug"
-          :district-slug="listingSeoDistrictSlug"
-          :venue-count="filteredVenues.length"
+          :listing-seo="listingSeoProps"
         />
         </template>
       </div>
@@ -1205,7 +1211,7 @@ const handleSaveVenue = async (venueData: any) => {
       </div>
     </Transition>
 
-    <MobileNav
+    <!--<MobileNav
       v-if="isMobile && route.name !== 'login' && route.name !== 'signup' && route.name !== 'token-login' && route.name !== 'complete-phone'"
       :currentTab="currentTab"
       :setTab="(t: AppTab) => { currentTab = t; }"
@@ -1213,7 +1219,7 @@ const handleSaveVenue = async (venueData: any) => {
       :darkMode="darkMode"
       :isAdmin="isAnyAdmin"
       :onAdminClick="() => { if (isAnyAdmin) currentTab = 'admin'; else { showAdminLogin = true; syncAdminUrl(true); } }"
-    />
+    />-->
   </div>
 </template>
 

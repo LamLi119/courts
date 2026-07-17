@@ -6,7 +6,6 @@ import { getStationDisplayName } from '../../utils/mtrStations';
 import { getVenueDistrictSlug, getDistrictDisplayName } from '../../utils/hkDistricts';
 import { applyVenueSeo, resetSeoToDefault, getSportTypeLabel, getVenueImageAlt } from '../../utils/seo';
 import {
-  buildVenueSeoSections,
   eventMatchesVenue,
   googleMapsDirectionsUrl,
 } from '../../utils/venueContent';
@@ -378,8 +377,6 @@ const showVenueEvents = computed(
   () => !upcomingLoading.value && venueScopedEvents.value.length > 0,
 );
 
-const venueSeoSections = computed(() => buildVenueSeoSections(props.venue, props.language));
-
 const venueAmenities = computed(() =>
   Array.isArray(props.venue.amenities)
     ? props.venue.amenities.map((a) => String(a || '').trim()).filter(Boolean)
@@ -489,8 +486,8 @@ watch(
       </button>
     </div>
 
-    <div class="container mx-auto px-4 py-6">
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+    <div class="container mx-auto px-4 py-6 w-full px-4 md:px-6 max-w-7xl mx-auto space-y-6">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 lg:items-start">
         <div class="lg:col-span-2 space-y-8">
           <ImageCarousel :key="venue.id" :images="venue.images" :venue-name="venue.name"
             :sport-type="getSportTypeLabel(venue, language)" :on-image-click="openFullscreen" />
@@ -620,41 +617,13 @@ watch(
                 </ul>
               </section>
 
-              <!--<section aria-labelledby="venue-overview-heading" class="space-y-5">
-                <h2
-                  id="venue-overview-heading"
-                  class="text-[18px] md:text-[20px] font-black tracking-tight"
-                  :class="darkMode ? 'text-white' : 'text-gray-900'"
-                >
-                  {{ t('venueOverview') }}
-                </h2>
-                <div v-for="(sec, idx) in venueSeoSections" :key="idx" class="space-y-2">
-                  <h3
-                    class="text-[15px] md:text-[16px] font-bold"
-                    :class="darkMode ? 'text-gray-100' : 'text-gray-800'"
-                  >
-                    {{ sec.heading }}
-                  </h3>
-                  <p
-                    v-for="(para, pIdx) in sec.paragraphs"
-                    :key="pIdx"
-                    class="text-[14px] md:text-[15px] leading-relaxed"
-                    :class="darkMode ? 'text-gray-400' : 'text-gray-600'"
-                  >
-                    {{ para }}
-                  </p>
-                </div>
-              </section>-->
-
               <VenueUpcomingEvents
-                v-if="showVenueEvents"
-                :events="venueScopedEvents"
-                :loading="false"
+                :events="upcomingEvents"
+                :loading="upcomingLoading"
                 :error="upcomingError"
                 :dark-mode="darkMode"
                 :language="language"
                 :t="t"
-                :heading="t('venueUpcomingEvents')"
                 @retry="refreshUpcoming"
               />
             </div>
@@ -728,41 +697,13 @@ watch(
                   </ul>
                 </section>
 
-                <!--<section aria-labelledby="venue-overview-heading-m" class="space-y-4">
-                  <h2
-                    id="venue-overview-heading-m"
-                    class="uppercase tracking-widest font-bold opacity-90"
-                    :class="language === 'en' ? 'text-[12px]' : 'text-[14px]'"
-                  >
-                    {{ t('venueOverview') }}
-                  </h2>
-                  <div v-for="(sec, idx) in venueSeoSections" :key="idx" class="space-y-2">
-                    <h3
-                      class="text-[14px] font-bold"
-                      :class="darkMode ? 'text-gray-100' : 'text-gray-800'"
-                    >
-                      {{ sec.heading }}
-                    </h3>
-                    <p
-                      v-for="(para, pIdx) in sec.paragraphs"
-                      :key="pIdx"
-                      class="text-[13px] leading-relaxed"
-                      :class="darkMode ? 'text-gray-400' : 'text-gray-600'"
-                    >
-                      {{ para }}
-                    </p>
-                  </div>
-                </section>-->
-
                 <VenueUpcomingEvents
-                  v-if="showVenueEvents"
-                  :events="venueScopedEvents"
-                  :loading="false"
+                  :events="upcomingEvents"
+                  :loading="upcomingLoading"
                   :error="upcomingError"
                   :dark-mode="darkMode"
                   :language="language"
                   :t="t"
-                  :heading="t('venueUpcomingEvents')"
                   @retry="refreshUpcoming"
                 />
               </div>
@@ -894,10 +835,10 @@ watch(
           </div>
         </div>
 
-        <!-- Desktop: right sidebar -->
-        <div class="hidden lg:block lg:col-span-1">
+        <!-- Desktop: right sidebar — sticky so it follows scroll within the grid -->
+        <aside class="hidden lg:block lg:col-span-1 sticky top-24 z-10 self-start">
           <div v-if="venue.address && venue.address.trim() !== ''"
-            class="sticky top-24 space-y-6 p-8 rounded-[16px] shadow-lg border"
+            class="max-h-[calc(100vh-6.5rem)] overflow-y-auto space-y-6 p-8 rounded-[16px] shadow-lg border"
             :class="darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'">
             <div v-if="venue.startingPrice > 0" class="flex items-center justify-between gap-4 max-w-lg mx-auto mb-4">
               <span class="uppercase tracking-widest font-bold opacity-90 whitespace-nowrap"
@@ -1002,7 +943,7 @@ watch(
             </button>
 
           </div>
-        </div>
+        </aside>
       </div>
     </div>
 

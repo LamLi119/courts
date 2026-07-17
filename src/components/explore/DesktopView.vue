@@ -9,6 +9,7 @@ import {
   type HkRegion,
 } from '../../utils/hkDistricts';
 import CourtCard from './CourtCard.vue';
+import ListingSeoPanel from '../seo/ListingSeoPanel.vue';
 const props = defineProps<{
   venues: Venue[];
   selectedVenue: Venue | null;
@@ -52,6 +53,14 @@ const props = defineProps<{
   onClearLocationFilter?: () => void;
   /** When true, used inside the landing page (fixed height, no map footer). */
   embedded?: boolean;
+  /** When set, show listing SEO map button + popup (explore/search routes only). */
+  listingSeo?: {
+    mode: 'explore' | 'search' | 'search-district';
+    sportName?: string;
+    sportSlug?: string;
+    districtSlug?: string;
+    venueCount: number;
+  } | null;
 }>();
 
 const shellClass = computed(() =>
@@ -62,7 +71,7 @@ const shellClass = computed(() =>
         'lg:rounded-2xl lg:border shadow-lg',
         props.darkMode ? 'border-gray-700' : 'border-gray-200',
       ]
-    : 'flex w-full min-w-0 h-[min(85vh,calc(100vh-64px))] overflow-hidden'
+    : 'flex w-full min-w-0 h-[calc(98.6vh-64px)] overflow-hidden'
 );
 
 const sidebarClass = computed(() =>
@@ -590,6 +599,17 @@ const leftListVenues = computed(() =>
         :onSelectVenue="(v: Venue | null) => onSelectVenue(v)" :onShowVenuesAtLocation="handleShowVenuesAtLocation"
         :language="language" :darkMode="darkMode" :isMobile="false" />
 
+      <ListingSeoPanel
+        v-if="listingSeo"
+        :language="language"
+        :t="t"
+        :dark-mode="darkMode"
+        :mode="listingSeo.mode"
+        :sport-name="listingSeo.sportName"
+        :sport-slug="listingSeo.sportSlug"
+        :district-slug="listingSeo.districtSlug"
+        :venue-count="listingSeo.venueCount"
+      />
 
       <!-- Map pin list (desktop): when a multi-venue pin is clicked, show a chooser panel on top of the map -->
       <div v-if="showLocationPicker" class="absolute top-5 left-5 right-5 z-30 pointer-events-none">

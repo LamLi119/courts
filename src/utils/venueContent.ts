@@ -204,6 +204,24 @@ export function buildVenueSeoSections(venue: Venue, lang: Language): VenueSeoSec
   ];
 }
 
+/** Flatten SEO sections into one meta/OG description (not shown in the page UI). */
+export function flattenVenueSeoForMeta(
+  venue: Venue,
+  lang: Language,
+  maxLen = 320,
+): string {
+  const text = buildVenueSeoSections(venue, lang)
+    .flatMap((s) => s.paragraphs)
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!text) return '';
+  if (text.length <= maxLen) return text;
+  const cut = text.slice(0, maxLen - 1);
+  const safer = cut.replace(/\s+\S*$/, '');
+  return `${(safer || cut).trimEnd()}…`;
+}
+
 /** Stable YYYY-MM-DD that only changes when venue content changes (no DB updated_at). */
 export function venueContentLastmod(venue: Record<string, unknown> | Venue): string {
   const rawUpdated = (venue as any).updated_at || (venue as any).updatedAt;

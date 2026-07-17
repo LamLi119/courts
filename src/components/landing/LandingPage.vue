@@ -8,12 +8,8 @@ import MobileView from '../explore/MobileView.vue';
 import LandingCta from './LandingCta.vue';
 import AppFooter from '../layout/AppFooter.vue';
 import FaqSection from '../seo/FaqSection.vue';
-import AboutContent from '../seo/AboutContent.vue';
 import { countVenuesBySport, venueMatchesSportSlug } from '../../utils/seo';
 import { HK_DISTRICTS, getDistrictDisplayName, venueMatchesDistricts } from '../../utils/hkDistricts';
-
-/** LCSD facilities search (public / free courts directory). */
-const LCSD_FACILITIES_URL = 'https://www.lcsd.gov.hk/en/facilities/facilitiessearch.html';
 
 type SportOption = { id: number; name: string; name_zh?: string | null; slug: string };
 
@@ -84,27 +80,36 @@ const districtCount = HK_DISTRICTS.length;
 
 const sportVenueCounts = computed(() => countVenuesBySport(props.venues, props.sports));
 
-const districtSportLinks = computed(() => {
-  const links: { href: string; label: string }[] = [];
-  for (const sport of sportVenueCounts.value.slice(0, 4)) {
-    for (const district of HK_DISTRICTS) {
-      const count = props.venues.filter(
-        (v) => venueMatchesSportSlug(v, sport.slug) && venueMatchesDistricts(v, [district.slug]),
-      ).length;
-      if (count === 0) continue;
-      const districtName = getDistrictDisplayName(district.slug, props.language);
-      const sportName = props.language === 'zh' && sport.name_zh ? sport.name_zh : sport.name;
-      links.push({
-        href: `/search/${sport.slug}/${district.slug}`,
-        label: props.language === 'zh'
-          ? `${districtName}${sportName}（${count}）`
-          : `${sportName} in ${districtName} (${count})`,
-      });
-      if (links.length >= 24) return links;
-    }
+/** Selected sport for the district cards section — default to first (highest count) */
+const selectedSportSlug = ref('');
+watch(sportVenueCounts, (list) => {
+  if (list.length && !list.some((s) => s.slug === selectedSportSlug.value)) {
+    selectedSportSlug.value = list[0].slug;
   }
-  return links;
-});
+}, { immediate: true });
+
+/** Districts with venue count for the selected sport, sorted desc */
+const districtsForSelectedSport = computed(() =>
+  HK_DISTRICTS.map((d) => ({
+    slug: d.slug,
+    name: getDistrictDisplayName(d.slug, props.language),
+    count: props.venues.filter(
+      (v) => venueMatchesSportSlug(v, selectedSportSlug.value) && venueMatchesDistricts(v, [d.slug]),
+    ).length,
+  }))
+    .filter((d) => d.count > 0)
+    .sort((a, b) => b.count - a.count),
+);
+
+const popularDistricts = computed(() => districtsForSelectedSport.value.slice(0, 4));
+const remainingDistricts = computed(() => districtsForSelectedSport.value.slice(4));
+
+function goDistrictExplore(districtSlug: string) {
+  props.onExplore({ sport: selectedSportSlug.value, districts: [districtSlug] });
+}
+function goAllDistrictsExplore() {
+  props.onExplore({ sport: selectedSportSlug.value });
+}
 
 const landingSeoIntroText = computed(() =>
   props.t('landingSeoIntro')
@@ -124,6 +129,10 @@ function sportCountLabel(item: { name: string; name_zh?: string | null; count: n
   return props.t('landingSeoSportItem')
     .replace('{{name}}', name)
     .replace('{{count}}', String(item.count));
+}
+
+function districtVenueCountLabel(count: number) {
+  return props.t('landingDistrictVenueCount').replace('{{count}}', String(count));
 }
 
 const heroDistricts = ref<string[]>([]);
@@ -355,7 +364,7 @@ function goNextPartnership() {
 
     <section
       id="explore-section"
-      class="w-full py-10 md:py-14"
+      class="w-full pt-10 md:py-14"
       :class="darkMode ? 'bg-gray-50 dark:bg-gray-950' : 'bg-gray-50'"
     >
     <div class="w-full px-4 md:px-6 max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6 md:mb-8">
@@ -478,7 +487,9 @@ function goNextPartnership() {
       :class="darkMode ? 'bg-gray-900' : 'bg-white'"
       :aria-label="t('landingSeoHeading')"
     >
-      <div class="w-full px-4 md:px-6 max-w-7xl mx-auto space-y-6">
+      <div class="w-full px-4 md:px-6 max-w-7xl mx-auto space-y-8">
+
+        <!-- Heading + intro -->
         <div>
           <h2
             class="text-2xl md:text-3xl font-black tracking-tight"
@@ -492,36 +503,92 @@ function goNextPartnership() {
           >
             {{ landingSeoIntroText }}
           </p>
-          <p
-            class="mt-2 text-sm leading-relaxed max-w-3xl"
-            :class="darkMode ? 'text-gray-500' : 'text-gray-500'"
-          >
-            {{ t('landingSeoAllDistricts') }}
-          </p>
         </div>
-        <ul class="flex flex-wrap gap-2">
-          <li v-for="item in sportVenueCounts" :key="item.slug">
-            <a
-              :href="`/search/${item.slug}`"
-              class="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-semibold border no-underline transition-colors"
-              :class="darkMode
-                ? 'border-gray-700 text-gray-200 hover:border-[#007a67] hover:text-[#79d8c7]'
-                : 'border-gray-200 text-gray-700 hover:border-[#007a67] hover:text-[#007a67]'"
+
+        <!-- Sport type tabs -->
+        <div class="flex flex-wrap gap-2">
+          <button
+            v-for="item in sportVenueCounts"
+            :key="item.slug"
+            type="button"
+            class="px-4 py-2 rounded-full text-sm font-bold border transition-colors"
+            :class="item.slug === selectedSportSlug
+              ? 'bg-[#007a67] text-white border-[#007a67]'
+              : (darkMode
+                  ? 'bg-transparent border-gray-600 text-gray-300 hover:border-[#007a67] hover:text-[#79d8c7]'
+                  : 'bg-gray-100 border-gray-200 text-gray-700 hover:border-[#007a67] hover:text-[#007a67]')"
+            @click="selectedSportSlug = item.slug"
+          >
+            {{ sportCountLabel(item) }}
+          </button>
+        </div>
+
+        <!-- Popular districts — top 4 large cards -->
+        <div v-if="popularDistricts.length">
+          <div class="flex items-center justify-between mb-4">
+            <h3
+              class="text-lg md:text-xl font-black tracking-tight"
+              :class="darkMode ? 'text-white' : 'text-gray-900'"
             >
-              {{ sportCountLabel(item) }}
-            </a>
-          </li>
-        </ul>
-        <ul class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 text-sm">
-          <li v-for="item in districtSportLinks" :key="item.href">
-            <a
-              :href="item.href"
-              class="text-[#007a67] hover:underline font-medium"
+              {{ t('landingPopularDistricts') }}
+            </h3>
+            <button
+              type="button"
+              class="text-sm font-bold text-[#007a67] hover:underline"
+              @click="goAllDistrictsExplore"
             >
-              {{ item.label }}
-            </a>
-          </li>
-        </ul>
+              {{ t('landingViewAllDistricts') }}
+            </button>
+          </div>
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <button
+              v-for="d in popularDistricts"
+              :key="d.slug"
+              type="button"
+              class="text-left rounded-2xl border p-4 transition-all hover:border-[#007a67] hover:shadow-md group"
+              :class="darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'"
+              @click="goDistrictExplore(d.slug)"
+            >
+              <div
+                class="w-8 h-1 rounded-full mb-3"
+                :class="darkMode ? 'bg-[#79d8c7]' : 'bg-[#007a67]'"
+              />
+              <p
+                class="font-black text-base leading-tight"
+                :class="darkMode ? 'text-white' : 'text-gray-900'"
+              >
+                {{ d.name }}
+              </p>
+              <span
+                class="mt-1 inline-block text-xs font-bold px-2 py-0.5 rounded-full"
+                :class="darkMode ? 'bg-gray-700 text-gray-300' : 'bg-[#e8f7f4] text-[#007a67]'"
+              >
+                {{ districtVenueCountLabel(d.count) }}
+              </span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Remaining districts — compact grey grid -->
+        <div
+          v-if="remainingDistricts.length"
+          class="rounded-2xl border p-4"
+          :class="darkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-200'"
+        >
+          <ul class="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-2">
+            <li v-for="d in remainingDistricts" :key="d.slug">
+              <button
+                type="button"
+                class="w-full text-left text-sm font-medium transition-colors"
+                :class="darkMode ? 'text-gray-300 hover:text-[#79d8c7]' : 'text-gray-600 hover:text-[#007a67]'"
+                @click="goDistrictExplore(d.slug)"
+              >
+                {{ d.name }} ({{ d.count }})
+              </button>
+            </li>
+          </ul>
+        </div>
+
       </div>
     </section>
 
@@ -529,7 +596,7 @@ function goNextPartnership() {
       class="w-full py-10 md:py-14"
       :class="darkMode ? 'bg-gray-950' : 'bg-gray-50'"
     >
-      <div class="w-full px-4 md:px-6 max-w-7xl mx-auto">
+    <div class="w-full px-4 md:px-6 max-w-7xl mx-auto">
         <FaqSection
           :items="landingFaqItems"
           :language="language"
@@ -537,54 +604,6 @@ function goNextPartnership() {
           :dark-mode="darkMode"
           inject-schema
         />
-      </div>
-    </section>
-
-    <section
-      class="w-full py-10 md:py-14"
-      :class="darkMode ? 'bg-gray-900' : 'bg-white'"
-    >
-      <div class="w-full px-4 md:px-6 max-w-7xl mx-auto space-y-4">
-        <h2
-          class="text-xl md:text-2xl font-black tracking-tight"
-          :class="darkMode ? 'text-white' : 'text-gray-900'"
-        >
-          {{ t('freeCourtsHeading') }}
-        </h2>
-        <p
-          class="text-sm md:text-base leading-relaxed max-w-3xl"
-          :class="darkMode ? 'text-gray-400' : 'text-gray-600'"
-        >
-          {{ t('freeCourtsBody') }}
-        </p>
-        <a
-          :href="LCSD_FACILITIES_URL"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="inline-flex text-sm font-bold text-[#007a67] hover:underline"
-        >
-          {{ t('freeCourtsLink') }} →
-        </a>
-      </div>
-    </section>
-
-    <section
-      id="about"
-      class="w-full py-10 md:py-14 border-t"
-      :class="darkMode ? 'bg-gray-950 border-gray-800' : 'bg-gray-50 border-gray-100'"
-    >
-      <div class="w-full px-4 md:px-6 max-w-7xl mx-auto">
-        <AboutContent
-          :language="language"
-          :t="t"
-          :dark-mode="darkMode"
-        />
-        <a
-          href="/about"
-          class="mt-6 inline-flex text-sm font-bold text-[#007a67] hover:underline"
-        >
-          {{ t('landingAboutCta') }} →
-        </a>
       </div>
     </section>
 

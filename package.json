@@ -10,7 +10,12 @@
     "build": "node scripts/generate-sitemap.js && vite build && node scripts/prerender-seo-html.js && node scripts/strip-static-sitemap.js",
     "prerender-seo": "node scripts/prerender-seo-html.js",
     "preview": "vite preview",
-    "server": "node server/run-local.js"
+    "server": "node server/run-local.js",
+    "seo:check-discovery": "node scripts/seo-check-discovery.js",
+    "seo:check-sitemap": "node scripts/seo-check-sitemap.js",
+    "seo:check-content": "node scripts/seo-check-content.js",
+    "seo:submit-indexnow": "node scripts/seo-submit-indexnow.js",
+    "seo:monitor": "node scripts/seo-check-discovery.js && node scripts/seo-check-sitemap.js && node scripts/seo-check-content.js"
   },
   "dependencies": {
     "@google-cloud/storage": "^7.19.0",

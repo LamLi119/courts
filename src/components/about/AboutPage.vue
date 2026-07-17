@@ -12,8 +12,11 @@ defineProps<{
 </script>
 
 <template>
-  <div class="w-full min-h-[70vh]" :class="darkMode ? 'bg-gray-900' : 'bg-white'">
-    <div class="w-full max-w-7xl mx-auto px-4 md:px-6 py-10 md:py-14">
+  <div
+    class="w-full min-h-[calc(100vh-4rem)] flex flex-col"
+    :class="darkMode ? 'bg-gray-900' : 'bg-white'"
+  >
+    <div class="flex-1 w-full max-w-7xl mx-auto px-4 md:px-6 py-10 md:py-14">
       <AboutContent
         :language="language"
         :t="t"

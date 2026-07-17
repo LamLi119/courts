@@ -103,8 +103,8 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <section class="py-12 md:py-16" :class="darkMode ? 'bg-gray-900' : 'bg-white'">
-    <div class="container mx-auto px-4">
+  <section class="py-12 md:py-16" :class="darkMode ? 'bg-gray-50 dark:bg-gray-950' : 'bg-gray-50'">
+    <div class="container mx-auto px-4 w-full px-4 md:px-6 max-w-7xl mx-auto">
       <div class="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#007a67] via-[#009e85] to-[#bef264] p-8 md:p-12 lg:p-14">
         <div
           class="absolute -right-8 -bottom-8 w-48 h-48 md:w-64 md:h-64 opacity-10 pointer-events-none select-none"

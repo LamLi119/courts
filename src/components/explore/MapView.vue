@@ -43,8 +43,9 @@ function getClusterCellKey(coords: { lat: number; lng: number }, zoom: number): 
   return `${lat},${lng}`;
 }
 
-function shouldUseMobileClusters(zoom: number): boolean {
-  return !!props.isMobile && zoom < 13;
+function shouldUseMobileClusters(_zoom: number): boolean {
+  // Mobile matches desktop: individual venue pins (org icons), no count-bubble clusters.
+  return false;
 }
 
 function clusterIcon(count: number): any {
