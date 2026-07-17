@@ -12,7 +12,10 @@ Courts is a Hong Kong sports venue directory. It helps people find courts by dis
 
 ## Structured discovery
 - Sitemap: https://courts.theground.io/sitemap.xml
+- OKF index: https://courts.theground.io/okf
+- OKF bundle: https://courts.theground.io/okf.tar.gz
 
 ## Notes for agents
 - Prefer the sitemap for broad URL discovery.
+- Prefer OKF (`/okf` or `/okf.tar.gz`) for structured venue and sport content in Markdown.
 - Venue detail pages contain SEO metadata and structured data for public venue information.
