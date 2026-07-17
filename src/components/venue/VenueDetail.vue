@@ -5,6 +5,11 @@ import type { Venue, Language, OperatingHours, OperatingDayKey } from '../../../
 import { getStationDisplayName } from '../../utils/mtrStations';
 import { getVenueDistrictSlug, getDistrictDisplayName } from '../../utils/hkDistricts';
 import { applyVenueSeo, resetSeoToDefault, getSportTypeLabel, getVenueImageAlt } from '../../utils/seo';
+import {
+  buildVenueSeoSections,
+  eventMatchesVenue,
+  googleMapsDirectionsUrl,
+} from '../../utils/venueContent';
 import { slugify } from '../../utils/slugify';
 import ImageCarousel from '../ui/ImageCarousel.vue';
 import VenueUpcomingEvents from './VenueUpcomingEvents.vue';
@@ -162,8 +167,7 @@ const handleWhatsApp = () => {
 };
 
 const openGoogleMaps = () => {
-  const encodedAddress = encodeURIComponent(props.venue.address);
-  window.open(`https://www.google.com/maps/search/?api=1&query=${encodedAddress}`, '_blank');
+  window.open(googleMapsDirectionsUrl(props.venue), '_blank');
 };
 
 const shareFeedback = ref<string | null>(null);
@@ -365,6 +369,22 @@ const {
   events: upcomingEvents,
   refresh: refreshUpcoming,
 } = useGrindUpcomingEvents();
+
+const venueScopedEvents = computed(() =>
+  upcomingEvents.value.filter((ev) => eventMatchesVenue(ev, props.venue)),
+);
+
+const showVenueEvents = computed(
+  () => !upcomingLoading.value && venueScopedEvents.value.length > 0,
+);
+
+const venueSeoSections = computed(() => buildVenueSeoSections(props.venue, props.language));
+
+const venueAmenities = computed(() =>
+  Array.isArray(props.venue.amenities)
+    ? props.venue.amenities.map((a) => String(a || '').trim()).filter(Boolean)
+    : [],
+);
 
 onMounted(() => {
   void refreshUpcoming();
@@ -579,14 +599,62 @@ watch(
               </div>
             </div>
 
-            <div class="hidden lg:block mt-8">
+            <div class="hidden lg:block mt-8 space-y-8">
+              <section v-if="venueAmenities.length" aria-labelledby="venue-amenities-heading">
+                <h2
+                  id="venue-amenities-heading"
+                  class="text-[18px] md:text-[20px] font-black tracking-tight mb-3"
+                  :class="darkMode ? 'text-white' : 'text-gray-900'"
+                >
+                  {{ t('amenities') }}
+                </h2>
+                <ul class="flex flex-wrap gap-2">
+                  <li
+                    v-for="item in venueAmenities"
+                    :key="item"
+                    class="px-3 py-1.5 rounded-full text-[13px] font-semibold border"
+                    :class="darkMode ? 'border-gray-600 bg-gray-800 text-gray-200' : 'border-gray-200 bg-gray-50 text-gray-700'"
+                  >
+                    {{ item }}
+                  </li>
+                </ul>
+              </section>
+
+              <!--<section aria-labelledby="venue-overview-heading" class="space-y-5">
+                <h2
+                  id="venue-overview-heading"
+                  class="text-[18px] md:text-[20px] font-black tracking-tight"
+                  :class="darkMode ? 'text-white' : 'text-gray-900'"
+                >
+                  {{ t('venueOverview') }}
+                </h2>
+                <div v-for="(sec, idx) in venueSeoSections" :key="idx" class="space-y-2">
+                  <h3
+                    class="text-[15px] md:text-[16px] font-bold"
+                    :class="darkMode ? 'text-gray-100' : 'text-gray-800'"
+                  >
+                    {{ sec.heading }}
+                  </h3>
+                  <p
+                    v-for="(para, pIdx) in sec.paragraphs"
+                    :key="pIdx"
+                    class="text-[14px] md:text-[15px] leading-relaxed"
+                    :class="darkMode ? 'text-gray-400' : 'text-gray-600'"
+                  >
+                    {{ para }}
+                  </p>
+                </div>
+              </section>-->
+
               <VenueUpcomingEvents
-                :events="upcomingEvents"
-                :loading="upcomingLoading"
+                v-if="showVenueEvents"
+                :events="venueScopedEvents"
+                :loading="false"
                 :error="upcomingError"
                 :dark-mode="darkMode"
                 :language="language"
                 :t="t"
+                :heading="t('venueUpcomingEvents')"
                 @retry="refreshUpcoming"
               />
             </div>
@@ -627,7 +695,7 @@ watch(
 
                   <button type="button" id="google-maps-button" class="btn btn-text btn-sm w-1/2"
                     @click="openGoogleMaps">
-                    📍 {{ t('openInGoogleMaps') }}
+                    📍 {{ t('getDirections') }}
                   </button>
 
                 </div>
@@ -639,14 +707,62 @@ watch(
 
                 </div>
               </div>
-              <div class="lg:hidden mt-6">
+              <div class="lg:hidden mt-6 space-y-6">
+                <section v-if="venueAmenities.length" aria-labelledby="venue-amenities-heading-m">
+                  <h2
+                    id="venue-amenities-heading-m"
+                    class="uppercase tracking-widest font-bold opacity-90 mb-3"
+                    :class="language === 'en' ? 'text-[12px]' : 'text-[14px]'"
+                  >
+                    {{ t('amenities') }}
+                  </h2>
+                  <ul class="flex flex-wrap gap-2">
+                    <li
+                      v-for="item in venueAmenities"
+                      :key="item"
+                      class="px-3 py-1.5 rounded-full text-[12px] font-semibold border"
+                      :class="darkMode ? 'border-gray-600 bg-gray-800 text-gray-200' : 'border-gray-200 bg-gray-50 text-gray-700'"
+                    >
+                      {{ item }}
+                    </li>
+                  </ul>
+                </section>
+
+                <!--<section aria-labelledby="venue-overview-heading-m" class="space-y-4">
+                  <h2
+                    id="venue-overview-heading-m"
+                    class="uppercase tracking-widest font-bold opacity-90"
+                    :class="language === 'en' ? 'text-[12px]' : 'text-[14px]'"
+                  >
+                    {{ t('venueOverview') }}
+                  </h2>
+                  <div v-for="(sec, idx) in venueSeoSections" :key="idx" class="space-y-2">
+                    <h3
+                      class="text-[14px] font-bold"
+                      :class="darkMode ? 'text-gray-100' : 'text-gray-800'"
+                    >
+                      {{ sec.heading }}
+                    </h3>
+                    <p
+                      v-for="(para, pIdx) in sec.paragraphs"
+                      :key="pIdx"
+                      class="text-[13px] leading-relaxed"
+                      :class="darkMode ? 'text-gray-400' : 'text-gray-600'"
+                    >
+                      {{ para }}
+                    </p>
+                  </div>
+                </section>-->
+
                 <VenueUpcomingEvents
-                  :events="upcomingEvents"
-                  :loading="upcomingLoading"
+                  v-if="showVenueEvents"
+                  :events="venueScopedEvents"
+                  :loading="false"
                   :error="upcomingError"
                   :dark-mode="darkMode"
                   :language="language"
                   :t="t"
+                  :heading="t('venueUpcomingEvents')"
                   @retry="refreshUpcoming"
                 />
               </div>
@@ -834,7 +950,7 @@ watch(
                 <button type="button"
                   class="text-[12px] font-[700] text-[#007a67] uppercase w-1/2 text-right hover:font-bold hover:underline"
                   @click="openGoogleMaps">
-                  📍 {{ t('openInGoogleMaps') }}
+                  📍 {{ t('getDirections') }}
                 </button>
 
               </div>

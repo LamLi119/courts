@@ -7,8 +7,13 @@ import DesktopView from '../explore/DesktopView.vue';
 import MobileView from '../explore/MobileView.vue';
 import LandingCta from './LandingCta.vue';
 import AppFooter from '../layout/AppFooter.vue';
+import FaqSection from '../seo/FaqSection.vue';
+import AboutContent from '../seo/AboutContent.vue';
 import { countVenuesBySport, venueMatchesSportSlug } from '../../utils/seo';
 import { HK_DISTRICTS, getDistrictDisplayName, venueMatchesDistricts } from '../../utils/hkDistricts';
+
+/** LCSD facilities search (public / free courts directory). */
+const LCSD_FACILITIES_URL = 'https://www.lcsd.gov.hk/en/facilities/facilitiessearch.html';
 
 type SportOption = { id: number; name: string; name_zh?: string | null; slug: string };
 
@@ -106,6 +111,13 @@ const landingSeoIntroText = computed(() =>
     .replace('{{total}}', String(props.venues.length))
     .replace('{{districts}}', String(districtCount))
 );
+
+const landingFaqItems = computed(() => [
+  { q: props.t('landingFaq1q'), a: props.t('landingFaq1a') },
+  { q: props.t('landingFaq2q'), a: props.t('landingFaq2a') },
+  { q: props.t('landingFaq3q'), a: props.t('landingFaq3a') },
+  { q: props.t('landingFaq4q'), a: props.t('landingFaq4a') },
+]);
 
 function sportCountLabel(item: { name: string; name_zh?: string | null; count: number }) {
   const name = props.language === 'zh' && item.name_zh ? item.name_zh : item.name;
@@ -461,20 +473,119 @@ function goNextPartnership() {
       :darkMode="darkMode"
     />
 
-    <section class="sr-only" :aria-label="t('landingSeoHeading')">
-      <h2>{{ t('landingSeoHeading') }}</h2>
-      <p>{{ landingSeoIntroText }}</p>
-      <p>{{ t('landingSeoAllDistricts') }}</p>
-      <ul>
-        <li v-for="item in sportVenueCounts" :key="item.slug">
-          <a :href="`/search/${item.slug}`">{{ sportCountLabel(item) }}</a>
-        </li>
-      </ul>
-      <ul>
-        <li v-for="item in districtSportLinks" :key="item.href">
-          <a :href="item.href">{{ item.label }}</a>
-        </li>
-      </ul>
+    <section
+      class="w-full py-10 md:py-14"
+      :class="darkMode ? 'bg-gray-900' : 'bg-white'"
+      :aria-label="t('landingSeoHeading')"
+    >
+      <div class="w-full px-4 md:px-6 max-w-7xl mx-auto space-y-6">
+        <div>
+          <h2
+            class="text-2xl md:text-3xl font-black tracking-tight"
+            :class="darkMode ? 'text-white' : 'text-gray-900'"
+          >
+            {{ t('landingSeoHeading') }}
+          </h2>
+          <p
+            class="mt-3 text-sm md:text-base leading-relaxed max-w-3xl"
+            :class="darkMode ? 'text-gray-400' : 'text-gray-600'"
+          >
+            {{ landingSeoIntroText }}
+          </p>
+          <p
+            class="mt-2 text-sm leading-relaxed max-w-3xl"
+            :class="darkMode ? 'text-gray-500' : 'text-gray-500'"
+          >
+            {{ t('landingSeoAllDistricts') }}
+          </p>
+        </div>
+        <ul class="flex flex-wrap gap-2">
+          <li v-for="item in sportVenueCounts" :key="item.slug">
+            <a
+              :href="`/search/${item.slug}`"
+              class="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-semibold border no-underline transition-colors"
+              :class="darkMode
+                ? 'border-gray-700 text-gray-200 hover:border-[#007a67] hover:text-[#79d8c7]'
+                : 'border-gray-200 text-gray-700 hover:border-[#007a67] hover:text-[#007a67]'"
+            >
+              {{ sportCountLabel(item) }}
+            </a>
+          </li>
+        </ul>
+        <ul class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 text-sm">
+          <li v-for="item in districtSportLinks" :key="item.href">
+            <a
+              :href="item.href"
+              class="text-[#007a67] hover:underline font-medium"
+            >
+              {{ item.label }}
+            </a>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <section
+      class="w-full py-10 md:py-14"
+      :class="darkMode ? 'bg-gray-950' : 'bg-gray-50'"
+    >
+      <div class="w-full px-4 md:px-6 max-w-7xl mx-auto">
+        <FaqSection
+          :items="landingFaqItems"
+          :language="language"
+          :t="t"
+          :dark-mode="darkMode"
+          inject-schema
+        />
+      </div>
+    </section>
+
+    <section
+      class="w-full py-10 md:py-14"
+      :class="darkMode ? 'bg-gray-900' : 'bg-white'"
+    >
+      <div class="w-full px-4 md:px-6 max-w-7xl mx-auto space-y-4">
+        <h2
+          class="text-xl md:text-2xl font-black tracking-tight"
+          :class="darkMode ? 'text-white' : 'text-gray-900'"
+        >
+          {{ t('freeCourtsHeading') }}
+        </h2>
+        <p
+          class="text-sm md:text-base leading-relaxed max-w-3xl"
+          :class="darkMode ? 'text-gray-400' : 'text-gray-600'"
+        >
+          {{ t('freeCourtsBody') }}
+        </p>
+        <a
+          :href="LCSD_FACILITIES_URL"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="inline-flex text-sm font-bold text-[#007a67] hover:underline"
+        >
+          {{ t('freeCourtsLink') }} →
+        </a>
+      </div>
+    </section>
+
+    <section
+      id="about"
+      class="w-full py-10 md:py-14 border-t"
+      :class="darkMode ? 'bg-gray-950 border-gray-800' : 'bg-gray-50 border-gray-100'"
+    >
+      <div class="w-full px-4 md:px-6 max-w-7xl mx-auto">
+        <AboutContent
+          :language="language"
+          :t="t"
+          :dark-mode="darkMode"
+        />
+        <a
+          href="/about"
+          class="mt-6 inline-flex text-sm font-bold text-[#007a67] hover:underline"
+        >
+          {{ t('landingAboutCta') }} →
+        </a>
+      </div>
     </section>
 
     <AppFooter

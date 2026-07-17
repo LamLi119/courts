@@ -62,7 +62,7 @@ const shellClass = computed(() =>
         'lg:rounded-2xl lg:border shadow-lg',
         props.darkMode ? 'border-gray-700' : 'border-gray-200',
       ]
-    : 'flex w-full min-w-0 h-[calc(100vh-64px)] overflow-hidden'
+    : 'flex w-full min-w-0 h-[min(85vh,calc(100vh-64px))] overflow-hidden'
 );
 
 const sidebarClass = computed(() =>

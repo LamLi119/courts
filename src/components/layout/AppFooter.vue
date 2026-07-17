@@ -15,7 +15,7 @@ const CONTACT_PHONE = '';
 const shareFeedback = ref<string | null>(null);
 
 const footerLinks = [
-  { key: 'aboutUs', href: 'https://join.theground.io' },
+  { key: 'aboutUs', href: '/about' },
   { key: 'termsOfService', href: 'https://join.theground.io/terms' },
   { key: 'privacyPolicy', href: 'https://join.theground.io/privacy' },
 ] as const;
@@ -81,8 +81,8 @@ function toggleLanguage() {
             :key="link.key"
             :href="link.href"
             class="hover:text-white transition-colors"
-            :target="link.href.startsWith('mailto:') ? undefined : '_blank'"
-            :rel="link.href.startsWith('mailto:') ? undefined : 'noopener noreferrer'"
+            :target="link.href.startsWith('http') ? '_blank' : undefined"
+            :rel="link.href.startsWith('http') ? 'noopener noreferrer' : undefined"
           >
             {{ t(link.key) }}
           </a>

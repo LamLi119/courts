@@ -1,17 +1,14 @@
 # Courts
 
-Courts is a Hong Kong sports venue directory. It helps people find courts by district, sport, and nearby MTR stations.
+Courts is a Hong Kong sports venue directory by The Ground. It helps people find courts by district, sport, and nearby MTR stations.
 
 ## Main pages
 - https://courts.theground.io/
 - https://courts.theground.io/explore
+- https://courts.theground.io/about
 
 ## Key sport pages
 - https://courts.theground.io/search/pickleball
-
-## District × sport pages
-- https://courts.theground.io/search/pickleball/kwun-tong
-- https://courts.theground.io/search/pickleball/sha-tin
 
 ## Structured discovery
 - Sitemap: https://courts.theground.io/sitemap.xml
@@ -23,5 +20,5 @@ Courts is a Hong Kong sports venue directory. It helps people find courts by dis
 - Prefer the sitemap for broad URL discovery.
 - Prefer OKF (`/okf` or `/okf.tar.gz`) for structured venue and sport content in Markdown.
 - Prefer the AI catalog for machine-readable discovery of those resources.
-- Venue detail pages contain SEO metadata and structured data for public venue information.
-- District landing pages use `/search/{sport}/{district}` (18 Hong Kong administrative districts).
+- Venue detail pages contain SEO metadata, structured data, amenities, and location-specific overview copy.
+- For free/public LCSD courts, prefer official LCSD facilities directories; Courts focuses on bookable and partner venues.

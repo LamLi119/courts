@@ -20,6 +20,8 @@ const mapRef = ref<HTMLDivElement | null>(null);
 const googleMap = ref<any>(null);
  /** Markers keyed by location key (lat,lng rounded) so one pin per same building. */
 const markers = ref<Record<string, any>>({});
+const clusterMarkers = ref<any[]>([]);
+const locationGroups = ref<Map<string, Venue[]>>(new Map());
 const selectedVenueByLocation = ref<Record<string, Venue>>({});
 const venueCountByLocation = ref<Record<string, number>>({});
 const embeddedIconCache = ref<Record<string, string>>({});
@@ -31,6 +33,33 @@ function getLocationKey(coords: { lat: number; lng: number }): string {
   const lat = Math.round(coords.lat * 1e5) / 1e5;
   const lng = Math.round(coords.lng * 1e5) / 1e5;
   return `${lat},${lng}`;
+}
+
+/** Coarser grid for mobile low-zoom clustering (tap targets). */
+function getClusterCellKey(coords: { lat: number; lng: number }, zoom: number): string {
+  const precision = zoom <= 10 ? 50 : zoom <= 12 ? 200 : 1000;
+  const lat = Math.round(coords.lat * precision) / precision;
+  const lng = Math.round(coords.lng * precision) / precision;
+  return `${lat},${lng}`;
+}
+
+function shouldUseMobileClusters(zoom: number): boolean {
+  return !!props.isMobile && zoom < 13;
+}
+
+function clusterIcon(count: number): any {
+  const size = count >= 20 ? 52 : count >= 10 ? 46 : 40;
+  const svg = encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+      <circle cx="${size / 2}" cy="${size / 2}" r="${size / 2 - 2}" fill="#007a67" stroke="#fff" stroke-width="3"/>
+      <text x="50%" y="54%" text-anchor="middle" fill="#fff" font-size="${count >= 100 ? 12 : 14}" font-family="Arial,sans-serif" font-weight="700">${count}</text>
+    </svg>`,
+  );
+  return {
+    url: `data:image/svg+xml;charset=UTF-8,${svg}`,
+    scaledSize: new google.maps.Size(size, size),
+    anchor: new google.maps.Point(size / 2, size / 2),
+  };
 }
 
 const MAP_STYLES = [
@@ -62,6 +91,7 @@ function initMap() {
     });
     googleMap.value.addListener('zoom_changed', () => {
       refreshMarkerIconsByZoom();
+      applyClusterVisibility();
     });
   } catch (err) {
     console.error('Error initializing map:', err);
@@ -657,6 +687,15 @@ const clearAllMarkers = () => {
     }
   });
   markers.value = {};
+  clusterMarkers.value.forEach((m) => {
+    try {
+      m.setMap(null);
+    } catch {
+      // ignore
+    }
+  });
+  clusterMarkers.value = [];
+  locationGroups.value = new Map();
   selectedVenueByLocation.value = {};
   venueCountByLocation.value = {};
 };
@@ -674,6 +713,7 @@ const syncMarkers = async () => {
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key)!.push(venue);
   });
+  locationGroups.value = groups;
 
   for (const [locationKey, venueList] of groups.entries()) {
     const initialVenue = venueList[0];
@@ -729,7 +769,99 @@ const syncMarkers = async () => {
   }
 
   refreshSelectedVenueMarkerIcon();
+  applyClusterVisibility();
 };
+
+function clearClusterMarkers() {
+  clusterMarkers.value.forEach((m) => {
+    try {
+      m.setMap(null);
+    } catch {
+      // ignore
+    }
+  });
+  clusterMarkers.value = [];
+}
+
+/** On mobile at low zoom, collapse nearby pins into tappable cluster bubbles. */
+function applyClusterVisibility() {
+  if (!googleMap.value || typeof google === 'undefined') return;
+  const zoom = typeof googleMap.value.getZoom === 'function' ? googleMap.value.getZoom() : 15;
+  const useClusters = shouldUseMobileClusters(Number(zoom) || 15);
+
+  clearClusterMarkers();
+
+  const markerEntries = Object.entries(markers.value);
+  if (!useClusters) {
+    markerEntries.forEach(([, marker]) => {
+      try {
+        marker.setMap(googleMap.value);
+        if (typeof marker.setVisible === 'function') marker.setVisible(true);
+      } catch {
+        // ignore
+      }
+    });
+    return;
+  }
+
+  const cells = new Map<string, { lat: number; lng: number; keys: string[]; count: number }>();
+  for (const [locationKey, marker] of markerEntries) {
+    const pos = typeof marker.getPosition === 'function' ? marker.getPosition() : null;
+    if (!pos) continue;
+    const coords = { lat: pos.lat(), lng: pos.lng() };
+    const cell = getClusterCellKey(coords, Number(zoom) || 11);
+    const venueCount = venueCountByLocation.value[locationKey] ?? 1;
+    if (!cells.has(cell)) {
+      cells.set(cell, { lat: coords.lat, lng: coords.lng, keys: [], count: 0 });
+    }
+    const entry = cells.get(cell)!;
+    entry.keys.push(locationKey);
+    entry.count += venueCount;
+    entry.lat = (entry.lat * (entry.keys.length - 1) + coords.lat) / entry.keys.length;
+    entry.lng = (entry.lng * (entry.keys.length - 1) + coords.lng) / entry.keys.length;
+  }
+
+  for (const [, cell] of cells) {
+    if (cell.keys.length === 1) {
+      const marker = markers.value[cell.keys[0]];
+      if (marker) {
+        try {
+          marker.setMap(googleMap.value);
+          if (typeof marker.setVisible === 'function') marker.setVisible(true);
+        } catch {
+          // ignore
+        }
+      }
+      continue;
+    }
+
+    cell.keys.forEach((key) => {
+      const marker = markers.value[key];
+      if (!marker) return;
+      try {
+        marker.setMap(null);
+        if (typeof marker.setVisible === 'function') marker.setVisible(false);
+      } catch {
+        // ignore
+      }
+    });
+
+    const cluster = new google.maps.Marker({
+      position: { lat: cell.lat, lng: cell.lng },
+      map: googleMap.value,
+      title: `${cell.count} venues`,
+      icon: clusterIcon(cell.count),
+      zIndex: 1000 + cell.count,
+    });
+    cluster.addListener('click', () => {
+      if (!googleMap.value) return;
+      const current = googleMap.value.getZoom?.() ?? 11;
+      googleMap.value.setCenter({ lat: cell.lat, lng: cell.lng });
+      googleMap.value.setZoom(Math.min(16, Number(current) + 2));
+    });
+    clusterMarkers.value.push(cluster);
+  }
+}
 
 const fitToAllVenues = () => {
   if (!googleMap.value || typeof google === 'undefined') return;

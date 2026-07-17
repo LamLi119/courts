@@ -23,6 +23,8 @@ import UpcomingEventsPage from './components/venue/UpcomingEventsPage.vue';
 import VenueForm from './components/admin/VenueForm.vue';
 import AdminPage from './components/admin/AdminPage.vue';
 import LandingPage from './components/landing/LandingPage.vue';
+import AboutPage from './components/about/AboutPage.vue';
+import ListingSeoPanel from './components/seo/ListingSeoPanel.vue';
 import { useAuth } from './composables/auth';
 import { useIsMobile } from './composables/useIsMobile';
 import { useGrindUpcomingEvents } from './composables/useGrindUpcomingEvents';
@@ -195,6 +197,22 @@ watch(
       } else {
         resetSeoToDefault();
       }
+    } else if (route.name === 'about') {
+      selectedVenue.value = null;
+      showDesktopDetail.value = false;
+      const aboutTitle = language.value === 'zh'
+        ? '關於 Courts by The Ground | Courts'
+        : 'About Courts by The Ground | Courts';
+      const aboutDesc = language.value === 'zh'
+        ? '了解 Courts by The Ground 如何整理香港運動場地資料、編輯方法及聯絡方式。'
+        : 'Learn how Courts by The Ground curates Hong Kong sports venues, our methodology, and how to contact us.';
+      document.title = aboutTitle;
+      const descEl = document.querySelector('meta[name="description"]');
+      if (descEl) descEl.setAttribute('content', aboutDesc);
+      const canonical = document.querySelector('link[rel="canonical"]');
+      if (canonical && typeof window !== 'undefined') {
+        canonical.setAttribute('href', `${window.location.origin}/about`);
+      }
     } else if (route.name === 'home' || route.name === 'admin') {
       if (route.name === 'home') {
         sportFilter.value = [];
@@ -254,6 +272,11 @@ watch(
   () => {
     if (route.name === 'home' && venues.value.length > 0) {
       applyLandingPageSeo(venues.value, sports.value, language.value);
+    }
+    if (route.name === 'about') {
+      document.title = language.value === 'zh'
+        ? '關於 Courts by The Ground | Courts'
+        : 'About Courts by The Ground | Courts';
     }
     if (route.name === 'explore' && venues.value.length > 0) {
       applyExplorePageSeo(venues.value, language.value);
@@ -627,6 +650,30 @@ const listVenues = computed(() => {
   return filteredVenues.value.filter((v) => idSet.has(v.id));
 });
 
+const showListingSeoPanel = computed(
+  () => route.name === 'explore' || route.name === 'search' || route.name === 'search-district',
+);
+
+const listingSeoMode = computed<'explore' | 'search' | 'search-district'>(() => {
+  if (route.name === 'search-district') return 'search-district';
+  if (route.name === 'search') return 'search';
+  return 'explore';
+});
+
+const listingSeoSport = computed(() => {
+  const slug = typeof route.params.sport === 'string' ? route.params.sport : sportFilter.value[0];
+  if (!slug) return { slug: '', name: '' };
+  const meta = sports.value.find((s) => s.slug === slug);
+  const name = meta
+    ? (language.value === 'zh' && meta.name_zh ? meta.name_zh : meta.name)
+    : slug.replace(/-/g, ' ');
+  return { slug, name };
+});
+
+const listingSeoDistrictSlug = computed(() =>
+  typeof route.params.district === 'string' ? route.params.district : '',
+);
+
 const showVenuesAtLocation = (venueList: Venue[]) => {
   locationVenueIds.value = venueList.map((v) => v.id);
 };
@@ -927,8 +974,18 @@ const handleSaveVenue = async (venueData: any) => {
           :setLanguage="(l: Language) => { language = l; }"
         />
 
-        <MobileView
+        <AboutPage
+          v-else-if="route.name === 'about'"
+          :language="language"
+          :t="t"
+          :dark-mode="darkMode"
+          :set-language="(l: Language) => { language = l; }"
+        />
+
+        <template
           v-else-if="isMobile && (route.name === 'explore' || route.name === 'search' || route.name === 'search-district' || route.name === 'venue')"
+        >
+        <MobileView
           :mode="mobileViewMode"
           :setMode="(m: 'map' | 'list') => { mobileViewMode = m; }"
           :venues="filteredVenues"
@@ -964,6 +1021,18 @@ const handleSaveVenue = async (venueData: any) => {
           :onBackFromDetail="goBackFromVenue"
           :force-show-detail="route.name === 'venue' && !!selectedVenue"
         />
+        <ListingSeoPanel
+          v-if="showListingSeoPanel && mobileViewMode === 'list' && route.name !== 'venue'"
+          :language="language"
+          :t="t"
+          :dark-mode="darkMode"
+          :mode="listingSeoMode"
+          :sport-name="listingSeoSport.name"
+          :sport-slug="listingSeoSport.slug"
+          :district-slug="listingSeoDistrictSlug"
+          :venue-count="filteredVenues.length"
+        />
+        </template>
 
         <VenueDetail
           v-else-if="showDesktopDetail && selectedVenue"
@@ -983,8 +1052,10 @@ const handleSaveVenue = async (venueData: any) => {
           :onEdit="() => { editingVenue = selectedVenue; showVenueForm = true; }"
         />
 
-        <DesktopView
+        <template
           v-else-if="!isMobile && (route.name === 'explore' || route.name === 'search' || route.name === 'search-district' || (route.name === 'venue' && !showDesktopDetail))"
+        >
+        <DesktopView
           :venues="filteredVenues"
           :listVenues="listVenues"
           :onShowVenuesAtLocation="showVenuesAtLocation"
@@ -1026,6 +1097,18 @@ const handleSaveVenue = async (venueData: any) => {
           :currentTab="currentTab"
           :setTab="(t: AppTab) => { currentTab = t; }"
         />
+        <ListingSeoPanel
+          v-if="showListingSeoPanel"
+          :language="language"
+          :t="t"
+          :dark-mode="darkMode"
+          :mode="listingSeoMode"
+          :sport-name="listingSeoSport.name"
+          :sport-slug="listingSeoSport.slug"
+          :district-slug="listingSeoDistrictSlug"
+          :venue-count="filteredVenues.length"
+        />
+        </template>
       </div>
     </main>
 

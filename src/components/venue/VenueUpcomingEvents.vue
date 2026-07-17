@@ -18,7 +18,11 @@ const props = defineProps<{
   t: (key: string) => string;
   /** Full-width layout for /upcoming-events page */
   standalone?: boolean;
+  /** Override section heading (e.g. venue-scoped label) */
+  heading?: string;
 }>();
+
+const sectionHeading = computed(() => props.heading || props.t('upcomingEvents'));
 
 const emit = defineEmits<{
   retry: [];
@@ -104,7 +108,7 @@ function goingLabel(n: number): string {
         class="text-[18px] md:text-[20px] font-black tracking-tight m-0"
         :class="darkMode ? 'text-white' : 'text-gray-900'"
       >
-        {{ t('upcomingEvents') }}
+        {{ sectionHeading }}
       </h2>
       <a
         id="see-all-upcoming-events"

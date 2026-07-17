@@ -5,6 +5,7 @@ import { slugify } from '../utils/slugify';
 export const routes = [
   { path: '/', name: 'home', meta: { title: 'Courts | Find Sports Courts Across All 18 Hong Kong Districts' } },
   { path: '/explore', name: 'explore', meta: { title: 'Explore Sports Courts Across Hong Kong | Courts' } },
+  { path: '/about', name: 'about', meta: { title: 'About Courts by The Ground' } },
   { path: '/venues/:slug', name: 'venue', meta: { title: 'Venue' } },
   { path: '/upcoming-events', name: 'upcoming-events', meta: { title: 'Upcoming Events' } },
   { path: '/search/:sport/:district', name: 'search-district', meta: { title: 'Search' } },
