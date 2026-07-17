@@ -23,6 +23,14 @@ const props = defineProps<{
 const isExpanded = ref(false);
 const imageAlt = computed(() => getVenueImageAlt(props.venue));
 const venueHref = computed(() => `/venues/${slugify(props.venue.name)}`);
+const imgFailed = ref(false);
+const imageSrc = computed(() =>
+  imgFailed.value ? '/placeholder.svg' : (props.venue.images?.[0] || '/placeholder.svg'),
+);
+
+function onImageError() {
+  imgFailed.value = true;
+}
 
 const districtName = computed(() => {
   const slug = getVenueDistrictSlug(props.venue);
@@ -82,15 +90,16 @@ function navigateVenue(e: MouseEvent, preferDetail = true) {
         class="flex items-center p-4 cursor-pointer gap-4 no-underline"
         @click="navigateVenue($event, false)"
       >
-        <div class="relative w-16 h-16 rounded-[16px] overflow-hidden flex-shrink-0">
+        <div class="relative w-16 h-16 aspect-square rounded-[16px] overflow-hidden flex-shrink-0 bg-gray-200 dark:bg-gray-700">
           <img
-            :src="venue.images[0] || '/placeholder.svg'"
+            :src="imageSrc"
             class="w-full h-full object-cover"
-            :alt="venue.name"
+            :alt="imageAlt"
             width="64"
             height="64"
             :loading="priorityImage ? 'eager' : 'lazy'"
             :fetchpriority="priorityImage ? 'high' : undefined"
+            @error="onImageError"
           />
           <span v-if="venue.membership_enabled" class="absolute top-0 left-0 rounded-br-md px-1.5 py-0.5 text-[12px] font-bold text-white bg-[#007a67] shadow-sm" :title="t('specialOffer')">
             {{ t('specialOffer') }}
@@ -139,7 +148,7 @@ function navigateVenue(e: MouseEvent, preferDetail = true) {
         <div class="flex gap-2">
           <button
             type="button"
-            class="flex-1 py-2.5 rounded-[8px] font-bold text-xs flex items-center justify-center gap-2 transition-all"
+            class="flex-1 min-h-[44px] py-2.5 rounded-[8px] font-bold text-xs flex items-center justify-center gap-2 transition-all"
             :class="isSaved ? 'bg-red-500 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-500'"
             @click.stop="onToggleSave"
           >
@@ -147,7 +156,7 @@ function navigateVenue(e: MouseEvent, preferDetail = true) {
           </button>
           <a
             :href="venueHref"
-            class="flex-[2] py-2.5 bg-[#007a67] text-white rounded-[8px] font-[900] text-xs shadow-md text-center no-underline"
+            class="flex-[2] min-h-[44px] py-2.5 bg-[#007a67] text-white rounded-[8px] font-[900] text-xs shadow-md text-center no-underline inline-flex items-center justify-center"
             @click="navigateVenue($event, true)"
           >
             {{ t('viewDetails') }}
@@ -164,15 +173,16 @@ function navigateVenue(e: MouseEvent, preferDetail = true) {
     :class="darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'"
     @click="navigateVenue($event, true)"
   >
-      <div class="relative h-44 overflow-hidden">
+      <div class="relative aspect-[400/176] h-44 overflow-hidden bg-gray-200 dark:bg-gray-700">
       <img
-        :src="venue.images[0] || '/placeholder.svg'"
+        :src="imageSrc"
         :alt="imageAlt"
         class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
         width="400"
         height="176"
         :loading="priorityImage ? 'eager' : 'lazy'"
         :fetchpriority="priorityImage ? 'high' : undefined"
+        @error="onImageError"
       />
       <span v-if="venue.membership_enabled" class="absolute top-2 left-2 rounded-md px-2 py-1 text-[11px] font-bold text-white bg-[#007a67] shadow-md z-0" :title="t('specialOffer')">
         {{ t('specialOffer') }}
@@ -190,7 +200,7 @@ function navigateVenue(e: MouseEvent, preferDetail = true) {
       <div class="absolute top-2 right-2">
         <button
           type="button"
-          class="p-2.5 rounded-full shadow-lg transition-all active:scale-90 rounded-[999px]"
+          class="p-2.5 min-h-[44px] min-w-[44px] rounded-full shadow-lg transition-all active:scale-90 rounded-[999px] inline-flex items-center justify-center"
           :class="isSaved ? 'bg-red-500 text-white' : 'bg-white/90 text-gray-500'"
           @click.stop="onToggleSave"
         >

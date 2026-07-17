@@ -3,10 +3,11 @@ import type { App } from 'vue';
 import { slugify } from '../utils/slugify';
 
 export const routes = [
-  { path: '/', name: 'home', meta: { title: 'Courts by The Ground | Find Sports Courts Across All 18 Hong Kong Districts' } },
-  { path: '/explore', name: 'explore', meta: { title: 'Explore Sports Courts Across Hong Kong | Courts by The Ground' } },
+  { path: '/', name: 'home', meta: { title: 'Courts | Find Sports Courts Across All 18 Hong Kong Districts' } },
+  { path: '/explore', name: 'explore', meta: { title: 'Explore Sports Courts Across Hong Kong | Courts' } },
   { path: '/venues/:slug', name: 'venue', meta: { title: 'Venue' } },
   { path: '/upcoming-events', name: 'upcoming-events', meta: { title: 'Upcoming Events' } },
+  { path: '/search/:sport/:district', name: 'search-district', meta: { title: 'Search' } },
   { path: '/search/:sport', name: 'search', meta: { title: 'Search' } },
   { path: '/admin', name: 'admin', meta: { title: 'Admin' } },
   { path: '/admin/manage', name: 'admin-manage', meta: { title: 'Admin Manage' } },

@@ -7,8 +7,8 @@ import DesktopView from '../explore/DesktopView.vue';
 import MobileView from '../explore/MobileView.vue';
 import LandingCta from './LandingCta.vue';
 import AppFooter from '../layout/AppFooter.vue';
-import { countVenuesBySport } from '../../utils/seo';
-import { HK_DISTRICTS } from '../../utils/hkDistricts';
+import { countVenuesBySport, venueMatchesSportSlug } from '../../utils/seo';
+import { HK_DISTRICTS, getDistrictDisplayName, venueMatchesDistricts } from '../../utils/hkDistricts';
 
 type SportOption = { id: number; name: string; name_zh?: string | null; slug: string };
 
@@ -78,6 +78,28 @@ const defaultHeroSportSlug = computed(() => resolveDefaultHeroSportSlug(props.sp
 const districtCount = HK_DISTRICTS.length;
 
 const sportVenueCounts = computed(() => countVenuesBySport(props.venues, props.sports));
+
+const districtSportLinks = computed(() => {
+  const links: { href: string; label: string }[] = [];
+  for (const sport of sportVenueCounts.value.slice(0, 4)) {
+    for (const district of HK_DISTRICTS) {
+      const count = props.venues.filter(
+        (v) => venueMatchesSportSlug(v, sport.slug) && venueMatchesDistricts(v, [district.slug]),
+      ).length;
+      if (count === 0) continue;
+      const districtName = getDistrictDisplayName(district.slug, props.language);
+      const sportName = props.language === 'zh' && sport.name_zh ? sport.name_zh : sport.name;
+      links.push({
+        href: `/search/${sport.slug}/${district.slug}`,
+        label: props.language === 'zh'
+          ? `${districtName}${sportName}（${count}）`
+          : `${sportName} in ${districtName} (${count})`,
+      });
+      if (links.length >= 24) return links;
+    }
+  }
+  return links;
+});
 
 const landingSeoIntroText = computed(() =>
   props.t('landingSeoIntro')
@@ -446,6 +468,11 @@ function goNextPartnership() {
       <ul>
         <li v-for="item in sportVenueCounts" :key="item.slug">
           <a :href="`/search/${item.slug}`">{{ sportCountLabel(item) }}</a>
+        </li>
+      </ul>
+      <ul>
+        <li v-for="item in districtSportLinks" :key="item.href">
+          <a :href="item.href">{{ item.label }}</a>
         </li>
       </ul>
     </section>

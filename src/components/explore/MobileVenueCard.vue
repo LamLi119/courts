@@ -20,6 +20,14 @@ const props = defineProps<{
 
 const imageAlt = computed(() => getVenueImageAlt(props.venue));
 const venueHref = computed(() => `/venues/${slugify(props.venue.name)}`);
+const imgFailed = ref(false);
+const imageSrc = computed(() =>
+  imgFailed.value ? '/placeholder.svg' : (props.venue.images?.[0] || '/placeholder.svg'),
+);
+
+function onImageError() {
+  imgFailed.value = true;
+}
 
 const districtName = computed(() => {
   const slug = getVenueDistrictSlug(props.venue);
@@ -66,15 +74,16 @@ function navigateVenue(e: MouseEvent) {
     <div class="flex flex-col shadow-sm transition-all active:scale-[0.98]"
       :class="darkMode ? 'border-gray-800' : 'border-gray-200'">
       <div class="flex items-center gap-4 px-4 pt-3 pb-2">
-        <div class="relative w-20 h-20 rounded-[16px] overflow-hidden flex-shrink-0 bg-gray-200 dark:bg-gray-700">
+        <div class="relative w-20 h-20 aspect-square rounded-[16px] overflow-hidden flex-shrink-0 bg-gray-200 dark:bg-gray-700">
           <img
-            :src="venue.images[0] || '/placeholder.svg'"
+            :src="imageSrc"
             :alt="imageAlt"
             class="w-full h-full object-cover"
             width="80"
             height="80"
             :loading="priorityImage ? 'eager' : 'lazy'"
             :fetchpriority="priorityImage ? 'high' : undefined"
+            @error="onImageError"
           />
           <span v-if="venue.membership_enabled" class="absolute top-0 left-0 rounded-br-md px-1.5 py-0.5 text-[9px] font-bold text-white bg-[#007a67] shadow-sm" :title="t('specialOffer')">
             {{ t('specialOffer') }}

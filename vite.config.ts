@@ -10,6 +10,7 @@ import {
   buildExplorePageMeta,
   buildHomePageMeta,
   buildSearchPageMeta,
+  buildDistrictSportPageMeta,
 } from './lib/pageSeoMeta.js';
 
 export default defineConfig(({ mode }) => {
@@ -151,7 +152,22 @@ export default defineConfig(({ mode }) => {
             }
 
             if (pathname.startsWith('/search/')) {
-              const sportSlug = pathname.slice('/search/'.length).replace(/\/$/, '').split('/')[0];
+              const parts = pathname.slice('/search/'.length).replace(/\/$/, '').split('/').filter(Boolean);
+              const sportSlug = parts[0];
+              const districtSlug = parts[1];
+              if (sportSlug && districtSlug) {
+                const { venues, sports } = readBootstrap();
+                return void injectAndSend(
+                  buildDistrictSportPageMeta({
+                    sportSlug,
+                    districtSlug,
+                    venues,
+                    sports,
+                    origin,
+                    lang: 'en',
+                  })
+                );
+              }
               if (sportSlug) {
                 const { venues, sports } = readBootstrap();
                 return void injectAndSend(

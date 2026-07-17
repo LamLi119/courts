@@ -87,21 +87,21 @@ const openFindEvents = () => {
       </div>
 
       <div class="flex items-center gap-2 md:gap-4 shrink-0">
-        <button type="button" class="btn btn-nav-icon" @click="setDarkMode(!darkMode)">
+        <button type="button" class="btn btn-nav-icon min-h-[44px] min-w-[44px]" @click="setDarkMode(!darkMode)" :aria-label="darkMode ? 'Light mode' : 'Dark mode'">
           {{ darkMode ? '☀️' : '🌙' }}
         </button>
 
-        <button type="button" id="find-events-button" class="btn btn-cta btn-cta-md hidden md:inline-flex px-4 py-2" @click="openFindEvents">
+        <button type="button" id="find-events-button" class="btn btn-cta btn-cta-md hidden md:inline-flex px-4 py-2 min-h-[44px]" @click="openFindEvents">
           {{ t('findEvents') }}
         </button>
-        <div class="flex rounded-[8px] p-1 border"
+        <div class="flex rounded-[8px] p-1 border items-center"
           :class="darkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-100 border-gray-200'">
-          <button type="button" class="btn btn-sm rounded-[6px] px-2 md:px-3 py-1 text-[10px] md:text-[11px]"
-            :class="language === 'zh' ? 'btn-cta' : 'btn-nav'" @click="setLanguage('zh')">
+          <button type="button" class="btn btn-sm rounded-[6px] min-h-[44px] min-w-[44px] px-2 md:px-3 text-[11px] md:text-[12px]"
+            :class="language === 'zh' ? 'btn-cta' : 'btn-nav'" @click="setLanguage('zh')" aria-label="中文">
             中文
           </button>
-          <button type="button" class="btn btn-sm rounded-[6px] px-2 md:px-3 py-1 text-[10px] md:text-[11px]"
-            :class="language === 'en' ? 'btn-cta' : 'btn-nav'" @click="setLanguage('en')">
+          <button type="button" class="btn btn-sm rounded-[6px] min-h-[44px] min-w-[44px] px-2 md:px-3 text-[11px] md:text-[12px]"
+            :class="language === 'en' ? 'btn-cta' : 'btn-nav'" @click="setLanguage('en')" aria-label="English">
             EN
           </button>
 
@@ -109,15 +109,15 @@ const openFindEvents = () => {
         <button
           v-if="showLogout"
           type="button"
-          class="btn btn-error btn-error-md hidden md:inline-flex px-4 py-2"
+          class="btn btn-error btn-error-md hidden md:inline-flex px-4 py-2 min-h-[44px]"
           @click="onUserLogout && onUserLogout()"
         >
           {{ t('logout') }}
         </button>
-        <button v-if="!showLogout && !isAdmin" type="button" class="btn btn-cta btn-cta-md hidden md:inline-flex px-4 py-2" @click="onLoginClick" aria-label="Admin">
+        <button v-if="!showLogout && !isAdmin" type="button" class="btn btn-cta btn-cta-md hidden md:inline-flex px-4 py-2 min-h-[44px]" @click="onLoginClick" aria-label="Admin">
           {{t('login')}}
         </button>
-        <button v-if="!showLogout && isAdmin" type="button" class="btn btn-nav-icon" @click="onAdminClick" aria-label="Admin">
+        <button v-if="!showLogout && isAdmin" type="button" class="btn btn-nav-icon min-h-[44px] min-w-[44px]" @click="onAdminClick" aria-label="Admin">
           🔑
         </button>
       </div>

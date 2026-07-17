@@ -4,9 +4,9 @@ import { useRoute, useRouter } from 'vue-router';
 import type { Venue, Language, AppTab } from '../types';
 import { translate } from './utils/translations';
 import { getStationCanonicalEn } from './utils/mtrStations';
-import { venueMatchesDistricts } from './utils/hkDistricts';
+import { venueMatchesDistricts, isValidDistrictSlug } from './utils/hkDistricts';
 import { slugify } from './utils/slugify';
-import { resetSeoToDefault, applySearchPageSeo, applyLandingPageSeo, applyExplorePageSeo } from './utils/seo';
+import { resetSeoToDefault, applySearchPageSeo, applyDistrictSportPageSeo, applyLandingPageSeo, applyExplorePageSeo } from './utils/seo';
 import { useVenueSlug } from './router';
 import { db } from '../db';
 import Header from './components/layout/Header.vue';
@@ -148,15 +148,42 @@ function resolveVenueBySlug(slug: string): Venue | null {
 }
 
 watch(
-  () => ({ name: route.name, slug: route.params.slug, sport: route.params.sport }),
+  () => ({
+    name: route.name,
+    slug: route.params.slug,
+    sport: route.params.sport,
+    district: route.params.district,
+  }),
   (params, prev) => {
     if (route.name === 'venue' && typeof route.params.slug === 'string') {
       const venue = resolveVenueBySlug(route.params.slug);
       selectedVenue.value = venue;
       showDesktopDetail.value = !!venue;
       if (!venue && venues.value.length > 0) router.replace('/');
+    } else if (
+      route.name === 'search-district'
+      && typeof route.params.sport === 'string'
+      && typeof route.params.district === 'string'
+    ) {
+      const district = route.params.district;
+      if (!isValidDistrictSlug(district)) {
+        router.replace(`/search/${route.params.sport}`);
+        return;
+      }
+      sportFilter.value = [route.params.sport];
+      districtFilter.value = [district];
+      selectedVenue.value = null;
+      showDesktopDetail.value = false;
+      applyDistrictSportPageSeo(
+        route.params.sport,
+        district,
+        venues.value,
+        sports.value,
+        language.value,
+      );
     } else if (route.name === 'search' && typeof route.params.sport === 'string') {
       sportFilter.value = [route.params.sport];
+      districtFilter.value = [];
       selectedVenue.value = null;
       showDesktopDetail.value = false;
       applySearchPageSeo(route.params.sport, venues.value, sports.value, language.value);
@@ -171,6 +198,7 @@ watch(
     } else if (route.name === 'home' || route.name === 'admin') {
       if (route.name === 'home') {
         sportFilter.value = [];
+        districtFilter.value = [];
         mtrFilter.value = [];
         distanceFilter.value = '';
         filterSpecialOffer.value = false;
@@ -205,6 +233,19 @@ watch(
     if (route.name === 'search' && typeof route.params.sport === 'string') {
       applySearchPageSeo(route.params.sport, venues.value, sports.value, language.value);
     }
+    if (
+      route.name === 'search-district'
+      && typeof route.params.sport === 'string'
+      && typeof route.params.district === 'string'
+    ) {
+      applyDistrictSportPageSeo(
+        route.params.sport,
+        route.params.district,
+        venues.value,
+        sports.value,
+        language.value,
+      );
+    }
   }
 );
 
@@ -220,13 +261,26 @@ watch(
     if (route.name === 'search' && typeof route.params.sport === 'string') {
       applySearchPageSeo(route.params.sport, venues.value, sports.value, language.value);
     }
+    if (
+      route.name === 'search-district'
+      && typeof route.params.sport === 'string'
+      && typeof route.params.district === 'string'
+    ) {
+      applyDistrictSportPageSeo(
+        route.params.sport,
+        route.params.district,
+        venues.value,
+        sports.value,
+        language.value,
+      );
+    }
   }
 );
 
 watch(
   () => sports.value,
   () => {
-    if (route.name === 'search') return;
+    if (route.name === 'search' || route.name === 'search-district') return;
     if (sportFilter.value.length > 0) return;
     applyDefaultSportFilter();
   },
@@ -236,7 +290,7 @@ watch(
 watch(
   () => venues.value.length,
   () => {
-    if (route.name === 'search') return;
+    if (route.name === 'search' || route.name === 'search-district') return;
     if (sportFilter.value.length > 0) return;
     applyDefaultSportFilter();
   }
@@ -692,7 +746,7 @@ const handleSaveVenue = async (venueData: any) => {
 </script>
 
 <template>
-  <div :class="['min-h-screen w-full pb-safe transition-colors', darkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900']">
+  <div :class="['min-h-screen w-full pb-safe transition-colors', isMobile ? 'pb-20' : '', darkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900']">
     <UserLoginPage
       v-if="route.name === 'login'"
       :language="language"
@@ -874,7 +928,7 @@ const handleSaveVenue = async (venueData: any) => {
         />
 
         <MobileView
-          v-else-if="isMobile && (route.name === 'explore' || route.name === 'search' || route.name === 'venue')"
+          v-else-if="isMobile && (route.name === 'explore' || route.name === 'search' || route.name === 'search-district' || route.name === 'venue')"
           :mode="mobileViewMode"
           :setMode="(m: 'map' | 'list') => { mobileViewMode = m; }"
           :venues="filteredVenues"
@@ -930,7 +984,7 @@ const handleSaveVenue = async (venueData: any) => {
         />
 
         <DesktopView
-          v-else-if="!isMobile && (route.name === 'explore' || route.name === 'search' || (route.name === 'venue' && !showDesktopDetail))"
+          v-else-if="!isMobile && (route.name === 'explore' || route.name === 'search' || route.name === 'search-district' || (route.name === 'venue' && !showDesktopDetail))"
           :venues="filteredVenues"
           :listVenues="listVenues"
           :onShowVenuesAtLocation="showVenuesAtLocation"
@@ -1068,15 +1122,15 @@ const handleSaveVenue = async (venueData: any) => {
       </div>
     </Transition>
 
-    <!-- <MobileNav
-      v-if="isMobile"
+    <MobileNav
+      v-if="isMobile && route.name !== 'login' && route.name !== 'signup' && route.name !== 'token-login' && route.name !== 'complete-phone'"
       :currentTab="currentTab"
       :setTab="(t: AppTab) => { currentTab = t; }"
       :t="t"
       :darkMode="darkMode"
       :isAdmin="isAnyAdmin"
       :onAdminClick="() => { if (isAnyAdmin) currentTab = 'admin'; else { showAdminLogin = true; syncAdminUrl(true); } }"
-    /> -->
+    />
   </div>
 </template>
 

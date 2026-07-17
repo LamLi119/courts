@@ -12,7 +12,11 @@ import {
   buildExplorePageMeta,
   buildHomePageMeta,
   buildSearchPageMeta,
+  buildDistrictSportPageMeta,
+  HK_DISTRICTS,
 } from '../lib/pageSeoMeta.js';
+import { venueMatchesSportSlug } from '../lib/sitemap.js';
+import { venueMatchesDistricts } from '../lib/hkDistricts.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -79,6 +83,25 @@ function main() {
       lang: 'en',
     });
     writeHtml(path.join('search', sportSlug, 'index.html'), injectPageSeoIntoHtml(shell, meta));
+
+    for (const district of HK_DISTRICTS) {
+      const count = venues.filter(
+        (v) => venueMatchesSportSlug(v, sportSlug) && venueMatchesDistricts(v, [district.slug])
+      ).length;
+      if (count === 0) continue;
+      const districtMeta = buildDistrictSportPageMeta({
+        sportSlug,
+        districtSlug: district.slug,
+        venues,
+        sports,
+        origin: BASE_URL,
+        lang: 'en',
+      });
+      writeHtml(
+        path.join('search', sportSlug, district.slug, 'index.html'),
+        injectPageSeoIntoHtml(shell, districtMeta)
+      );
+    }
   }
 
   let venueCount = 0;
@@ -92,7 +115,7 @@ function main() {
   }
 
   console.log(
-    `prerender-seo-html: wrote home + explore + ${sportSlugs.size} search pages + ${venueCount} venue pages`
+    `prerender-seo-html: wrote home + explore + ${sportSlugs.size} search pages (+ district variants) + ${venueCount} venue pages`
   );
 }
 
