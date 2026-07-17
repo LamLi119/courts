@@ -505,8 +505,24 @@ function goNextPartnership() {
           </p>
         </div>
 
-        <!-- Sport type tabs -->
-        <div class="flex flex-wrap gap-2">
+        <!-- Sport type: dropdown on mobile, tabs on desktop -->
+        <select
+          v-model="selectedSportSlug"
+          class="md:hidden w-full px-4 py-3 rounded-xl text-sm font-bold border appearance-none cursor-pointer transition-colors"
+          :class="darkMode
+            ? 'bg-gray-800 border-gray-600 text-gray-100'
+            : 'bg-white border-gray-200 text-gray-800'"
+          :aria-label="t('sportType')"
+        >
+          <option
+            v-for="item in sportVenueCounts"
+            :key="item.slug"
+            :value="item.slug"
+          >
+            {{ sportCountLabel(item) }}
+          </option>
+        </select>
+        <div class="hidden md:flex flex-wrap gap-2">
           <button
             v-for="item in sportVenueCounts"
             :key="item.slug"

@@ -838,7 +838,7 @@ watch(
         <!-- Desktop: right sidebar — sticky so it follows scroll within the grid -->
         <aside class="hidden lg:block lg:col-span-1 sticky top-24 z-10 self-start">
           <div v-if="venue.address && venue.address.trim() !== ''"
-            class="max-h-[calc(100vh-6.5rem)] overflow-y-auto space-y-6 p-8 rounded-[16px] shadow-lg border"
+            class="space-y-6 p-8 rounded-[16px] shadow-lg border"
             :class="darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'">
             <div v-if="venue.startingPrice > 0" class="flex items-center justify-between gap-4 max-w-lg mx-auto mb-4">
               <span class="uppercase tracking-widest font-bold opacity-90 whitespace-nowrap"
