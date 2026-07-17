@@ -5,7 +5,6 @@ Courts is a Hong Kong sports venue directory. It helps people find courts by dis
 ## Main pages
 - https://courts.theground.io/
 - https://courts.theground.io/explore
-- https://courts.theground.io/upcoming-events
 
 ## Key sport pages
 - https://courts.theground.io/search/pickleball
@@ -14,8 +13,10 @@ Courts is a Hong Kong sports venue directory. It helps people find courts by dis
 - Sitemap: https://courts.theground.io/sitemap.xml
 - OKF index: https://courts.theground.io/okf
 - OKF bundle: https://courts.theground.io/okf.tar.gz
+- AI catalog (ARD): https://courts.theground.io/.well-known/ai-catalog.json
 
 ## Notes for agents
 - Prefer the sitemap for broad URL discovery.
 - Prefer OKF (`/okf` or `/okf.tar.gz`) for structured venue and sport content in Markdown.
+- Prefer the AI catalog for machine-readable discovery of those resources.
 - Venue detail pages contain SEO metadata and structured data for public venue information.

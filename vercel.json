@@ -8,6 +8,14 @@
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=3600, stale-while-revalidate=86400" }
       ]
+    },
+    {
+      "source": "/.well-known/ai-catalog.json",
+      "headers": [
+        { "key": "Content-Type", "value": "application/json; charset=utf-8" },
+        { "key": "Cache-Control", "value": "public, max-age=3600" },
+        { "key": "Access-Control-Allow-Origin", "value": "*" }
+      ]
     }
   ],
   "rewrites": [
@@ -28,7 +36,7 @@
       "destination": "https://courts.api.theground.io/api/okf/:path*"
     },
     {
-      "source": "/((?!assets/|sw\\.js|workbox-|manifest\\.webmanifest|robots\\.txt|llms\\.txt|venues-bootstrap\\.json|okf(?:\\.tar\\.gz|/.*)?$|a7f3c9e2b18d4f6a0e5c2b9d7f1a8e3c\\.txt).*)",
+      "source": "/((?!assets/|sw\\.js|workbox-|manifest\\.webmanifest|robots\\.txt|llms\\.txt|venues-bootstrap\\.json|okf(?:\\.tar\\.gz|/.*)?$|\\.well-known/|a7f3c9e2b18d4f6a0e5c2b9d7f1a8e3c\\.txt).*)",
       "destination": "/index.html"
     }
   ]

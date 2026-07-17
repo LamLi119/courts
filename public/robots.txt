@@ -2,4 +2,5 @@ User-agent: *
 Allow: /
 
 # LLMs: https://courts.theground.io/llms.txt
+# AI catalog: https://courts.theground.io/.well-known/ai-catalog.json
 Sitemap: https://courts.theground.io/sitemap.xml
