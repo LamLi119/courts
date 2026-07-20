@@ -58,7 +58,7 @@ ssh team@instance-courts   # or gcloud compute ssh ...
 cd /opt/courts-new         # use WorkingDirectory from above
 
 git fetch
-git checkout Fix/vercel-problem   # e.g. dev, or main for a staging test
+git checkout Main/SEO  # e.g. dev, or main for a staging test
 git pull
 
 npm ci
@@ -91,7 +91,7 @@ sudo journalctl -u courts-api-staging -f
 cd /opt/courts-new
 
 git fetch
-git checkout main          # or your production branch
+git checkout dev          # or your production branch
 git pull
 
 npm ci

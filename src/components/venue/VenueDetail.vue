@@ -5,6 +5,12 @@ import type { Venue, Language, OperatingHours, OperatingDayKey } from '../../../
 import { getStationDisplayName } from '../../utils/mtrStations';
 import { getVenueDistrictSlug, getDistrictDisplayName } from '../../utils/hkDistricts';
 import { applyVenueSeo, resetSeoToDefault, getSportTypeLabel, getVenueImageAlt } from '../../utils/seo';
+import {
+  eventMatchesVenue,
+  googleMapsDirectionsUrl,
+  googleMapsEmbedUrl,
+} from '../../utils/venueContent';
+import VenueSeoSections from '../seo/VenueSeoSections.vue';
 import { slugify } from '../../utils/slugify';
 import ImageCarousel from '../ui/ImageCarousel.vue';
 import VenueUpcomingEvents from './VenueUpcomingEvents.vue';
@@ -162,8 +168,7 @@ const handleWhatsApp = () => {
 };
 
 const openGoogleMaps = () => {
-  const encodedAddress = encodeURIComponent(props.venue.address);
-  window.open(`https://www.google.com/maps/search/?api=1&query=${encodedAddress}`, '_blank');
+  window.open(googleMapsDirectionsUrl(props.venue), '_blank');
 };
 
 const shareFeedback = ref<string | null>(null);
@@ -366,9 +371,39 @@ const {
   refresh: refreshUpcoming,
 } = useGrindUpcomingEvents();
 
+const venueScopedEvents = computed(() =>
+  upcomingEvents.value.filter((ev) => eventMatchesVenue(ev, props.venue)),
+);
+
+const showVenueEvents = computed(
+  () => !upcomingLoading.value && venueScopedEvents.value.length > 0,
+);
+
+const venueAmenities = computed(() =>
+  Array.isArray(props.venue.amenities)
+    ? props.venue.amenities.map((a) => String(a || '').trim()).filter(Boolean)
+    : [],
+);
+
+const mapEmbedUrl = computed(() => googleMapsEmbedUrl(props.venue));
+const showMapEmbed = ref(false);
+
+const showVenueRating = computed(() => {
+  const rv = props.venue.rating_value;
+  const rc = props.venue.review_count;
+  return rv != null && rc != null && rc >= 1 && rv >= 1 && rv <= 5;
+});
+
 onMounted(() => {
   void refreshUpcoming();
 });
+
+watch(
+  () => props.venue.id,
+  () => {
+    showMapEmbed.value = false;
+  },
+);
 
 watch(
   () => [props.venue.id, hasDescriptionText.value, hasPricingDetail.value, hasOperatingDetail.value] as const,
@@ -469,8 +504,8 @@ watch(
       </button>
     </div>
 
-    <div class="container mx-auto px-4 py-6">
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+    <div class="container mx-auto px-4 py-6 w-full px-4 md:px-6 max-w-7xl mx-auto space-y-6">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 lg:items-start">
         <div class="lg:col-span-2 space-y-8">
           <ImageCarousel :key="venue.id" :images="venue.images" :venue-name="venue.name"
             :sport-type="getSportTypeLabel(venue, language)" :on-image-click="openFullscreen" />
@@ -482,6 +517,12 @@ watch(
                 :alt="venueImageAlt" fetchpriority="high" />
               <span>{{ venue.name }}</span>
             </h2>
+            <p
+              v-if="showVenueRating"
+              class="text-sm font-bold text-[#007a67]"
+            >
+              ★ {{ venue.rating_value }} · {{ venue.review_count }} {{ t('venueReviews') }}
+            </p>
             <template v-if="socialLinksList().length > 0">
             </template>
             <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-[14px] font-[400]"
@@ -579,7 +620,27 @@ watch(
               </div>
             </div>
 
-            <div class="hidden lg:block mt-8">
+            <div class="hidden lg:block mt-8 space-y-8">
+              <section v-if="venueAmenities.length" aria-labelledby="venue-amenities-heading">
+                <h2
+                  id="venue-amenities-heading"
+                  class="text-[18px] md:text-[20px] font-black tracking-tight mb-3"
+                  :class="darkMode ? 'text-white' : 'text-gray-900'"
+                >
+                  {{ t('amenities') }}
+                </h2>
+                <ul class="flex flex-wrap gap-2">
+                  <li
+                    v-for="item in venueAmenities"
+                    :key="item"
+                    class="px-3 py-1.5 rounded-full text-[13px] font-semibold border"
+                    :class="darkMode ? 'border-gray-600 bg-gray-800 text-gray-200' : 'border-gray-200 bg-gray-50 text-gray-700'"
+                  >
+                    {{ item }}
+                  </li>
+                </ul>
+              </section>
+
               <VenueUpcomingEvents
                 :events="upcomingEvents"
                 :loading="upcomingLoading"
@@ -619,27 +680,73 @@ watch(
               <!-- Mobile: Location -->
               <div v-if="venue.address && venue.address.trim() !== ''"
                 class="lg:hidden pt-4 mt-2 mb-4 border-t border-gray-300">
-                <div class="flex justify-between w-full">
+                <div class="flex justify-between w-full items-start">
                   <h3 class="uppercase tracking-widest font-bold opacity-90"
                     :class="language === 'en' ? 'text-[12px]' : 'text-[14px]'">
                     {{ t('location') }}
                   </h3>
 
-                  <button type="button" id="google-maps-button" class="btn btn-text btn-sm w-1/2"
-                    @click="openGoogleMaps">
-                    📍 {{ t('openInGoogleMaps') }}
-                  </button>
+                  <div class="w-1/2 flex flex-col items-end gap-1">
+                    <button type="button" id="google-maps-button" class="btn btn-text btn-sm"
+                      @click="openGoogleMaps">
+                      📍 {{ t('getDirections') }}
+                    </button>
+                    
+                  </div>
 
                 </div>
-                <div class="p-4 rounded-[16px] border w-full"
-                  :class="darkMode ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-gray-50 border-gray-100 text-gray-700'">
-                  <p class="text-[14px] leading-relaxed" :class="darkMode ? 'text-gray-300' : 'text-gray-700'">
+                <div
+                  class="p-4 rounded-[16px] border w-full relative"
+                  :class="darkMode ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-gray-50 border-gray-100 text-gray-700'"
+                >
+                  <p class="text-[14px] leading-relaxed pr-24" :class="darkMode ? 'text-gray-300' : 'text-gray-700'">
                     {{ venue.address }}
                   </p>
-
+                  <button
+                    v-if="mapEmbedUrl"
+                    type="button"
+                    class="absolute bottom-3 right-3 btn btn-text btn-sm"
+                    @click="showMapEmbed = !showMapEmbed"
+                  >
+                    🗺️ {{ showMapEmbed ? t('hideMap') : t('showMap') }}
+                  </button>
+                </div>
+                <div
+                  v-if="mapEmbedUrl && showMapEmbed"
+                  class="mt-3 rounded-2xl overflow-hidden border aspect-video w-full"
+                  :class="darkMode ? 'border-gray-700' : 'border-gray-200'"
+                >
+                  <iframe
+                    :src="mapEmbedUrl"
+                    :title="`${venue.name} map`"
+                    loading="lazy"
+                    class="w-full h-full border-0"
+                    referrerpolicy="no-referrer-when-downgrade"
+                    allowfullscreen
+                  />
                 </div>
               </div>
-              <div class="lg:hidden mt-6">
+              <div class="lg:hidden mt-6 space-y-6">
+                <section v-if="venueAmenities.length" aria-labelledby="venue-amenities-heading-m">
+                  <h2
+                    id="venue-amenities-heading-m"
+                    class="uppercase tracking-widest font-bold opacity-90 mb-3"
+                    :class="language === 'en' ? 'text-[12px]' : 'text-[14px]'"
+                  >
+                    {{ t('amenities') }}
+                  </h2>
+                  <ul class="flex flex-wrap gap-2">
+                    <li
+                      v-for="item in venueAmenities"
+                      :key="item"
+                      class="px-3 py-1.5 rounded-full text-[12px] font-semibold border"
+                      :class="darkMode ? 'border-gray-600 bg-gray-800 text-gray-200' : 'border-gray-200 bg-gray-50 text-gray-700'"
+                    >
+                      {{ item }}
+                    </li>
+                  </ul>
+                </section>
+
                 <VenueUpcomingEvents
                   :events="upcomingEvents"
                   :loading="upcomingLoading"
@@ -778,10 +885,10 @@ watch(
           </div>
         </div>
 
-        <!-- Desktop: right sidebar -->
-        <div class="hidden lg:block lg:col-span-1">
+        <!-- Desktop: right sidebar — sticky so it follows scroll within the grid -->
+        <aside class="hidden lg:block lg:col-span-1 sticky top-24 z-10 self-start">
           <div v-if="venue.address && venue.address.trim() !== ''"
-            class="sticky top-24 space-y-6 p-8 rounded-[16px] shadow-lg border"
+            class="space-y-6 p-8 rounded-[16px] shadow-lg border"
             :class="darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'">
             <div v-if="venue.startingPrice > 0" class="flex items-center justify-between gap-4 max-w-lg mx-auto mb-4">
               <span class="uppercase tracking-widest font-bold opacity-90 whitespace-nowrap"
@@ -825,25 +932,51 @@ watch(
             </div>
             <!-- Desktop: location -->
             <div class="space-y-4">
-              <div v-if="venue.address && venue.address.trim() !== ''" class="flex justify-between w-full">
+              <div v-if="venue.address && venue.address.trim() !== ''" class="flex justify-between w-full items-start">
                 <h3 class="uppercase tracking-widest font-bold opacity-90"
                   :class="language === 'en' ? 'text-[14px]' : 'text-[16px]'">
                   {{ t('location') }}
                 </h3>
 
-                <button type="button"
-                  class="text-[12px] font-[700] text-[#007a67] uppercase w-1/2 text-right hover:font-bold hover:underline"
-                  @click="openGoogleMaps">
-                  📍 {{ t('openInGoogleMaps') }}
-                </button>
+                <div class="w-1/2 flex flex-col items-end gap-1">
+                  <button type="button"
+                    class="text-[12px] font-[700] text-[#007a67] uppercase hover:font-bold hover:underline"
+                    @click="openGoogleMaps">
+                    📍 {{ t('getDirections') }}
+                  </button>
+                  
+                </div>
 
               </div>
-              <div class="p-4 rounded-[16px] border w-full"
-                :class="darkMode ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-gray-50 border-gray-100 text-gray-700'">
-                <p class="text-[14px] leading-relaxed" :class="darkMode ? 'text-gray-300' : 'text-gray-700'">
+              <div
+                class="p-4 rounded-[16px] border w-full relative"
+                :class="darkMode ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-gray-50 border-gray-100 text-gray-700'"
+              >
+                <p class="text-[14px] leading-relaxed pr-24" :class="darkMode ? 'text-gray-300' : 'text-gray-700'">
                   {{ venue.address }}
                 </p>
-
+                <button
+                  v-if="mapEmbedUrl"
+                  type="button"
+                  class="absolute bottom-3 right-3 text-[12px] font-[700] text-[#007a67] uppercase hover:font-bold hover:underline"
+                  @click="showMapEmbed = !showMapEmbed"
+                >
+                  🗺️ {{ showMapEmbed ? t('hideMap') : t('showMap') }}
+                </button>
+              </div>
+              <div
+                v-if="mapEmbedUrl && showMapEmbed"
+                class="rounded-2xl overflow-hidden border aspect-video w-full"
+                :class="darkMode ? 'border-gray-700' : 'border-gray-200'"
+              >
+                <iframe
+                  :src="mapEmbedUrl"
+                  :title="`${venue.name} map`"
+                  loading="lazy"
+                  class="w-full h-full border-0"
+                  referrerpolicy="no-referrer-when-downgrade"
+                  allowfullscreen
+                />
               </div>
             </div>
             <!-- Desktop: membership -->
@@ -886,11 +1019,20 @@ watch(
             </button>
 
           </div>
-        </div>
+        </aside>
       </div>
     </div>
 
     <AppFooter :language="language" :t="t" :darkMode="darkMode" variant="inline" />
+
+    <VenueSeoSections
+      :venue="venue"
+      :language="language"
+      :dark-mode="darkMode"
+      :t="t"
+      :can-see-special-offer="canSeeSpecialOffer"
+      :sanitize-description="sanitizeDescription"
+    />
 
     <!-- Mobile: fixed bar – price + Join membership -->
     <div v-if="venue.startingPrice > 0" class="fixed bottom-0 left-0 right-0 z-50 p-4 border-t lg:hidden"

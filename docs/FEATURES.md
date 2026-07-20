@@ -67,7 +67,7 @@ Each venue page shows:
 | Navigation | Prev/next venue within current filter |
 | Save | Heart icon to save venue locally |
 
-**SEO**: dynamic meta tags and Open Graph per venue (`lib/venueOgMeta.js`).
+**SEO**: dynamic meta tags and Open Graph per venue (`lib/venueOgMeta.js`). After shipping public features, follow [SEO_AFTER_FEATURE.md](./SEO_AFTER_FEATURE.md).
 
 ### 2.3 Saved venues
 

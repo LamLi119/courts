@@ -1,8 +1,29 @@
-import type { Venue } from '../../types';
+import type { OperatingDayKey, OperatingHours, Venue } from '../../types';
+import {
+  getDistrictBySlug,
+  getDistrictDisplayName,
+  getRegionDisplayName,
+  getVenueDistrictSlug,
+  isValidDistrictSlug,
+  venueMatchesDistricts,
+} from './hkDistricts';
+import { flattenVenueSeoForMeta } from './venueContent';
 import { slugify } from './slugify';
 
-const SITE_NAME = 'Courts';
+const BRAND = 'Courts';
+const SITE_NAME = BRAND;
 const HK_DISTRICT_COUNT = 18;
+const PARENT_SITE = 'https://theground.io';
+const PARENT_SITE_WWW = 'https://www.theground.io';
+const OPERATING_DAY_SCHEMA: Record<OperatingDayKey, string> = {
+  mon: 'Monday',
+  tue: 'Tuesday',
+  wed: 'Wednesday',
+  thu: 'Thursday',
+  fri: 'Friday',
+  sat: 'Saturday',
+  sun: 'Sunday',
+};
 const DEFAULT_KEYWORDS =
   'pickleball courts hong kong, pickleball court hk, sports courts Hong Kong, court booking, Hong Kong 18 districts courts, 香港18區球場, 香港球場, 球場預訂, pickleball Hong Kong, 匹克球, 匹克球香港, pickleball 香港, pickleball 場地, 匹克球場地, 匹克球 租場, 匹克球場收費, Sha Tin courts, Kwun Tong pickleball, 沙田球場, 觀塘匹克球';
 
@@ -14,6 +35,14 @@ export type SportVenueCount = {
 };
 
 type SportOption = { name: string; name_zh?: string | null; slug: string };
+
+export const HOME_TITLE_EN = `${BRAND} | Find Sports Courts Across All ${HK_DISTRICT_COUNT} Hong Kong Districts`;
+export const HOME_TITLE_ZH = `運動場地搜尋 全港${HK_DISTRICT_COUNT}區 80+場館 | ${BRAND}`;
+const DEFAULT_TITLE = HOME_TITLE_EN;
+const DEFAULT_DESCRIPTION =
+  `Search sports courts across all ${HK_DISTRICT_COUNT} Hong Kong districts. Filter by district and sport, compare prices and amenities, and book in minutes. 搜尋香港18區運動場地。`;
+/** Default share preview image (home page). Use absolute URL so crawlers see it when sharing site URL. */
+const DEFAULT_OG_IMAGE_PATH = '/gray-G.png';
 
 /** Whether a venue supports the given sport slug (matches explore filter logic). */
 export function venueMatchesSportSlug(venue: Venue, sportSlug: string): boolean {
@@ -115,11 +144,117 @@ export function getVenueTitle(venue: Venue, lang: 'en' | 'zh' = 'en'): string {
   const sport = getSportTypeLabel(venue, lang);
   const mtr = cleanText(venue.mtrStation);
   const where = mtr ? ` in ${mtr}` : '';
-  return `${venue.name} | ${sport} Court${where} | ${SITE_NAME}`;
+  return `${venue.name} | ${sport} Court${where} | ${BRAND}`;
 }
 
-/** Meta description: booking + location + key attributes */
+function buildOrganizationLd(homeUrl: string): Record<string, unknown> {
+  const base = homeUrl.replace(/\/$/, '') || homeUrl;
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'Organization',
+    name: BRAND,
+    url: base.endsWith('/') ? base : `${base}/`,
+    logo: `${base.replace(/\/$/, '')}/gray-G.png`,
+    sameAs: [PARENT_SITE, PARENT_SITE_WWW],
+  };
+}
+
+function operatingHoursToSchema(venue: Venue): Record<string, unknown>[] | undefined {
+  if (!venue.operating_hours_enabled || !venue.operating_hours) return undefined;
+  const oh = venue.operating_hours as OperatingHours;
+  if (!oh?.weekly) return undefined;
+  const specs: Record<string, unknown>[] = [];
+  (Object.keys(OPERATING_DAY_SCHEMA) as OperatingDayKey[]).forEach((day) => {
+    const entry = oh.weekly[day];
+    if (!entry || entry.closed) return;
+    const slots = Array.isArray(entry.slots) ? entry.slots : [];
+    for (const slot of slots) {
+      const opens = cleanText(slot?.[0]);
+      const closes = cleanText(slot?.[1]);
+      if (!opens || !closes) continue;
+      specs.push({
+        '@type': 'OpeningHoursSpecification',
+        dayOfWeek: OPERATING_DAY_SCHEMA[day],
+        opens,
+        closes,
+      });
+    }
+  });
+  return specs.length ? specs : undefined;
+}
+
+function buildVenuePostalAddress(venue: Venue): Record<string, unknown> {
+  const districtSlug = getVenueDistrictSlug(venue);
+  const district = districtSlug ? getDistrictBySlug(districtSlug) : undefined;
+  const address: Record<string, unknown> = {
+    '@type': 'PostalAddress',
+    streetAddress: cleanText(venue.address) || undefined,
+    addressCountry: 'HK',
+  };
+  if (district) {
+    address.addressLocality = district.en;
+    address.addressRegion = getRegionDisplayName(district.region, 'en');
+  } else if (cleanText(venue.mtrStation)) {
+    address.addressLocality = cleanText(venue.mtrStation);
+    address.addressRegion = 'Hong Kong Island';
+  }
+  return address;
+}
+
+function buildVenueBreadcrumbLd(
+  venue: Venue,
+  pageUrl: string,
+  origin: string,
+): Record<string, unknown> {
+  const base = origin.replace(/\/$/, '');
+  const sportSlug = Array.isArray(venue.sport_data) && venue.sport_data[0]?.slug
+    ? String(venue.sport_data[0].slug)
+    : Array.isArray(venue.sport_types) && venue.sport_types[0]
+      ? slugify(String(venue.sport_types[0]))
+      : '';
+  const sportLabel = getSportTypeLabel(venue, 'en');
+  const items: Record<string, unknown>[] = [
+    { '@type': 'ListItem', position: 1, name: 'Home', item: `${base}/` },
+  ];
+  if (sportSlug) {
+    items.push({
+      '@type': 'ListItem',
+      position: 2,
+      name: sportLabel,
+      item: `${base}/search/${sportSlug}`,
+    });
+    items.push({
+      '@type': 'ListItem',
+      position: 3,
+      name: venue.name,
+      item: pageUrl,
+    });
+  } else {
+    items.push({
+      '@type': 'ListItem',
+      position: 2,
+      name: 'Explore',
+      item: `${base}/explore`,
+    });
+    items.push({
+      '@type': 'ListItem',
+      position: 3,
+      name: venue.name,
+      item: pageUrl,
+    });
+  }
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: items,
+  };
+}
+
+/** Meta description: venue SEO prose (hidden on-page) with short booking fallback. */
 export function getVenueDescription(venue: Venue, lang: 'en' | 'zh' = 'en'): string {
+  const rich = flattenVenueSeoForMeta(venue, lang, 320);
+  if (rich) return rich;
+
   const sport = getSportTypeLabel(venue, lang);
   const mtr = cleanText(venue.mtrStation);
   const exit = cleanText(venue.mtrExit);
@@ -127,7 +262,7 @@ export function getVenueDescription(venue: Venue, lang: 'en' | 'zh' = 'en'): str
   const walkingDistance = numOrNull((venue as any).walkingDistance);
   const wd = walkingDistance != null && walkingDistance > 0 ? `${walkingDistance} min walk` : '';
   const mtrPart = mtr ? `near ${mtr}${exit ? ` (${exit})` : ''}` : '';
-  const where =  mtrPart ? ` in ${mtrPart}` : '';
+  const where = mtrPart ? ` in ${mtrPart}` : '';
   const courtCount = numOrNull((venue as any).court_count);
   const courts = courtCount != null && courtCount > 0 ? `${courtCount} courts` : '';
   const ceilingHeight = numOrNull((venue as any).ceilingHeight);
@@ -135,7 +270,6 @@ export function getVenueDescription(venue: Venue, lang: 'en' | 'zh' = 'en'): str
   const startingPrice = numOrNull((venue as any).startingPrice);
   const price = startingPrice != null && startingPrice > 0 ? `Starting from $${startingPrice}/hr` : '';
   const contact = cleanText(venue.whatsapp) ? 'WhatsApp to book' : '';
-
 
   const parts = [
     `Book ${venue.name}${where}.`,
@@ -208,12 +342,6 @@ function getReadableCurrentUrl(): string {
   }
 }
 
-const DEFAULT_TITLE = `Courts | Find Sports Courts in All ${HK_DISTRICT_COUNT} Hong Kong Districts`;
-const DEFAULT_DESCRIPTION =
-  `Search sports courts across all ${HK_DISTRICT_COUNT} Hong Kong districts. Filter by district and sport, compare prices and amenities, and book in minutes. 搜尋香港18區運動場地。`;
-/** Default share preview image (home page). Use absolute URL so crawlers see it when sharing site URL. */
-const DEFAULT_OG_IMAGE_PATH = '/gray-G.png';
-
 /** Apply dynamic meta and OG tags for a venue (detail page). Call when venue is shown. */
 export function applyVenueSeo(venue: Venue, baseUrl: string, lang: 'en' | 'zh' = 'en'): void {
   const title = getVenueTitle(venue, lang);
@@ -266,13 +394,18 @@ export function applyLandingPageSeo(
   const homeUrl = origin ? `${origin}/` : (baseUrl || '');
   const defaultImageUrl = origin ? new URL(DEFAULT_OG_IMAGE_PATH, origin).href : '';
 
-  const title = lang === 'zh'
-    ? `Courts`
-    : `Courts`;
+  const title = lang === 'zh' ? HOME_TITLE_ZH : HOME_TITLE_EN;
 
-  const description = lang === 'zh'
-    ? `搜尋香港全部${HK_DISTRICT_COUNT}區運動場地，共${total}個場館${sportSummary ? `。${sportSummary}` : ''}。可搜尋所有地區或按區篩選，比較收費，快速預訂。`
-    : `Search sports courts across all ${HK_DISTRICT_COUNT} Hong Kong districts. ${total}+ venues${sportSummary ? `: ${sportSummary}` : ''}. Filter by district and sport, compare prices, and book in minutes.`;
+  const aboutMeta = lang === 'zh'
+    ? 'Courts by The Ground 是香港運動場地目錄，資料來自營運商提交及編輯覆核。可按地區、運動類型及港鐵站搜尋場地，再聯絡場館預訂。'
+    : 'Courts by The Ground is a Hong Kong sports-venue directory curated from operator-submitted and editor-reviewed details. Find courts by district, sport, and MTR — then contact venues to book.';
+
+  const descriptionRaw = lang === 'zh'
+    ? `搜尋香港全部${HK_DISTRICT_COUNT}區運動場地，共${total}個場館${sportSummary ? `。${sportSummary}` : ''}。可搜尋所有地區或按區篩選，比較收費，快速預訂。${aboutMeta}`
+    : `Search sports courts across all ${HK_DISTRICT_COUNT} Hong Kong districts. ${total}+ venues${sportSummary ? `: ${sportSummary}` : ''}. Filter by district and sport, compare prices, and book in minutes. ${aboutMeta}`;
+  const description = descriptionRaw.length > 320
+    ? `${descriptionRaw.slice(0, 319).replace(/\s+\S*$/, '').trimEnd()}…`
+    : descriptionRaw;
 
   const keywords = buildLandingKeywords(sportCounts);
 
@@ -298,6 +431,59 @@ export function applyLandingPageSeo(
   }
 
   injectLandingJsonLd({ total, sportCounts, homeUrl, lang });
+}
+
+/** Explore page SEO with CollectionPage + ItemList of venues. */
+export function applyExplorePageSeo(
+  venues: Venue[],
+  lang: 'en' | 'zh' = 'en',
+  baseUrl?: string,
+): void {
+  const origin = typeof window !== 'undefined' ? window.location.origin : (baseUrl || '').replace(/\/$/, '');
+  const pageUrl = origin ? `${origin}/explore` : `${baseUrl || ''}/explore`;
+  const defaultImageUrl = origin ? new URL(DEFAULT_OG_IMAGE_PATH, origin).href : '';
+  const total = venues.length;
+
+  const title = lang === 'zh'
+    ? `探索全港${HK_DISTRICT_COUNT}區運動場地 | ${BRAND}`
+    : `Explore Sports Courts Across Hong Kong | ${BRAND}`;
+  const description = lang === 'zh'
+    ? `在地圖或列表中瀏覽香港${total}+個運動場館，按地區、運動類型及港鐵站篩選。`
+    : `Browse ${total}+ Hong Kong sports venues on map or list. Filter by district, sport, and MTR station.`;
+
+  document.title = title;
+  setMeta('description', description);
+  setMeta('keywords', DEFAULT_KEYWORDS);
+  if (pageUrl) setCanonical(pageUrl);
+
+  setOgTag('og:title', title);
+  setOgTag('og:description', description);
+  setOgTag('og:type', 'website');
+  if (pageUrl) setOgTag('og:url', pageUrl);
+  setOgTag('og:site_name', SITE_NAME);
+
+  setMeta('twitter:card', 'summary_large_image');
+  setMeta('twitter:title', title);
+  setMeta('twitter:description', description);
+  if (pageUrl) setMeta('twitter:url', pageUrl);
+  if (defaultImageUrl) {
+    setOgTag('og:image', defaultImageUrl);
+    setMeta('twitter:image', defaultImageUrl);
+  }
+
+  injectListingJsonLd({
+    pageUrl,
+    title,
+    description,
+    listName: lang === 'zh' ? '香港運動場地列表' : 'Hong Kong sports venues',
+    venues,
+    origin: origin || (baseUrl || '').replace(/\/$/, ''),
+    marker: 'data-seo-listing',
+    breadcrumbItems: [
+      { name: 'Home', url: `${(origin || '').replace(/\/$/, '')}/` },
+      { name: lang === 'zh' ? '探索' : 'Explore', url: pageUrl },
+    ],
+  });
 }
 
 /** Reset to default meta when leaving venue detail. */
@@ -330,12 +516,33 @@ export function resetSeoToDefault(baseUrl?: string): void {
 }
 
 /** Category page SEO: /search/:sport */
-export function applySearchPageSeo(sportSlug: string, baseUrl?: string): void {
-  const sport = sportSlug.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-  const title = `${sport} Courts Hong Kong | ${SITE_NAME}`;
-  const description = `Find ${sport.toLowerCase()} courts near MTR stations. Compare prices, amenities, and book today.`;
+export function applySearchPageSeo(
+  sportSlug: string,
+  venues: Venue[] = [],
+  sports: SportOption[] = [],
+  lang: 'en' | 'zh' = 'en',
+  baseUrl?: string,
+): void {
+  const origin = typeof window !== 'undefined' ? window.location.origin : (baseUrl || '').replace(/\/$/, '');
+  const sportMeta = sports.find((s) => s.slug === sportSlug);
+  const sport = sportMeta
+    ? sportLabel({ slug: sportMeta.slug, name: sportMeta.name, name_zh: sportMeta.name_zh, count: 0 }, lang)
+    : sportSlug.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  const filtered = venues.filter((v) => venueMatchesSportSlug(v, sportSlug));
+  const total = filtered.length;
+  const title = lang === 'zh'
+    ? `${sport}場地 香港 | ${BRAND}`
+    : `${sport} Courts Hong Kong | ${BRAND}`;
+  const description = lang === 'zh'
+    ? `搜尋香港${sport}場地，共${total}個場館。比較收費、設施及港鐵步行距離，快速預訂。`
+    : `Find ${sport.toLowerCase()} courts in Hong Kong (${total} venues). Compare prices, amenities, and MTR walking distance.`;
   const keywords = uniqueCsv([`${sport} courts hong kong`, `${sport} court hk`, `${sport} courts near mtr`, DEFAULT_KEYWORDS]);
-  const searchUrl = typeof window !== 'undefined' ? window.location.href : `${baseUrl || ''}/search/${sportSlug}`;
+  const searchUrl = origin
+    ? `${origin}/search/${sportSlug}`
+    : typeof window !== 'undefined'
+      ? window.location.href
+      : `${baseUrl || ''}/search/${sportSlug}`;
+  const defaultImageUrl = origin ? new URL(DEFAULT_OG_IMAGE_PATH, origin).href : '';
 
   document.title = title;
   setMeta('description', description);
@@ -346,12 +553,102 @@ export function applySearchPageSeo(sportSlug: string, baseUrl?: string): void {
   setOgTag('og:description', description);
   setOgTag('og:type', 'website');
   if (searchUrl) setOgTag('og:url', searchUrl);
+  setOgTag('og:site_name', SITE_NAME);
 
   setMeta('twitter:title', title);
   setMeta('twitter:description', description);
   if (searchUrl) setMeta('twitter:url', searchUrl);
+  if (defaultImageUrl) {
+    setOgTag('og:image', defaultImageUrl);
+    setMeta('twitter:image', defaultImageUrl);
+  }
 
-  removeJsonLd();
+  injectListingJsonLd({
+    pageUrl: searchUrl,
+    title,
+    description,
+    listName: lang === 'zh' ? `香港${sport}場地` : `${sport} courts in Hong Kong`,
+    venues: filtered,
+    origin: origin || (baseUrl || '').replace(/\/$/, ''),
+    marker: 'data-seo-listing',
+    breadcrumbItems: [
+      { name: 'Home', url: `${(origin || '').replace(/\/$/, '')}/` },
+      { name: sport, url: searchUrl },
+    ],
+  });
+}
+
+/** District × sport landing SEO: /search/:sport/:district */
+export function applyDistrictSportPageSeo(
+  sportSlug: string,
+  districtSlug: string,
+  venues: Venue[] = [],
+  sports: SportOption[] = [],
+  lang: 'en' | 'zh' = 'en',
+  baseUrl?: string,
+): void {
+  const origin = typeof window !== 'undefined' ? window.location.origin : (baseUrl || '').replace(/\/$/, '');
+  const base = origin || (baseUrl || '').replace(/\/$/, '');
+  const sportMeta = sports.find((s) => s.slug === sportSlug);
+  const sport = sportMeta
+    ? sportLabel({ slug: sportMeta.slug, name: sportMeta.name, name_zh: sportMeta.name_zh, count: 0 }, lang)
+    : sportSlug.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  const districtName = isValidDistrictSlug(districtSlug)
+    ? getDistrictDisplayName(districtSlug, lang)
+    : districtSlug.replace(/-/g, ' ');
+  const filtered = venues.filter(
+    (v) => venueMatchesSportSlug(v, sportSlug) && venueMatchesDistricts(v, [districtSlug]),
+  );
+  const total = filtered.length;
+  const title = lang === 'zh'
+    ? `${districtName}${sport}場地 | ${BRAND}`
+    : `${sport} Courts in ${districtName} | ${BRAND}`;
+  const description = lang === 'zh'
+    ? `搜尋${districtName}${sport}場地，共${total}個場館。比較收費、設施及港鐵步行距離，快速預訂。`
+    : `Find ${sport.toLowerCase()} courts in ${districtName}, Hong Kong (${total} venues). Compare prices, amenities, and MTR walking distance.`;
+  const keywords = uniqueCsv([
+    `${sport} courts ${districtName}`,
+    `${districtName} ${sport}`,
+    `${sport} courts hong kong`,
+    DEFAULT_KEYWORDS,
+  ]);
+  const pageUrl = base ? `${base}/search/${sportSlug}/${districtSlug}` : '';
+  const sportUrl = base ? `${base}/search/${sportSlug}` : '';
+  const defaultImageUrl = origin ? new URL(DEFAULT_OG_IMAGE_PATH, origin).href : '';
+
+  document.title = title;
+  setMeta('description', description);
+  setMeta('keywords', keywords);
+  if (pageUrl) setCanonical(pageUrl);
+
+  setOgTag('og:title', title);
+  setOgTag('og:description', description);
+  setOgTag('og:type', 'website');
+  if (pageUrl) setOgTag('og:url', pageUrl);
+  setOgTag('og:site_name', SITE_NAME);
+
+  setMeta('twitter:title', title);
+  setMeta('twitter:description', description);
+  if (pageUrl) setMeta('twitter:url', pageUrl);
+  if (defaultImageUrl) {
+    setOgTag('og:image', defaultImageUrl);
+    setMeta('twitter:image', defaultImageUrl);
+  }
+
+  injectListingJsonLd({
+    pageUrl,
+    title,
+    description,
+    listName: lang === 'zh' ? `${districtName}${sport}場地` : `${sport} courts in ${districtName}`,
+    venues: filtered,
+    origin: base,
+    marker: 'data-seo-listing',
+    breadcrumbItems: [
+      { name: 'Home', url: `${base}/` },
+      { name: sport, url: sportUrl },
+      { name: districtName, url: pageUrl },
+    ],
+  });
 }
 
 /** Schema.org SportsActivityLocation JSON-LD */
@@ -364,31 +661,38 @@ function injectVenueJsonLd(venue: Venue, baseUrl: string): void {
     typeof window !== 'undefined'
       ? getReadableCurrentUrl()
       : `${baseUrl.replace(/\/$/, '')}/venues/${slugify(venue.name)}`;
+  const origin = typeof window !== 'undefined' ? window.location.origin : baseUrl.replace(/\/$/, '');
 
   const jsonLd: Record<string, unknown> = {
     '@context': 'https://schema.org',
     '@type': 'SportsActivityLocation',
     name: venue.name,
     url: pageUrl,
-    address: {
-      '@type': 'PostalAddress',
-      streetAddress: venue.address,
-      addressLocality: cleanText(venue.mtrStation) || undefined,
-      addressRegion: 'Hong Kong'
-    },
+    address: buildVenuePostalAddress(venue),
     image: imageUrl ? [imageUrl] : undefined,
-    priceRange: venue.startingPrice ? `$${venue.startingPrice}` : undefined,
+    priceRange: venue.startingPrice
+      ? `HK$${venue.startingPrice}`
+      : undefined,
   };
+  const hoursSpec = operatingHoursToSchema(venue);
+  if (hoursSpec) {
+    jsonLd.openingHoursSpecification = hoursSpec;
+  }
   if (venue.whatsapp) {
     jsonLd.telephone = venue.whatsapp.replace(/[^0-9+]/g, '');
   }
-  const extra: string[] = [];
-  if (cleanText(venue.mtrStation)) extra.push(`MTR: ${cleanText(venue.mtrStation)}${cleanText(venue.mtrExit) ? ` (${cleanText(venue.mtrExit)})` : ''}`);
-  if (typeof venue.walkingDistance === 'number' && venue.walkingDistance > 0) extra.push(`Walking distance: ${venue.walkingDistance} min`);
-  if (typeof venue.ceilingHeight === 'number' && venue.ceilingHeight > 0) extra.push(`Ceiling height: ${venue.ceilingHeight} m`);
-  if (venue.court_count != null && venue.court_count > 0) extra.push(`Court count: ${venue.court_count}`);
-  if (extra.length) {
-    (jsonLd as Record<string, unknown>).description = `${sport} venue. ` + extra.join(' · ');
+  const richDescription = flattenVenueSeoForMeta(venue, 'en', 500);
+  if (richDescription) {
+    jsonLd.description = richDescription;
+  } else {
+    const extra: string[] = [];
+    if (cleanText(venue.mtrStation)) extra.push(`MTR: ${cleanText(venue.mtrStation)}${cleanText(venue.mtrExit) ? ` (${cleanText(venue.mtrExit)})` : ''}`);
+    if (typeof venue.walkingDistance === 'number' && venue.walkingDistance > 0) extra.push(`Walking distance: ${venue.walkingDistance} min`);
+    if (typeof venue.ceilingHeight === 'number' && venue.ceilingHeight > 0) extra.push(`Ceiling height: ${venue.ceilingHeight} m`);
+    if (venue.court_count != null && venue.court_count > 0) extra.push(`Court count: ${venue.court_count}`);
+    if (extra.length) {
+      jsonLd.description = `${sport} venue. ` + extra.join(' · ');
+    }
   }
   if (venue.coordinates?.lat != null && venue.coordinates?.lng != null) {
     (jsonLd as Record<string, unknown>).geo = {
@@ -398,11 +702,36 @@ function injectVenueJsonLd(venue: Venue, baseUrl: string): void {
     };
   }
 
-  const script = document.createElement('script');
-  script.type = 'application/ld+json';
-  script.textContent = JSON.stringify(jsonLd);
-  script.setAttribute('data-seo-venue', '1');
-  document.head.appendChild(script);
+  // AggregateRating only when real review data exists (Phase 4 — never fabricate).
+  const ratingValue = numOrNull(venue.rating_value);
+  const reviewCount = numOrNull(venue.review_count);
+  if (
+    ratingValue != null
+    && reviewCount != null
+    && ratingValue >= 1
+    && ratingValue <= 5
+    && reviewCount >= 1
+  ) {
+    jsonLd.aggregateRating = {
+      '@type': 'AggregateRating',
+      ratingValue,
+      reviewCount,
+      bestRating: 5,
+      worstRating: 1,
+    };
+  }
+
+  const venueScript = document.createElement('script');
+  venueScript.type = 'application/ld+json';
+  venueScript.textContent = JSON.stringify(jsonLd);
+  venueScript.setAttribute('data-seo-venue', '1');
+  document.head.appendChild(venueScript);
+
+  const crumbScript = document.createElement('script');
+  crumbScript.type = 'application/ld+json';
+  crumbScript.textContent = JSON.stringify(buildVenueBreadcrumbLd(venue, pageUrl, origin));
+  crumbScript.setAttribute('data-seo-breadcrumb', '1');
+  document.head.appendChild(crumbScript);
 }
 
 function injectLandingJsonLd({
@@ -418,6 +747,7 @@ function injectLandingJsonLd({
 }): void {
   removeJsonLd();
 
+  const orgLd = buildOrganizationLd(homeUrl);
   const websiteLd: Record<string, unknown> = {
     '@context': 'https://schema.org',
     '@type': 'WebSite',
@@ -426,12 +756,14 @@ function injectLandingJsonLd({
     description: lang === 'zh'
       ? `搜尋香港${HK_DISTRICT_COUNT}區運動場地，共${total}個場館。`
       : `Search ${total}+ sports venues across all ${HK_DISTRICT_COUNT} Hong Kong districts.`,
+    publisher: { '@id': `${homeUrl.replace(/\/$/, '')}/#organization` },
     potentialAction: {
       '@type': 'SearchAction',
       target: `${homeUrl.replace(/\/$/, '')}/explore`,
       'query-input': 'required name=search_term_string',
     },
   };
+  orgLd['@id'] = `${homeUrl.replace(/\/$/, '')}/#organization`;
 
   const itemListLd: Record<string, unknown> = {
     '@context': 'https://schema.org',
@@ -449,7 +781,7 @@ function injectLandingJsonLd({
     })),
   };
 
-  for (const payload of [websiteLd, itemListLd]) {
+  for (const payload of [orgLd, websiteLd, itemListLd]) {
     const script = document.createElement('script');
     script.type = 'application/ld+json';
     script.textContent = JSON.stringify(payload);
@@ -458,7 +790,76 @@ function injectLandingJsonLd({
   }
 }
 
+function injectListingJsonLd({
+  pageUrl,
+  title,
+  description,
+  listName,
+  venues,
+  origin,
+  marker,
+  breadcrumbItems,
+}: {
+  pageUrl: string;
+  title: string;
+  description: string;
+  listName: string;
+  venues: Venue[];
+  origin: string;
+  marker: 'data-seo-listing';
+  breadcrumbItems?: { name: string; url: string }[];
+}): void {
+  removeJsonLd();
+  const base = origin.replace(/\/$/, '');
+  const collectionLd: Record<string, unknown> = {
+    '@context': 'https://schema.org',
+    '@type': 'CollectionPage',
+    name: title,
+    url: pageUrl,
+    description,
+    isPartOf: { '@type': 'WebSite', name: SITE_NAME, url: `${base}/` },
+  };
+  const itemListLd: Record<string, unknown> = {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    name: listName,
+    numberOfItems: venues.length,
+    itemListElement: venues.slice(0, 80).map((venue, index) => ({
+      '@type': 'ListItem',
+      position: index + 1,
+      name: venue.name,
+      url: `${base}/venues/${slugify(venue.name)}`,
+    })),
+  };
+
+  const payloads: Record<string, unknown>[] = [collectionLd, itemListLd];
+  if (breadcrumbItems && breadcrumbItems.length > 0) {
+    payloads.push({
+      '@context': 'https://schema.org',
+      '@type': 'BreadcrumbList',
+      itemListElement: breadcrumbItems.map((item, index) => ({
+        '@type': 'ListItem',
+        position: index + 1,
+        name: item.name,
+        item: item.url,
+      })),
+    });
+  }
+
+  for (const payload of payloads) {
+    const script = document.createElement('script');
+    script.type = 'application/ld+json';
+    script.textContent = JSON.stringify(payload);
+    script.setAttribute(marker, '1');
+    document.head.appendChild(script);
+  }
+}
+
 function removeJsonLd(): void {
-  document.querySelectorAll('script[data-seo-venue="1"], script[data-seo-landing="1"]').forEach((el) => el.remove());
+  document
+    .querySelectorAll(
+      'script[data-seo-venue="1"], script[data-seo-landing="1"], script[data-seo-listing="1"], script[data-seo-breadcrumb="1"]',
+    )
+    .forEach((el) => el.remove());
 }
 

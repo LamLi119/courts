@@ -4,8 +4,14 @@ import { defineConfig, loadEnv } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
-import { buildVenueOgMeta, injectVenueOgIntoHtml } from './lib/venueOgMeta.js';
+import { buildVenueOgMeta, injectPageSeoIntoHtml } from './lib/venueOgMeta.js';
 import { injectLastModified } from './lib/injectLastModified.js';
+import {
+  buildExplorePageMeta,
+  buildHomePageMeta,
+  buildSearchPageMeta,
+  buildDistrictSportPageMeta,
+} from './lib/pageSeoMeta.js';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
@@ -100,47 +106,105 @@ export default defineConfig(({ mode }) => {
             'http://localhost:3001'
           ).replace(/\/$/, '');
 
+          const readBootstrap = () => {
+            try {
+              const bootstrapPath = path.resolve(server.config.root, 'public/venues-bootstrap.json');
+              if (!fs.existsSync(bootstrapPath)) return { venues: [], sports: [] };
+              const data = JSON.parse(fs.readFileSync(bootstrapPath, 'utf-8'));
+              return {
+                venues: Array.isArray(data.venues) ? data.venues : [],
+                sports: Array.isArray(data.sports) ? data.sports : [],
+              };
+            } catch {
+              return { venues: [], sports: [] };
+            }
+          };
+
           server.middlewares.use(async (req, res, next) => {
             if (req.method !== 'GET' || !req.url) return next();
             const pathname = decodeURIComponent(req.url.split('?')[0]);
-            if (!pathname.startsWith('/venues/')) return next();
-            const slug = pathname.slice('/venues/'.length).replace(/\/$/, '').split('/')[0];
-            if (!slug) return next();
-
             const indexPath = path.resolve(server.config.root, 'index.html');
+            const host = (req.headers.host || `localhost:${server.config.server?.port ?? 3000}`).toString();
+            const origin = `http://${host}`;
             const sendHtml = (html: string) => {
               res.setHeader('Content-Type', 'text/html; charset=utf-8');
               res.end(html);
             };
+
+            const injectAndSend = async (meta: Parameters<typeof injectPageSeoIntoHtml>[1]) => {
+              try {
+                let html = fs.readFileSync(indexPath, 'utf-8');
+                html = await server.transformIndexHtml(pathname || '/', html);
+                sendHtml(injectLastModified(injectPageSeoIntoHtml(html, meta)));
+              } catch (err) {
+                next(err);
+              }
+            };
+
+            if (pathname === '/' || pathname === '') {
+              const { venues, sports } = readBootstrap();
+              return void injectAndSend(buildHomePageMeta({ venues, sports, origin, lang: 'en' }));
+            }
+
+            if (pathname === '/explore') {
+              const { venues } = readBootstrap();
+              return void injectAndSend(buildExplorePageMeta({ venues, origin, lang: 'en' }));
+            }
+
+            if (pathname.startsWith('/search/')) {
+              const parts = pathname.slice('/search/'.length).replace(/\/$/, '').split('/').filter(Boolean);
+              const sportSlug = parts[0];
+              const districtSlug = parts[1];
+              if (sportSlug && districtSlug) {
+                const { venues, sports } = readBootstrap();
+                return void injectAndSend(
+                  buildDistrictSportPageMeta({
+                    sportSlug,
+                    districtSlug,
+                    venues,
+                    sports,
+                    origin,
+                    lang: 'en',
+                  })
+                );
+              }
+              if (sportSlug) {
+                const { venues, sports } = readBootstrap();
+                return void injectAndSend(
+                  buildSearchPageMeta({ sportSlug, venues, sports, origin, lang: 'en' })
+                );
+              }
+            }
+
+            if (!pathname.startsWith('/venues/')) return next();
+            const slug = pathname.slice('/venues/'.length).replace(/\/$/, '').split('/')[0];
+            if (!slug) return next();
 
             try {
               const r = await fetch(
                 `${apiBase}/api/venues/slug/${encodeURIComponent(slug)}`
               );
               if (!r.ok) {
-                return fs.readFile(indexPath, 'utf-8', (err, html) => {
-                  if (err) return next(err);
-                  sendHtml(injectLastModified(html));
-                });
+                let html = fs.readFileSync(indexPath, 'utf-8');
+                html = await server.transformIndexHtml(pathname, html);
+                return sendHtml(injectLastModified(html));
               }
               const venue = await r.json();
-              const host = (req.headers.host || `localhost:${server.config.server?.port ?? 3000}`).toString();
-              const origin = `http://${host}`;
               const pageUrl = new URL(pathname, `${origin}/`).href;
               const meta = buildVenueOgMeta(venue, {
                 pageUrl,
                 origin,
                 lang: 'en',
               });
-              fs.readFile(indexPath, 'utf-8', (err, html) => {
-                if (err) return next(err);
-                sendHtml(injectLastModified(injectVenueOgIntoHtml(html, meta)));
-              });
+              return void injectAndSend(meta);
             } catch {
-              return fs.readFile(indexPath, 'utf-8', (err, html) => {
-                if (err) return next(err);
+              try {
+                let html = fs.readFileSync(indexPath, 'utf-8');
+                html = await server.transformIndexHtml(pathname, html);
                 sendHtml(injectLastModified(html));
-              });
+              } catch (err) {
+                next(err);
+              }
             }
           });
 

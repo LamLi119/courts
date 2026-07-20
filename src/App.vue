@@ -4,9 +4,9 @@ import { useRoute, useRouter } from 'vue-router';
 import type { Venue, Language, AppTab } from '../types';
 import { translate } from './utils/translations';
 import { getStationCanonicalEn } from './utils/mtrStations';
-import { venueMatchesDistricts } from './utils/hkDistricts';
+import { venueMatchesDistricts, isValidDistrictSlug } from './utils/hkDistricts';
 import { slugify } from './utils/slugify';
-import { resetSeoToDefault, applySearchPageSeo, applyLandingPageSeo } from './utils/seo';
+import { resetSeoToDefault, applySearchPageSeo, applyDistrictSportPageSeo, applyLandingPageSeo, applyExplorePageSeo } from './utils/seo';
 import { useVenueSlug } from './router';
 import { db } from '../db';
 import Header from './components/layout/Header.vue';
@@ -23,6 +23,7 @@ import UpcomingEventsPage from './components/venue/UpcomingEventsPage.vue';
 import VenueForm from './components/admin/VenueForm.vue';
 import AdminPage from './components/admin/AdminPage.vue';
 import LandingPage from './components/landing/LandingPage.vue';
+import AboutPage from './components/about/AboutPage.vue';
 import { useAuth } from './composables/auth';
 import { useIsMobile } from './composables/useIsMobile';
 import { useGrindUpcomingEvents } from './composables/useGrindUpcomingEvents';
@@ -30,6 +31,7 @@ import {
   hydrateInitialVenueData,
   setVenuesCache,
 } from './utils/venuesBootstrap';
+import { courtApiUrl } from './utils/courtApiUrl';
 
 const initialVenueData = hydrateInitialVenueData();
 
@@ -147,25 +149,74 @@ function resolveVenueBySlug(slug: string): Venue | null {
 }
 
 watch(
-  () => ({ name: route.name, slug: route.params.slug, sport: route.params.sport }),
+  () => ({
+    name: route.name,
+    slug: route.params.slug,
+    sport: route.params.sport,
+    district: route.params.district,
+  }),
   (params, prev) => {
     if (route.name === 'venue' && typeof route.params.slug === 'string') {
       const venue = resolveVenueBySlug(route.params.slug);
       selectedVenue.value = venue;
       showDesktopDetail.value = !!venue;
       if (!venue && venues.value.length > 0) router.replace('/');
-    } else if (route.name === 'search' && typeof route.params.sport === 'string') {
+    } else if (
+      route.name === 'search-district'
+      && typeof route.params.sport === 'string'
+      && typeof route.params.district === 'string'
+    ) {
+      const district = route.params.district;
+      if (!isValidDistrictSlug(district)) {
+        router.replace(`/search/${route.params.sport}`);
+        return;
+      }
       sportFilter.value = [route.params.sport];
+      districtFilter.value = [district];
       selectedVenue.value = null;
       showDesktopDetail.value = false;
-      applySearchPageSeo(route.params.sport);
+      applyDistrictSportPageSeo(
+        route.params.sport,
+        district,
+        venues.value,
+        sports.value,
+        language.value,
+      );
+    } else if (route.name === 'search' && typeof route.params.sport === 'string') {
+      sportFilter.value = [route.params.sport];
+      districtFilter.value = [];
+      selectedVenue.value = null;
+      showDesktopDetail.value = false;
+      applySearchPageSeo(route.params.sport, venues.value, sports.value, language.value);
     } else if (route.name === 'explore') {
       selectedVenue.value = null;
       showDesktopDetail.value = false;
-      resetSeoToDefault();
+      if (venues.value.length > 0) {
+        applyExplorePageSeo(venues.value, language.value);
+      } else {
+        resetSeoToDefault();
+      }
+    } else if (route.name === 'about') {
+      selectedVenue.value = null;
+      showDesktopDetail.value = false;
+      const aboutTitle = language.value === 'zh'
+        ? '關於 Courts by The Ground | Courts'
+        : 'About Courts by The Ground | Courts';
+      const aboutDesc = language.value === 'zh'
+        ? '了解 Courts by The Ground 如何整理香港運動場地資料、編輯方法及聯絡方式。'
+        : 'Learn how Courts by The Ground curates Hong Kong sports venues, our methodology, and how to contact us.';
+      document.title = aboutTitle;
+      const descEl = document.querySelector('meta[name="description"]');
+      if (descEl) descEl.setAttribute('content', aboutDesc);
+      const canonical = document.querySelector('link[rel="canonical"]');
+      if (canonical && typeof window !== 'undefined') {
+        canonical.setAttribute('href', `${window.location.origin}/about`);
+      }
     } else if (route.name === 'home' || route.name === 'admin') {
       if (route.name === 'home') {
+        currentTab.value = 'explore';
         sportFilter.value = [];
+        districtFilter.value = [];
         mtrFilter.value = [];
         distanceFilter.value = '';
         filterSpecialOffer.value = false;
@@ -175,6 +226,8 @@ watch(
         if (venues.value.length > 0) {
           applyLandingPageSeo(venues.value, sports.value, language.value);
         }
+      } else {
+        currentTab.value = 'admin';
       }
     }
   },
@@ -194,6 +247,25 @@ watch(
     if (route.name === 'home' && venues.value.length > 0) {
       applyLandingPageSeo(venues.value, sports.value, language.value);
     }
+    if (route.name === 'explore' && venues.value.length > 0) {
+      applyExplorePageSeo(venues.value, language.value);
+    }
+    if (route.name === 'search' && typeof route.params.sport === 'string') {
+      applySearchPageSeo(route.params.sport, venues.value, sports.value, language.value);
+    }
+    if (
+      route.name === 'search-district'
+      && typeof route.params.sport === 'string'
+      && typeof route.params.district === 'string'
+    ) {
+      applyDistrictSportPageSeo(
+        route.params.sport,
+        route.params.district,
+        venues.value,
+        sports.value,
+        language.value,
+      );
+    }
   }
 );
 
@@ -203,13 +275,37 @@ watch(
     if (route.name === 'home' && venues.value.length > 0) {
       applyLandingPageSeo(venues.value, sports.value, language.value);
     }
+    if (route.name === 'about') {
+      document.title = language.value === 'zh'
+        ? '關於 Courts by The Ground | Courts'
+        : 'About Courts by The Ground | Courts';
+    }
+    if (route.name === 'explore' && venues.value.length > 0) {
+      applyExplorePageSeo(venues.value, language.value);
+    }
+    if (route.name === 'search' && typeof route.params.sport === 'string') {
+      applySearchPageSeo(route.params.sport, venues.value, sports.value, language.value);
+    }
+    if (
+      route.name === 'search-district'
+      && typeof route.params.sport === 'string'
+      && typeof route.params.district === 'string'
+    ) {
+      applyDistrictSportPageSeo(
+        route.params.sport,
+        route.params.district,
+        venues.value,
+        sports.value,
+        language.value,
+      );
+    }
   }
 );
 
 watch(
   () => sports.value,
   () => {
-    if (route.name === 'search') return;
+    if (route.name === 'search' || route.name === 'search-district') return;
     if (sportFilter.value.length > 0) return;
     applyDefaultSportFilter();
   },
@@ -219,7 +315,7 @@ watch(
 watch(
   () => venues.value.length,
   () => {
-    if (route.name === 'search') return;
+    if (route.name === 'search' || route.name === 'search-district') return;
     if (sportFilter.value.length > 0) return;
     applyDefaultSportFilter();
   }
@@ -249,12 +345,19 @@ onMounted(() => {
   (window as any).__adminPopState = onPopState;
 
   const restoreAdminSession = async () => {
+    // Avoid a guaranteed 401 for anonymous visitors (no admin cookie).
+    const hasAdminCookie =
+      typeof document !== 'undefined' &&
+      document.cookie.split(';').some((c) => c.trim().startsWith('courts_admin_session='));
+    if (!hasAdminCookie) {
+      adminStatus.value = { type: 'none', allowedIds: [] };
+      return;
+    }
     try {
-      const API_BASE = import.meta.env.VITE_API_URL ?? '';
-      const base = API_BASE.replace(/\/$/, '');
-      const res = await fetch(`${base}/api/auth/session`, { method: 'GET', credentials: 'include' });
+      const res = await fetch(courtApiUrl('/api/auth/session'), { method: 'GET', credentials: 'include' });
       if (!res.ok) throw new Error('No admin session');
       const data = await res.json();
+      if (!data?.type || data.type === 'none') throw new Error('No admin session');
       adminStatus.value = { type: data.type === 'super' ? 'super' : 'court', allowedIds: data.allowedVenueIds || [] };
       if (isAdminPath()) currentTab.value = 'admin';
     } catch {
@@ -352,14 +455,21 @@ const clearFilters = () => {
   locationVenueIds.value = null;
 };
 
+async function readApiErrorMessage(res: Response): Promise<string> {
+  try {
+    const data = await res.json();
+    if (data && typeof data.error === 'string' && data.error.trim()) return data.error.trim();
+  } catch {
+    // ignore non-JSON
+  }
+  return `HTTP ${res.status}`;
+}
+
 const handleAdminLogin = async () => {
   if (isAdminLoggingIn.value) return;
   isAdminLoggingIn.value = true;
   try {
-    const API_BASE = (import.meta.env.VITE_API_URL ?? '').trim();
-    const base = API_BASE.replace(/\/+$/, '').replace(/(?:\/api)+$/, '');
-    const url = `${base}/api/auth/login`;
-    const res = await fetch(url, {
+    const res = await fetch(courtApiUrl('/api/auth/login'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -374,10 +484,12 @@ const handleAdminLogin = async () => {
       invalidateVenuesCache();
       await loadData();
     } else {
-      alert('Incorrect password');
+      const msg = await readApiErrorMessage(res);
+      alert(msg === 'Invalid password' ? 'Incorrect password' : `Login failed: ${msg}`);
     }
   } catch (e) {
-    alert('Login failed');
+    const detail = e instanceof Error && e.message ? e.message : 'network error';
+    alert(`Login failed: ${detail}\nAPI: ${courtApiUrl('/api/auth/login')}`);
   } finally {
     isAdminLoggingIn.value = false;
   }
@@ -389,10 +501,7 @@ const handleAdminLoginFromUserLoginPage = async (password: string) => {
   const pwd = (password || '').toString();
 
   try {
-    const API_BASE = import.meta.env.VITE_API_URL ?? '';
-    const base = API_BASE.replace(/\/$/, '');
-    const url = `${base}/api/auth/login`;
-    const res = await fetch(url, {
+    const res = await fetch(courtApiUrl('/api/auth/login'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -406,10 +515,12 @@ const handleAdminLoginFromUserLoginPage = async (password: string) => {
       await loadData();
       router.push('/admin');
     } else {
-      alert('Incorrect password');
+      const msg = await readApiErrorMessage(res);
+      alert(msg === 'Invalid password' ? 'Incorrect password' : `Login failed: ${msg}`);
     }
-  } catch {
-    alert('Login failed');
+  } catch (e) {
+    const detail = e instanceof Error && e.message ? e.message : 'network error';
+    alert(`Login failed: ${detail}\nAPI: ${courtApiUrl('/api/auth/login')}`);
   } finally {
     isAdminLoggingIn.value = false;
   }
@@ -417,14 +528,15 @@ const handleAdminLoginFromUserLoginPage = async (password: string) => {
 
 const handleAdminLogout = async () => {
   try {
-    const API_BASE = import.meta.env.VITE_API_URL ?? '';
-    const base = API_BASE.replace(/\/$/, '');
-    await fetch(`${base}/api/auth/logout`, { method: 'POST', credentials: 'include' });
+    await fetch(courtApiUrl('/api/auth/logout'), { method: 'POST', credentials: 'include' });
   } catch {
     // ignore logout request failure; clear local state anyway
   }
   adminStatus.value = { type: 'none', allowedIds: [] };
   currentTab.value = 'explore';
+  if (route.name === 'admin') {
+    await router.push('/');
+  }
   invalidateVenuesCache();
   await loadData();
 };
@@ -541,6 +653,41 @@ const listVenues = computed(() => {
   if (!locationVenueIds.value || locationVenueIds.value.length === 0) return filteredVenues.value;
   const idSet = new Set(locationVenueIds.value);
   return filteredVenues.value.filter((v) => idSet.has(v.id));
+});
+
+const showListingSeoPanel = computed(
+  () => route.name === 'explore' || route.name === 'search' || route.name === 'search-district',
+);
+
+const listingSeoMode = computed<'explore' | 'search' | 'search-district'>(() => {
+  if (route.name === 'search-district') return 'search-district';
+  if (route.name === 'search') return 'search';
+  return 'explore';
+});
+
+const listingSeoSport = computed(() => {
+  const slug = typeof route.params.sport === 'string' ? route.params.sport : sportFilter.value[0];
+  if (!slug) return { slug: '', name: '' };
+  const meta = sports.value.find((s) => s.slug === slug);
+  const name = meta
+    ? (language.value === 'zh' && meta.name_zh ? meta.name_zh : meta.name)
+    : slug.replace(/-/g, ' ');
+  return { slug, name };
+});
+
+const listingSeoDistrictSlug = computed(() =>
+  typeof route.params.district === 'string' ? route.params.district : '',
+);
+
+const listingSeoProps = computed(() => {
+  if (!showListingSeoPanel.value) return null;
+  return {
+    mode: listingSeoMode.value,
+    sportName: listingSeoSport.value.name || undefined,
+    sportSlug: listingSeoSport.value.slug || undefined,
+    districtSlug: listingSeoDistrictSlug.value || undefined,
+    venueCount: filteredVenues.value.length,
+  };
 });
 
 const showVenuesAtLocation = (venueList: Venue[]) => {
@@ -719,8 +866,18 @@ const handleSaveVenue = async (venueData: any) => {
       :t="t"
       :currentTab="currentTab"
       :setTab="(tab: AppTab) => {
-        if (tab === 'admin' && !isAnyAdmin) showAdminLogin = true;
-        else currentTab = tab;
+        if (tab === 'admin' && !isAnyAdmin) {
+          showAdminLogin = true;
+          return;
+        }
+        if (tab === 'admin') {
+          currentTab = 'admin';
+          selectedVenue = null;
+          showDesktopDetail = false;
+          router.push('/admin');
+          return;
+        }
+        currentTab = tab;
         if (tab === 'explore') { goToExplore(); }
         else if (tab === 'saved') { goToExplore(); currentTab = 'saved'; filterSavedOnly = true; }
         else { selectedVenue = null; showDesktopDetail = false; }
@@ -738,7 +895,7 @@ const handleSaveVenue = async (venueData: any) => {
       :class="route.name === 'home' ? '' : 'h-full'"
     >
       <AdminPage
-        v-if="currentTab === 'admin' && isAnyAdmin && !selectedVenue"
+        v-if="route.name === 'admin' && isAnyAdmin && !selectedVenue"
         :venues="venues"
         :sports="sports"
         :language="language"
@@ -843,8 +1000,18 @@ const handleSaveVenue = async (venueData: any) => {
           :setLanguage="(l: Language) => { language = l; }"
         />
 
+        <AboutPage
+          v-else-if="route.name === 'about'"
+          :language="language"
+          :t="t"
+          :dark-mode="darkMode"
+          :set-language="(l: Language) => { language = l; }"
+        />
+
+        <template
+          v-else-if="isMobile && (route.name === 'explore' || route.name === 'search' || route.name === 'search-district' || route.name === 'venue')"
+        >
         <MobileView
-          v-else-if="isMobile && (route.name === 'explore' || route.name === 'search' || route.name === 'venue')"
           :mode="mobileViewMode"
           :setMode="(m: 'map' | 'list') => { mobileViewMode = m; }"
           :venues="filteredVenues"
@@ -879,7 +1046,9 @@ const handleSaveVenue = async (venueData: any) => {
           :onOpenDetail="(v: Venue) => { router.push('/venues/' + useVenueSlug(v)); }"
           :onBackFromDetail="goBackFromVenue"
           :force-show-detail="route.name === 'venue' && !!selectedVenue"
+          :listing-seo="listingSeoProps"
         />
+        </template>
 
         <VenueDetail
           v-else-if="showDesktopDetail && selectedVenue"
@@ -899,8 +1068,10 @@ const handleSaveVenue = async (venueData: any) => {
           :onEdit="() => { editingVenue = selectedVenue; showVenueForm = true; }"
         />
 
+        <template
+          v-else-if="!isMobile && (route.name === 'explore' || route.name === 'search' || route.name === 'search-district' || (route.name === 'venue' && !showDesktopDetail))"
+        >
         <DesktopView
-          v-else-if="!isMobile && (route.name === 'explore' || route.name === 'search' || (route.name === 'venue' && !showDesktopDetail))"
           :venues="filteredVenues"
           :listVenues="listVenues"
           :onShowVenuesAtLocation="showVenuesAtLocation"
@@ -941,7 +1112,9 @@ const handleSaveVenue = async (venueData: any) => {
           :setFilterSavedOnly="(v: boolean) => { filterSavedOnly = v; }"
           :currentTab="currentTab"
           :setTab="(t: AppTab) => { currentTab = t; }"
+          :listing-seo="listingSeoProps"
         />
+        </template>
       </div>
     </main>
 
@@ -1038,15 +1211,15 @@ const handleSaveVenue = async (venueData: any) => {
       </div>
     </Transition>
 
-    <!-- <MobileNav
-      v-if="isMobile"
+    <!--<MobileNav
+      v-if="isMobile && route.name !== 'login' && route.name !== 'signup' && route.name !== 'token-login' && route.name !== 'complete-phone'"
       :currentTab="currentTab"
       :setTab="(t: AppTab) => { currentTab = t; }"
       :t="t"
       :darkMode="darkMode"
       :isAdmin="isAnyAdmin"
       :onAdminClick="() => { if (isAnyAdmin) currentTab = 'admin'; else { showAdminLogin = true; syncAdminUrl(true); } }"
-    /> -->
+    />-->
   </div>
 </template>
 

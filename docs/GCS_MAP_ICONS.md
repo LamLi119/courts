@@ -10,6 +10,8 @@ Map pins load venue icons from **Google Cloud Storage**. The browser must be all
 
 If CORS is missing on a preview URL, icons still load via **`https://courts.api.theground.io/staging/api/image-proxy`** (requires `VITE_API_URL` on Preview).
 
+`scripts/gcs-cors.json` allows `origin: ["*"]` for `GET`/`HEAD` so map canvas icons and venue photos work from any frontend host.
+
 ---
 
 ## One-time setup (GCP — you must run this)

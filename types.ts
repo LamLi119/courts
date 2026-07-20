@@ -80,6 +80,12 @@ export interface Venue {
   booking_url?: string | null;
   operating_hours?: OperatingHours | null;
   operating_hours_enabled?: boolean;
+  /**
+   * Optional real review aggregate for schema.org AggregateRating.
+   * Only emit when both rating_value and review_count are present and valid — never fabricate.
+   */
+  rating_value?: number | null;
+  review_count?: number | null;
 }
 
 export type Language = 'en' | 'zh';

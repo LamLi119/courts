@@ -7,8 +7,9 @@ import DesktopView from '../explore/DesktopView.vue';
 import MobileView from '../explore/MobileView.vue';
 import LandingCta from './LandingCta.vue';
 import AppFooter from '../layout/AppFooter.vue';
-import { countVenuesBySport } from '../../utils/seo';
-import { HK_DISTRICTS } from '../../utils/hkDistricts';
+import FaqSection from '../seo/FaqSection.vue';
+import { countVenuesBySport, venueMatchesSportSlug } from '../../utils/seo';
+import { HK_DISTRICTS, getDistrictDisplayName, venueMatchesDistricts } from '../../utils/hkDistricts';
 
 type SportOption = { id: number; name: string; name_zh?: string | null; slug: string };
 
@@ -79,17 +80,67 @@ const districtCount = HK_DISTRICTS.length;
 
 const sportVenueCounts = computed(() => countVenuesBySport(props.venues, props.sports));
 
+/** Selected sport for the district cards section — default to first (highest count) */
+const selectedSportSlug = ref('');
+watch(sportVenueCounts, (list) => {
+  if (list.length && !list.some((s) => s.slug === selectedSportSlug.value)) {
+    selectedSportSlug.value = list[0].slug;
+  }
+}, { immediate: true });
+
+/** Districts with venue count for the selected sport, sorted desc */
+const districtsForSelectedSport = computed(() =>
+  HK_DISTRICTS.map((d) => ({
+    slug: d.slug,
+    name: getDistrictDisplayName(d.slug, props.language),
+    count: props.venues.filter(
+      (v) => venueMatchesSportSlug(v, selectedSportSlug.value) && venueMatchesDistricts(v, [d.slug]),
+    ).length,
+  }))
+    .filter((d) => d.count > 0)
+    .sort((a, b) => b.count - a.count),
+);
+
+const popularDistricts = computed(() => districtsForSelectedSport.value.slice(0, 4));
+const remainingDistricts = computed(() => districtsForSelectedSport.value.slice(4));
+
+function districtSearchHref(districtSlug: string) {
+  return `/search/${selectedSportSlug.value}/${districtSlug}`;
+}
+
+function sportSearchHref(slug: string) {
+  return `/search/${slug}`;
+}
+
+function goDistrictExplore(districtSlug: string) {
+  props.onExplore({ sport: selectedSportSlug.value, districts: [districtSlug] });
+}
+function goAllDistrictsExplore() {
+  props.onExplore({ sport: selectedSportSlug.value });
+}
+
 const landingSeoIntroText = computed(() =>
   props.t('landingSeoIntro')
     .replace('{{total}}', String(props.venues.length))
     .replace('{{districts}}', String(districtCount))
 );
 
+const landingFaqItems = computed(() => [
+  { q: props.t('landingFaq1q'), a: props.t('landingFaq1a') },
+  { q: props.t('landingFaq2q'), a: props.t('landingFaq2a') },
+  { q: props.t('landingFaq3q'), a: props.t('landingFaq3a') },
+  { q: props.t('landingFaq4q'), a: props.t('landingFaq4a') },
+]);
+
 function sportCountLabel(item: { name: string; name_zh?: string | null; count: number }) {
   const name = props.language === 'zh' && item.name_zh ? item.name_zh : item.name;
   return props.t('landingSeoSportItem')
     .replace('{{name}}', name)
     .replace('{{count}}', String(item.count));
+}
+
+function districtVenueCountLabel(count: number) {
+  return props.t('landingDistrictVenueCount').replace('{{count}}', String(count));
 }
 
 const heroDistricts = ref<string[]>([]);
@@ -321,7 +372,7 @@ function goNextPartnership() {
 
     <section
       id="explore-section"
-      class="w-full py-10 md:py-14"
+      class="w-full pt-10 md:py-14"
       :class="darkMode ? 'bg-gray-50 dark:bg-gray-950' : 'bg-gray-50'"
     >
     <div class="w-full px-4 md:px-6 max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6 md:mb-8">
@@ -339,13 +390,13 @@ function goNextPartnership() {
           {{ t('landingMapSubtitle') }}
         </p>
         </div>
-        <button
-          type="button"
-          class="text-sm font-bold text-[#007a67] hover:underline shrink-0 self-start sm:self-auto"
-          @click="handleSeeAllCourts"
+        <a
+          href="/explore"
+          class="text-sm font-bold text-[#007a67] hover:underline shrink-0 self-start sm:self-auto no-underline"
+          @click.prevent="handleSeeAllCourts"
         >
           {{ t('viewAllVenues') }} →
-        </button>
+        </a>
       </div>
       
 
@@ -439,15 +490,157 @@ function goNextPartnership() {
       :darkMode="darkMode"
     />
 
-    <section class="sr-only" :aria-label="t('landingSeoHeading')">
-      <h2>{{ t('landingSeoHeading') }}</h2>
-      <p>{{ landingSeoIntroText }}</p>
-      <p>{{ t('landingSeoAllDistricts') }}</p>
-      <ul>
-        <li v-for="item in sportVenueCounts" :key="item.slug">
-          {{ sportCountLabel(item) }}
-        </li>
-      </ul>
+    <section
+      class="w-full py-10 md:py-14"
+      :class="darkMode ? 'bg-gray-900' : 'bg-white'"
+      :aria-label="t('landingSeoHeading')"
+    >
+      <div class="w-full px-4 md:px-6 max-w-7xl mx-auto space-y-8">
+
+        <!-- Heading + intro -->
+        <div>
+          <h2
+            class="text-2xl md:text-3xl font-black tracking-tight"
+            :class="darkMode ? 'text-white' : 'text-gray-900'"
+          >
+            {{ t('landingSeoHeading') }}
+          </h2>
+          <p
+            class="mt-3 text-sm md:text-base leading-relaxed max-w-3xl"
+            :class="darkMode ? 'text-gray-400' : 'text-gray-600'"
+          >
+            {{ landingSeoIntroText }}
+          </p>
+        </div>
+
+        <!-- Sport type: dropdown on mobile, tabs on desktop -->
+        <div class="relative md:hidden">
+          <select
+            v-model="selectedSportSlug"
+            class="w-full px-4 py-3 pr-10 rounded-xl text-sm font-bold border appearance-none cursor-pointer transition-colors"
+            :class="darkMode
+              ? 'bg-gray-800 border-gray-600 text-gray-100'
+              : 'bg-white border-gray-200 text-gray-800'"
+            :aria-label="t('sportType')"
+          >
+            <option
+              v-for="item in sportVenueCounts"
+              :key="item.slug"
+              :value="item.slug"
+            >
+              {{ sportCountLabel(item) }}
+            </option>
+          </select>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 opacity-50"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            aria-hidden="true"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+        <div class="hidden md:flex flex-wrap gap-2">
+          <a
+            v-for="item in sportVenueCounts"
+            :key="item.slug"
+            :href="sportSearchHref(item.slug)"
+            class="px-4 py-2 rounded-full text-sm font-bold border transition-colors no-underline min-h-[44px] inline-flex items-center"
+            :class="item.slug === selectedSportSlug
+              ? 'bg-[#007a67] text-white border-[#007a67]'
+              : (darkMode
+                  ? 'bg-transparent border-gray-600 text-gray-300 hover:border-[#007a67] hover:text-[#79d8c7]'
+                  : 'bg-gray-100 border-gray-200 text-gray-700 hover:border-[#007a67] hover:text-[#007a67]')"
+            @click.prevent="selectedSportSlug = item.slug"
+          >
+            {{ sportCountLabel(item) }}
+          </a>
+        </div>
+
+        <!-- Popular districts — top 4 large cards -->
+        <div v-if="popularDistricts.length">
+          <div class="flex items-center justify-between mb-4">
+            <h3
+              class="text-lg md:text-xl font-black tracking-tight"
+              :class="darkMode ? 'text-white' : 'text-gray-900'"
+            >
+              {{ t('landingPopularDistricts') }}
+            </h3>
+            <button
+              type="button"
+              class="text-sm font-bold text-[#007a67] hover:underline"
+              @click="goAllDistrictsExplore"
+            >
+              {{ t('landingViewAllDistricts') }}
+            </button>
+          </div>
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <a
+              v-for="d in popularDistricts"
+              :key="d.slug"
+              :href="districtSearchHref(d.slug)"
+              class="text-left rounded-2xl border p-4 transition-all hover:border-[#007a67] hover:shadow-md group no-underline block"
+              :class="darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'"
+              @click.prevent="goDistrictExplore(d.slug)"
+            >
+              <div
+                class="w-8 h-1 rounded-full mb-3"
+                :class="darkMode ? 'bg-[#79d8c7]' : 'bg-[#007a67]'"
+              />
+              <p
+                class="font-black text-base leading-tight"
+                :class="darkMode ? 'text-white' : 'text-gray-900'"
+              >
+                {{ d.name }}
+              </p>
+              <span
+                class="mt-1 inline-block text-xs font-bold px-2 py-0.5 rounded-full"
+                :class="darkMode ? 'bg-gray-700 text-gray-300' : 'bg-[#e8f7f4] text-[#007a67]'"
+              >
+                {{ districtVenueCountLabel(d.count) }}
+              </span>
+            </a>
+          </div>
+        </div>
+
+        <!-- Remaining districts — compact grey grid -->
+        <div
+          v-if="remainingDistricts.length"
+          class="rounded-2xl border p-4"
+          :class="darkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-200'"
+        >
+          <ul class="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-2">
+            <li v-for="d in remainingDistricts" :key="d.slug">
+              <a
+                :href="districtSearchHref(d.slug)"
+                class="w-full text-left text-sm font-medium transition-colors no-underline block min-h-[44px] py-1"
+                :class="darkMode ? 'text-gray-300 hover:text-[#79d8c7]' : 'text-gray-600 hover:text-[#007a67]'"
+                @click.prevent="goDistrictExplore(d.slug)"
+              >
+                {{ d.name }} ({{ d.count }})
+              </a>
+            </li>
+          </ul>
+        </div>
+
+      </div>
+    </section>
+
+    <section
+      class="w-full py-10 md:py-14"
+      :class="darkMode ? 'bg-gray-950' : 'bg-gray-50'"
+    >
+    <div class="w-full px-4 md:px-6 max-w-7xl mx-auto">
+        <FaqSection
+          :items="landingFaqItems"
+          :language="language"
+          :t="t"
+          :dark-mode="darkMode"
+          inject-schema
+        />
+      </div>
     </section>
 
     <AppFooter

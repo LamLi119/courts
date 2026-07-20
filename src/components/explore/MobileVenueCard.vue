@@ -5,6 +5,7 @@ import { getStationDisplayName } from '../../utils/mtrStations';
 import { getVenueDistrictSlug, getDistrictDisplayName } from '../../utils/hkDistricts';
 import { getVenueImageAlt } from '../../utils/seo';
 import { slugify } from '../../utils/slugify';
+import { isGcsImageUrl, venueCardImageSrc } from '../../utils/venueImageUrl';
 
 const props = defineProps<{
   venue: Venue;
@@ -19,6 +20,23 @@ const props = defineProps<{
 }>();
 
 const imageAlt = computed(() => getVenueImageAlt(props.venue));
+const venueHref = computed(() => `/venues/${slugify(props.venue.name)}`);
+const imgFailed = ref(false);
+const useProxy = ref(false);
+const imageSrc = computed(() => {
+  if (imgFailed.value) return '/placeholder.svg';
+  const raw = props.venue.images?.[0] || '/placeholder.svg';
+  return venueCardImageSrc(raw === '/placeholder.svg' ? raw : raw, useProxy.value);
+});
+
+function onImageError() {
+  const raw = props.venue.images?.[0] || '';
+  if (!useProxy.value && isGcsImageUrl(raw)) {
+    useProxy.value = true;
+    return;
+  }
+  imgFailed.value = true;
+}
 
 const districtName = computed(() => {
   const slug = getVenueDistrictSlug(props.venue);
@@ -28,7 +46,7 @@ const districtName = computed(() => {
 const shareFeedback = ref<string | null>(null);
 const handleShare = async () => {
   const url = typeof window !== 'undefined'
-    ? `${window.location.origin}/venues/${slugify(props.venue.name)}`
+    ? `${window.location.origin}${venueHref.value}`
     : '';
   const title = props.venue.name;
   try {
@@ -52,22 +70,29 @@ const handleShare = async () => {
     }
   }
 };
+
+function navigateVenue(e: MouseEvent) {
+  if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+  e.preventDefault();
+  props.onViewDetails();
+}
 </script>
 
 <template>
-  <button type="button" class="w-full text-left" @click="onViewDetails">
+  <a :href="venueHref" class="w-full text-left block no-underline" @click="navigateVenue">
     <div class="flex flex-col shadow-sm transition-all active:scale-[0.98]"
       :class="darkMode ? 'border-gray-800' : 'border-gray-200'">
       <div class="flex items-center gap-4 px-4 pt-3 pb-2">
-        <div class="relative w-20 h-20 rounded-[16px] overflow-hidden flex-shrink-0 bg-gray-200 dark:bg-gray-700">
+        <div class="relative w-20 h-20 aspect-square rounded-[16px] overflow-hidden flex-shrink-0 bg-gray-200 dark:bg-gray-700">
           <img
-            :src="venue.images[0] || '/placeholder.svg'"
+            :src="imageSrc"
             :alt="imageAlt"
             class="w-full h-full object-cover"
             width="80"
             height="80"
             :loading="priorityImage ? 'eager' : 'lazy'"
             :fetchpriority="priorityImage ? 'high' : undefined"
+            @error="onImageError"
           />
           <span v-if="venue.membership_enabled" class="absolute top-0 left-0 rounded-br-md px-1.5 py-0.5 text-[9px] font-bold text-white bg-[#007a67] shadow-sm" :title="t('specialOffer')">
             {{ t('specialOffer') }}
@@ -126,5 +151,5 @@ const handleShare = async () => {
       </div>
       </div>
     </div>
-  </button>
+  </a>
 </template>

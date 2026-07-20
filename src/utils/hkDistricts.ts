@@ -40,6 +40,14 @@ export const HK_DISTRICTS: HkDistrict[] = [
 
 const districtBySlug = new Map(HK_DISTRICTS.map((d) => [d.slug, d]));
 
+export function isValidDistrictSlug(slug: string): boolean {
+  return districtBySlug.has((slug || '').toLowerCase().trim());
+}
+
+export function getDistrictBySlug(slug: string): HkDistrict | undefined {
+  return districtBySlug.get((slug || '').toLowerCase().trim());
+}
+
 /** MTR station (canonical English) → district slug */
 const STATION_TO_DISTRICT: Record<string, string> = {
   // Hong Kong Island — Central and Western

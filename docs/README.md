@@ -7,6 +7,8 @@
 | Doc | Audience | Contents |
 |-----|----------|----------|
 | [FEATURES.md](./FEATURES.md) | Everyone | Product features, admin, API overview |
+| [SEO_AFTER_FEATURE.md](./SEO_AFTER_FEATURE.md) | Developers | SEO checklist to run after shipping features |
+| [SEO_MONITORING.md](./SEO_MONITORING.md) | Developers / ops | Phase 4 monitoring: sitemap, IndexNow, PSI, SERP, GBP |
 | [../DEPLOY_VERCEL.md](../DEPLOY_VERCEL.md) | Developers | Vercel frontend deploy, env vars |
 | [VM_SERVER_UPDATE.md](./VM_SERVER_UPDATE.md) | DevOps | GCP VM API deploy (staging vs prod) |
 | [GCS_MAP_ICONS.md](./GCS_MAP_ICONS.md) | DevOps | GCS CORS for map icons |

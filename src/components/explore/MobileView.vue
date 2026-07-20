@@ -10,6 +10,8 @@ import {
 } from '../../utils/hkDistricts';
 import MobileVenueCard from './MobileVenueCard.vue';
 import VenueDetail from '../venue/VenueDetail.vue';
+import ListingSeoPanel from '../seo/ListingSeoPanel.vue';
+import ListingSeoIntro from '../seo/ListingSeoIntro.vue';
 
 const MapView = defineAsyncComponent(() => import('./MapView.vue'));
 
@@ -68,6 +70,14 @@ const props = defineProps<{
   onShowVenuesAtLocation?: (venues: Venue[]) => void;
   /** When true, used inside the landing page (fixed height, no footer). */
   embedded?: boolean;
+  /** When set, show listing SEO map button + popup (explore/search routes only). */
+  listingSeo?: {
+    mode: 'explore' | 'search' | 'search-district';
+    sportName?: string;
+    sportSlug?: string;
+    districtSlug?: string;
+    venueCount: number;
+  } | null;
 }>();
 
 const mapShellClass = computed(() =>
@@ -844,6 +854,18 @@ const goNextVenueFromDetail = async () => {
       :language="language"
       :darkMode="darkMode"
       :isMobile="true"
+    />
+
+    <ListingSeoPanel
+      v-if="listingSeo"
+      :language="language"
+      :t="t"
+      :dark-mode="darkMode"
+      :mode="listingSeo.mode"
+      :sport-name="listingSeo.sportName"
+      :sport-slug="listingSeo.sportSlug"
+      :district-slug="listingSeo.districtSlug"
+      :venue-count="listingSeo.venueCount"
     />
 
 
