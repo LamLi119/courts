@@ -264,17 +264,6 @@ const leftListVenues = computed(() =>
 
 <template>
   <div class="flex flex-col h-full min-h-0 w-full">
-    <ListingSeoIntro
-      v-if="listingSeo"
-      :language="language"
-      :t="t"
-      :dark-mode="darkMode"
-      :mode="listingSeo.mode"
-      :sport-name="listingSeo.sportName"
-      :sport-slug="listingSeo.sportSlug"
-      :district-slug="listingSeo.districtSlug"
-      :venue-count="listingSeo.venueCount"
-    />
   <div :class="shellClass">
     <div
       :class="[
