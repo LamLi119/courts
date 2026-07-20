@@ -159,7 +159,7 @@ const isSaved = () => props.savedVenues.includes(props.venue.id);
 
 const handleWhatsApp = () => {
   const message = encodeURIComponent(
-    `你好，我係經TheGround.io嘅介紹嚟book場！Hi! Here to book a court, found you via TheGround.io`
+    `我係經courts.theground.io嘅介紹嚟book場！Hi! Here to book a court, found you via courts.theground.io`
   );
   window.open(
     `https://wa.me/${props.venue.whatsapp.replace(/[^0-9]/g, '')}?text=${message}`,
