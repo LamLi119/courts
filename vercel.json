@@ -4,15 +4,52 @@
   "framework": "vite",
   "headers": [
     {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+        { "key": "X-Frame-Options", "value": "SAMEORIGIN" },
+        { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=(self)" },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://www.google-analytics.com https://maps.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https:; frame-src https://www.google.com https://maps.google.com https://www.googletagmanager.com; object-src 'none'; base-uri 'self'"
+        }
+      ]
+    },
+    {
       "source": "/venues-bootstrap.json",
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=3600, stale-while-revalidate=86400" }
+      ]
+    },
+    {
+      "source": "/.well-known/ai-catalog.json",
+      "headers": [
+        { "key": "Content-Type", "value": "application/json; charset=utf-8" },
+        { "key": "Cache-Control", "value": "public, max-age=3600" },
+        { "key": "Access-Control-Allow-Origin", "value": "*" }
       ]
     }
   ],
   "rewrites": [
     {
-      "source": "/((?!assets/|sw\\.js|workbox-|manifest\\.webmanifest|sitemap\\.xml|robots\\.txt|venues-bootstrap\\.json).*)",
+      "source": "/sitemap.xml",
+      "destination": "https://courts.api.theground.io/api/sitemap.xml"
+    },
+    {
+      "source": "/okf.tar.gz",
+      "destination": "https://courts.api.theground.io/api/okf.tar.gz"
+    },
+    {
+      "source": "/okf",
+      "destination": "https://courts.api.theground.io/api/okf"
+    },
+    {
+      "source": "/okf/:path*",
+      "destination": "https://courts.api.theground.io/api/okf/:path*"
+    },
+    {
+      "source": "/((?!assets/|sw\\.js|workbox-|manifest\\.webmanifest|robots\\.txt|llms\\.txt|venues-bootstrap\\.json|okf(?:\\.tar\\.gz|/.*)?$|\\.well-known/|a7f3c9e2b18d4f6a0e5c2b9d7f1a8e3c\\.txt).*)",
       "destination": "/index.html"
     }
   ]

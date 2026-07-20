@@ -6,6 +6,10 @@ import crypto from 'crypto';
 import axios from 'axios';
 import { Storage } from '@google-cloud/storage';
 import { getCourtsFormConfig, submitCourtsForm } from './webflowCourtsForm.js';
+import { buildSitemapXml } from '../lib/sitemap.js';
+import { notifyIndexNowForVenue, submitIndexNowUrls, venuePublicUrl } from '../lib/indexnow.js';
+import { loadPublicCatalog } from '../lib/catalogData.js';
+import { buildOkfBundle } from '../lib/okf.js';
 
 const app = express();
 // Venue form sends base64 images; keep payload limit high enough for multi-image saves.
@@ -23,6 +27,27 @@ const publicEventsInflight = new Map();
 const PUBLIC_EVENTS_PREWARM_QS = [
   'order=ASC&tab=upcoming&page=1&pageSize=8',
 ];
+const OKF_CACHE_TTL_MS = 1000 * 60 * 5;
+let okfCache = null;
+
+function invalidateOkfCache() {
+  okfCache = null;
+}
+
+async function getOkfBundle(db) {
+  const now = Date.now();
+  if (okfCache && now - okfCache.createdAt < OKF_CACHE_TTL_MS) {
+    return okfCache.bundle;
+  }
+  const { sports, venues } = await loadPublicCatalog(db, { listSportsRows });
+  const bundle = buildOkfBundle({
+    sports,
+    venues,
+    baseUrl: process.env.SITEMAP_BASE_URL || 'https://courts.theground.io',
+  });
+  okfCache = { createdAt: now, bundle };
+  return bundle;
+}
 
 /** SSL only when cert files exist (e.g. Cloud SQL); otherwise connect without SSL for local MySQL. */
 function getSslOptions() {
@@ -287,26 +312,45 @@ function getAdminSession(req) {
   return { sid, ...session };
 }
 
+function adminCookieOptions(req) {
+  const forwardedProto = (req.get('x-forwarded-proto') || '').split(',')[0].trim();
+  const secure = req.secure || forwardedProto === 'https';
+  // Preview (*.vercel.app) → API is cross-site; Lax cookies are dropped by the browser.
+  // SameSite=None; Secure keeps the session cookie for credentialed cross-origin calls.
+  const origin = (req.get('origin') || '').trim();
+  let sameSite = 'lax';
+  if (origin && secure) {
+    try {
+      const originHost = new URL(origin).hostname.toLowerCase();
+      const apiHost = String(req.get('host') || '').split(':')[0].toLowerCase();
+      if (originHost && apiHost && originHost !== apiHost) {
+        sameSite = 'none';
+      }
+    } catch (_) {
+      // keep lax
+    }
+  }
+  return {
+    httpOnly: true,
+    sameSite,
+    secure: sameSite === 'none' ? true : secure,
+    maxAge: ADMIN_SESSION_TTL_MS,
+    path: '/',
+  };
+}
+
 function setAdminSession(res, req, payload) {
   cleanupAdminSessions();
   const sid = crypto.randomBytes(32).toString('hex');
   const expiresAt = Date.now() + ADMIN_SESSION_TTL_MS;
   adminSessions.set(sid, { ...payload, expiresAt });
-  const forwardedProto = (req.get('x-forwarded-proto') || '').split(',')[0].trim();
-  const secure = req.secure || forwardedProto === 'https';
-  res.cookie(ADMIN_SESSION_COOKIE, sid, {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure,
-    maxAge: ADMIN_SESSION_TTL_MS,
-    path: '/',
-  });
+  res.cookie(ADMIN_SESSION_COOKIE, sid, adminCookieOptions(req));
 }
 
 function clearAdminSession(req, res) {
   const sid = parseCookies(req)[ADMIN_SESSION_COOKIE];
   if (sid) adminSessions.delete(sid);
-  res.clearCookie(ADMIN_SESSION_COOKIE, { path: '/' });
+  res.clearCookie(ADMIN_SESSION_COOKIE, adminCookieOptions(req));
 }
 
 function trimTrailingSlash(input) {
@@ -722,6 +766,7 @@ app.use((req, res, next) => {
 
 // Optional: protect API when running behind a proxy (e.g. Vercel).
 // If PROXY_SECRET is set on the server, require callers to send matching x-proxy-secret.
+// Browser calls the API directly now — keep public read + admin auth allowlisted.
 const PROXY_SECRET = process.env.PROXY_SECRET || '';
 app.use('/api', (req, res, next) => {
   if (!PROXY_SECRET) return next();
@@ -729,6 +774,22 @@ app.use('/api', (req, res, next) => {
   // Public, allowlisted image proxy used by the frontend to avoid GCS CORS.
   // Safe because `/api/image-proxy` only allows storage.googleapis.com URLs.
   if (req.path === '/image-proxy') return next();
+  // Live sitemap + OKF (Vercel rewrites public URLs here; no proxy secret).
+  if (req.method === 'GET' && req.path === '/sitemap.xml') return next();
+  if (req.method === 'GET' && (req.path === '/okf.tar.gz' || req.path === '/okf' || req.path.startsWith('/okf/'))) {
+    return next();
+  }
+  // Admin login/session (browser credentials; no x-proxy-secret).
+  if (
+    (req.method === 'POST' && (req.path === '/auth/login' || req.path === '/auth/logout'))
+    || (req.method === 'GET' && req.path === '/auth/session')
+  ) {
+    return next();
+  }
+  // Public catalog reads used by the SPA.
+  if (req.method === 'GET' && (req.path === '/sports' || req.path === '/venues' || /^\/venues\/[^/]+$/.test(req.path))) {
+    return next();
+  }
   // Public read-only proxy for venue detail "upcoming events" (browser-facing).
   if (
     req.method === 'GET'
@@ -1167,7 +1228,7 @@ app.post('/api/auth/login', async (req, res) => {
 
 app.get('/api/auth/session', (_req, res) => {
   const session = getAdminSession(_req);
-  if (!session) return res.status(401).json({ error: 'Not logged in' });
+  if (!session) return res.json({ type: 'none', allowedVenueIds: [] });
   return res.json({ type: session.type, allowedVenueIds: session.allowedIds || [] });
 });
 
@@ -1287,6 +1348,7 @@ app.post('/api/sports', async (req, res) => {
     const listed = await listSportsRows(db);
     const row = listed.find((s) => s.slug === slug);
     if (!row) return res.status(500).json({ error: 'Failed to create sport' });
+    invalidateOkfCache();
     return res.status(201).json(row);
   } catch (err) {
     if (err.code === 'ER_BAD_FIELD_ERROR' && err.message && err.message.includes('name_zh')) {
@@ -1314,6 +1376,7 @@ app.patch('/api/sports/order', async (req, res) => {
         await connection.execute('UPDATE sports SET sort_order = ? WHERE id = ?', [i, sid]);
       }
       await connection.commit();
+      invalidateOkfCache();
       return res.status(204).send();
     } catch (err) {
       await connection.rollback().catch(() => {});
@@ -1361,6 +1424,7 @@ app.put('/api/sports/:id', async (req, res) => {
     const rows = await listSportsRows(db);
     const found = (rows || []).find((r) => Number(r.id) === id);
     if (!found) return res.status(404).json({ error: 'Sport not found' });
+    invalidateOkfCache();
     return res.json(found);
   } catch (err) {
     if (err && err.message && err.message.includes("Duplicate entry") && err.message.includes('uq_sports_slug')) {
@@ -1376,6 +1440,7 @@ app.delete('/api/sports/:id', async (req, res) => {
     const id = req.params.id;
     await db.execute('DELETE FROM venue_sports WHERE sport_id = ?', [id]);
     await db.execute('DELETE FROM sports WHERE id = ?', [id]);
+    invalidateOkfCache();
     return res.status(204).send();
   } catch (err) {
     res.status(500).json({ error: dbErrorMessage(err) });
@@ -1449,6 +1514,55 @@ app.get('/api/venues', async (req, res) => {
   }
 });
 
+/** Live sitemap from current DB venues/sports (proxied at courts.theground.io/sitemap.xml). */
+app.get('/api/sitemap.xml', async (req, res) => {
+  try {
+    const db = getPool();
+    const { sports, venues } = await loadPublicCatalog(db, { listSportsRows });
+
+    const xml = buildSitemapXml({
+      sports,
+      venues: venues || [],
+      baseUrl: process.env.SITEMAP_BASE_URL || 'https://courts.theground.io',
+    });
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=3600');
+    res.send(xml);
+  } catch (err) {
+    res.status(500).type('text/plain').send(`Failed to generate sitemap: ${dbErrorMessage(err)}`);
+  }
+});
+
+/** Browsable Open Knowledge Format generated from the public venue catalog. */
+app.get('/api/okf.tar.gz', async (req, res) => {
+  try {
+    const db = getPool();
+    const bundle = await getOkfBundle(db);
+    res.setHeader('Content-Type', 'application/gzip');
+    res.setHeader('Content-Disposition', 'inline; filename="okf.tar.gz"');
+    res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=3600');
+    res.send(bundle.tarGz);
+  } catch (err) {
+    res.status(500).type('text/plain').send(`Failed to generate OKF bundle: ${dbErrorMessage(err)}`);
+  }
+});
+
+app.get(/^\/api\/okf(?:\/(.*))?$/, async (req, res) => {
+  try {
+    const rel = (req.params[0] || '').replace(/^\/+/, '');
+    const key = rel ? `okf/${rel}` : 'okf/index.md';
+    const db = getPool();
+    const bundle = await getOkfBundle(db);
+    const content = bundle.byPath[key];
+    if (!content) return res.status(404).type('text/plain').send('OKF path not found');
+    res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=3600');
+    res.send(content);
+  } catch (err) {
+    res.status(500).type('text/plain').send(`Failed to load OKF path: ${dbErrorMessage(err)}`);
+  }
+});
+
 app.post('/api/venues', async (req, res) => {
   try {
     const db = getPool();
@@ -1503,6 +1617,8 @@ app.post('/api/venues', async (req, res) => {
     const adminSession = getAdminSession(req);
     const includePasswords = adminSession && adminSession.type === 'super';
     const out = await getVenueWithSports(db, venueId, includePasswords);
+    invalidateOkfCache();
+    notifyIndexNowForVenue(out || { id: venueId, ...row });
     res.status(201).json(out || { id: venueId, ...row });
   } catch (err) {
     console.error('POST Error:', err.message);
@@ -1548,6 +1664,8 @@ app.put('/api/venues/:id', async (req, res) => {
           } catch (_) {}
         }
         const out = await getVenueWithSports(db, id, includePasswords);
+        invalidateOkfCache();
+        notifyIndexNowForVenue(out || { id, ...row });
         return res.json(out || { id, ...row });
       }
       const setClause = keys.map((k) => `\`${k}\` = ?`).join(', ');
@@ -1560,6 +1678,8 @@ app.put('/api/venues/:id', async (req, res) => {
         } catch (_) {}
       }
       const out = await getVenueWithSports(db, id, includePasswords);
+      invalidateOkfCache();
+      notifyIndexNowForVenue(out || { id, ...row });
       res.json(out || { id, ...row });
   } catch (err) {
     res.status(500).json({ error: dbErrorMessage(err) });
@@ -1584,6 +1704,7 @@ app.patch('/api/venues/order', async (req, res) => {
             );
           }
           await connection.commit();
+          invalidateOkfCache();
           return res.status(204).send();
         }
       }
@@ -1591,6 +1712,7 @@ app.patch('/api/venues/order', async (req, res) => {
         await connection.execute('UPDATE venues SET sort_order = ? WHERE id = ?', [i, orderedIds[i]]);
       }
       await connection.commit();
+      invalidateOkfCache();
       return res.status(204).send();
     } finally {
       connection.release();
@@ -1604,7 +1726,11 @@ app.delete('/api/venues/:id', async (req, res) => {
   try {
     const db = getPool();
     const id = req.params.id;
+    const existing = await getVenueWithSports(db, id, false);
+    const deletedUrl = existing ? venuePublicUrl(existing) : null;
     await db.execute('DELETE FROM venues WHERE id = ?', [id]);
+    invalidateOkfCache();
+    if (deletedUrl) submitIndexNowUrls([deletedUrl]).catch(() => {});
     res.status(204).send();
   } catch (err) {
     res.status(500).json({ error: dbErrorMessage(err) });

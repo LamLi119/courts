@@ -15,7 +15,9 @@ const CONTACT_PHONE = '';
 const shareFeedback = ref<string | null>(null);
 
 const footerLinks = [
-  { key: 'aboutUs', href: 'https://join.theground.io' },
+  { key: 'aboutUs', href: '/about' },
+  { key: 'footerCourtsDirectory', href: 'https://courts.theground.io/' },
+  { key: 'footerTheGround', href: 'https://theground.io/' },
   { key: 'termsOfService', href: 'https://join.theground.io/terms' },
   { key: 'privacyPolicy', href: 'https://join.theground.io/privacy' },
 ] as const;
@@ -63,6 +65,9 @@ function toggleLanguage() {
           <p class="text-lg md:text-xl font-black text-white tracking-tight">
             {{ t('footerBrand') }}
           </p>
+          <p class="mt-1 text-xs text-gray-500">
+            {{ language === 'zh' ? 'Courts by The Ground · courts.theground.io' : 'Courts by The Ground · courts.theground.io' }}
+          </p>
           <p class="mt-2 text-xs md:text-sm text-gray-400">
             {{ t('footerCopyright') }}
           </p>
@@ -81,8 +86,8 @@ function toggleLanguage() {
             :key="link.key"
             :href="link.href"
             class="hover:text-white transition-colors"
-            :target="link.href.startsWith('mailto:') ? undefined : '_blank'"
-            :rel="link.href.startsWith('mailto:') ? undefined : 'noopener noreferrer'"
+            :target="link.href.startsWith('http') ? '_blank' : undefined"
+            :rel="link.href.startsWith('http') ? 'noopener noreferrer' : undefined"
           >
             {{ t(link.key) }}
           </a>

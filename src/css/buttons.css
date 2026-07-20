@@ -162,6 +162,8 @@
 
 /* Nav icon-only (e.g. back, theme toggle, admin) */
 .btn-nav-icon {
+  min-height: 44px;
+  min-width: 44px;
   padding: 0.5rem;
   border-radius: var(--btn-radius);
   background: var(--btn-utility-bg);

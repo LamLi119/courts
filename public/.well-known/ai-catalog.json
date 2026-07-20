@@ -1,0 +1,34 @@
+{
+  "version": "1.0",
+  "name": "Courts",
+  "description": "Hong Kong sports venue directory by The Ground. Find courts by district, sport, and nearby MTR stations.",
+  "url": "https://courts.theground.io/",
+  "publisher": {
+    "name": "The Ground",
+    "url": "https://www.theground.io/"
+  },
+  "llms": "https://courts.theground.io/llms.txt",
+  "sitemap": "https://courts.theground.io/sitemap.xml",
+  "resources": [
+    {
+      "type": "okf-index",
+      "url": "https://courts.theground.io/okf",
+      "description": "Markdown index of venues and sports for AI agents"
+    },
+    {
+      "type": "okf-bundle",
+      "url": "https://courts.theground.io/okf.tar.gz",
+      "description": "Gzipped OKF corpus of public venue and sport pages"
+    },
+    {
+      "type": "explore",
+      "url": "https://courts.theground.io/explore",
+      "description": "Interactive map and list of all venues"
+    },
+    {
+      "type": "about",
+      "url": "https://courts.theground.io/about",
+      "description": "About Courts and The Ground"
+    }
+  ]
+}

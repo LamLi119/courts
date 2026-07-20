@@ -1,6 +1,9 @@
 /**
- * Fetches public venues and sports from the API and writes public/sitemap.xml.
- * Run before `vite build` so the sitemap is included in dist/.
+ * Fetches public venues and sports from the API and writes:
+ * - public/venues-bootstrap.json (always, for fast first paint)
+ * - public/sitemap.xml (fallback only; production serves live /sitemap.xml via API proxy)
+ *
+ * Run before `vite build` so bootstrap is included in dist/.
  */
 import fs from 'fs';
 import http from 'node:http';
@@ -8,6 +11,7 @@ import https from 'node:https';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+import { buildSitemapXml } from '../lib/sitemap.js';
 
 dotenv.config();
 
@@ -36,39 +40,6 @@ function resolveApiUrl() {
 }
 
 const API_URL = resolveApiUrl();
-
-/** Match src/utils/slugify.ts */
-function slugify(text) {
-  if (!text || typeof text !== 'string') return '';
-  return text
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, '-')
-    .replace(/[^\p{L}\p{N}-]/gu, '')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '');
-}
-
-function escapeXml(value) {
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-}
-
-function urlEntry(loc, { changefreq = 'monthly', priority = '0.5' } = {}) {
-  const lastmod = new Date().toISOString().slice(0, 10);
-  return [
-    '  <url>',
-    `    <loc>${escapeXml(loc)}</loc>`,
-    `    <lastmod>${lastmod}</lastmod>`,
-    `    <changefreq>${changefreq}</changefreq>`,
-    `    <priority>${priority}</priority>`,
-    '  </url>',
-  ].join('\n');
-}
 
 function formatFetchError(err) {
   const parts = [err?.message || String(err)];
@@ -214,59 +185,6 @@ async function loadData({ cacheOnly = false } = {}) {
   }
 }
 
-function venueMatchesSportSlug(venue, sportSlug) {
-  const slug = (sportSlug || '').toLowerCase().trim();
-  if (!slug) return false;
-  const types = venue?.sport_types;
-  const data = venue?.sport_data;
-  const name = String(venue?.name ?? '').toLowerCase();
-  const desc = String(venue?.description ?? '').toLowerCase();
-  const hasSportBySlug = Array.isArray(data)
-    && data.some((d) => String(d?.slug || '').toLowerCase().trim() === slug);
-  const hasSportByName = Array.isArray(types)
-    && types.some((t) => String(t).toLowerCase().trim() === slug);
-  return hasSportBySlug || hasSportByName || name.includes(slug) || desc.includes(slug);
-}
-
-function buildSitemap({ sports, venues }) {
-  const urls = [];
-  const seen = new Set();
-  const venueList = venues || [];
-  const sportList = sports || [];
-
-  function add(loc, opts) {
-    if (seen.has(loc)) return;
-    seen.add(loc);
-    urls.push({ loc, opts });
-  }
-
-  add(`${BASE_URL}/`, { changefreq: 'weekly', priority: '1.0' });
-  add(`${BASE_URL}/explore`, { changefreq: 'weekly', priority: '0.9' });
-  add(`${BASE_URL}/upcoming-events`, { changefreq: 'weekly', priority: '0.6' });
-
-  for (const sport of sportList) {
-    const slug = sport?.slug;
-    if (!slug) continue;
-    const count = venueList.filter((v) => venueMatchesSportSlug(v, slug)).length;
-    if (count === 0) continue;
-    add(`${BASE_URL}/search/${slug}`, { changefreq: 'weekly', priority: '0.8' });
-  }
-
-  for (const venue of venueList) {
-    const slug = slugify(venue?.name);
-    if (!slug) continue;
-    add(`${BASE_URL}/venues/${slug}`, { changefreq: 'monthly', priority: '0.7' });
-  }
-
-  return [
-    '<?xml version="1.0" encoding="UTF-8"?>',
-    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
-    ...urls.map(({ loc, opts }) => urlEntry(loc, opts)),
-    '</urlset>',
-    '',
-  ].join('\n');
-}
-
 async function main() {
   const cacheOnly = process.argv.includes('--cache-only');
 
@@ -274,14 +192,14 @@ async function main() {
   console.log(`API URL: ${API_URL}`);
 
   const { sports, venues } = await loadData({ cacheOnly });
-  const xml = buildSitemap({ sports, venues });
+  const xml = buildSitemapXml({ sports, venues, baseUrl: BASE_URL });
   writeVenuesBootstrap({ sports, venues });
 
   fs.mkdirSync(path.dirname(OUT_PATH), { recursive: true });
   fs.writeFileSync(OUT_PATH, xml, 'utf8');
 
   const urlCount = (xml.match(/<loc>/g) || []).length;
-  console.log(`Wrote ${urlCount} URLs to public/sitemap.xml`);
+  console.log(`Wrote ${urlCount} URLs to public/sitemap.xml (fallback; live site proxies API)`);
   console.log(`Wrote venues bootstrap (${(venues || []).length} venues) to public/venues-bootstrap.json`);
 }
 
