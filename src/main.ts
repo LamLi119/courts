@@ -38,6 +38,9 @@ async function bootstrap(): Promise<void> {
   const rootElement = document.getElementById('root');
   if (!rootElement) throw new Error('Could not find root element to mount to');
 
+  // Drop prerendered SEO static HTML before mount so users only see the Vue app.
+  rootElement.replaceChildren();
+
   const app = createApp(App);
   installRouter(app);
   app.mount(rootElement);
