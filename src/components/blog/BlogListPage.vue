@@ -86,13 +86,13 @@ onMounted(async () => {
           >
             <div
               v-if="post.cover_url"
-              class="aspect-[16/9] overflow-hidden mb-4 bg-gray-100"
+              class="aspect-[16/9] overflow-hidden mb-4 bg-gray-100 rounded-2xl shadow-md"
               :class="darkMode ? 'bg-gray-800' : 'bg-gray-100'"
             >
               <img
                 :src="post.cover_url"
                 :alt="post.title"
-                class="w-full h-full rounded-lg shadow-md object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+                class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
                 loading="lazy"
               />
             </div>
