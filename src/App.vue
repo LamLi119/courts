@@ -6,7 +6,7 @@ import { translate } from './utils/translations';
 import { getStationCanonicalEn } from './utils/mtrStations';
 import { venueMatchesDistricts, isValidDistrictSlug } from './utils/hkDistricts';
 import { slugify } from './utils/slugify';
-import { resetSeoToDefault, applySearchPageSeo, applyDistrictSportPageSeo, applyLandingPageSeo, applyExplorePageSeo } from './utils/seo';
+import { resetSeoToDefault, applySearchPageSeo, applyDistrictSportPageSeo, applyLandingPageSeo, applyExplorePageSeo, applyBlogListSeo, applyBlogPostSeo } from './utils/seo';
 import { useVenueSlug } from './router';
 import { db } from '../db';
 import Header from './components/layout/Header.vue';
@@ -24,6 +24,8 @@ import VenueForm from './components/admin/VenueForm.vue';
 import AdminPage from './components/admin/AdminPage.vue';
 import LandingPage from './components/landing/LandingPage.vue';
 import AboutPage from './components/about/AboutPage.vue';
+import BlogListPage from './components/blog/BlogListPage.vue';
+import BlogPostPage from './components/blog/BlogPostPage.vue';
 import { useAuth } from './composables/auth';
 import { useIsMobile } from './composables/useIsMobile';
 import { useGrindUpcomingEvents } from './composables/useGrindUpcomingEvents';
@@ -212,6 +214,13 @@ watch(
       if (canonical && typeof window !== 'undefined') {
         canonical.setAttribute('href', `${window.location.origin}/about`);
       }
+    } else if (route.name === 'blog') {
+      selectedVenue.value = null;
+      showDesktopDetail.value = false;
+      applyBlogListSeo(language.value);
+    } else if (route.name === 'blog-post') {
+      selectedVenue.value = null;
+      showDesktopDetail.value = false;
     } else if (route.name === 'home' || route.name === 'admin') {
       if (route.name === 'home') {
         currentTab.value = 'explore';
@@ -279,6 +288,9 @@ watch(
       document.title = language.value === 'zh'
         ? '關於 Courts by The Ground | Courts'
         : 'About Courts by The Ground | Courts';
+    }
+    if (route.name === 'blog') {
+      applyBlogListSeo(language.value);
     }
     if (route.name === 'explore' && venues.value.length > 0) {
       applyExplorePageSeo(venues.value, language.value);
@@ -899,6 +911,7 @@ const handleSaveVenue = async (venueData: any) => {
         :venues="venues"
         :sports="sports"
         :language="language"
+        :t="t"
         :dark-mode="darkMode"
         :is-super-admin="isSuperAdmin"
         :admin-status="adminStatus"
@@ -1006,6 +1019,23 @@ const handleSaveVenue = async (venueData: any) => {
           :t="t"
           :dark-mode="darkMode"
           :set-language="(l: Language) => { language = l; }"
+        />
+
+        <BlogListPage
+          v-else-if="route.name === 'blog'"
+          :language="language"
+          :t="t"
+          :dark-mode="darkMode"
+          :set-language="(l: Language) => { language = l; }"
+        />
+
+        <BlogPostPage
+          v-else-if="route.name === 'blog-post'"
+          :language="language"
+          :t="t"
+          :dark-mode="darkMode"
+          :set-language="(l: Language) => { language = l; }"
+          @post-loaded="(post) => applyBlogPostSeo(post, language)"
         />
 
         <template

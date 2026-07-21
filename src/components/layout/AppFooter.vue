@@ -15,6 +15,7 @@ const CONTACT_PHONE = '';
 const shareFeedback = ref<string | null>(null);
 
 const footerLinks = [
+  { key: 'blog', href: '/blog' },
   { key: 'aboutUs', href: '/about' },
   { key: 'footerCourtsDirectory', href: 'https://courts.theground.io/' },
   { key: 'footerTheGround', href: 'https://theground.io/' },

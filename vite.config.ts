@@ -12,6 +12,7 @@ import {
   buildSearchPageMeta,
   buildDistrictSportPageMeta,
 } from './lib/pageSeoMeta.js';
+import { buildBlogListPageMeta, buildBlogPostPageMeta } from './lib/blogSeoMeta.js';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
@@ -109,11 +110,12 @@ export default defineConfig(({ mode }) => {
           const readBootstrap = () => {
             try {
               const bootstrapPath = path.resolve(server.config.root, 'public/venues-bootstrap.json');
-              if (!fs.existsSync(bootstrapPath)) return { venues: [], sports: [] };
+              if (!fs.existsSync(bootstrapPath)) return { venues: [], sports: [], blogPosts: [] };
               const data = JSON.parse(fs.readFileSync(bootstrapPath, 'utf-8'));
               return {
                 venues: Array.isArray(data.venues) ? data.venues : [],
                 sports: Array.isArray(data.sports) ? data.sports : [],
+                blogPosts: Array.isArray(data.blogPosts) ? data.blogPosts : [],
               };
             } catch {
               return { venues: [], sports: [] };
@@ -149,6 +151,24 @@ export default defineConfig(({ mode }) => {
             if (pathname === '/explore') {
               const { venues } = readBootstrap();
               return void injectAndSend(buildExplorePageMeta({ venues, origin, lang: 'en' }));
+            }
+
+            if (pathname === '/blog' || pathname === '/blog/') {
+              const { blogPosts } = readBootstrap();
+              return void injectAndSend(buildBlogListPageMeta({ posts: blogPosts, origin, lang: 'en' }));
+            }
+
+            if (pathname.startsWith('/blog/')) {
+              const slug = pathname.slice('/blog/'.length).replace(/\/$/, '').split('/')[0];
+              if (!slug) return next();
+              try {
+                const r = await fetch(`${apiBase}/api/blog/${encodeURIComponent(slug)}`);
+                if (!r.ok) return next();
+                const post = await r.json();
+                return void injectAndSend(buildBlogPostPageMeta(post, { origin, lang: 'en' }));
+              } catch {
+                return next();
+              }
             }
 
             if (pathname.startsWith('/search/')) {

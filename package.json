@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@google-cloud/storage": "^7.19.0",
+    "@notionhq/client": "^2.3.0",
     "assets": "latest",
     "axios": "^1.13.5",
     "dotenv": "^16.4.5",
@@ -27,6 +28,7 @@
     "form-data": "^4.0.5",
     "mysql2": "^3.17.0",
     "pg": "^8.12.0",
+    "sanitize-html": "^2.17.0",
     "vue": "^3.5.13",
     "vue-router": "^4.5.0"
   },
