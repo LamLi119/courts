@@ -30,15 +30,21 @@ export async function syncBlogFromNotion(db) {
 
   for (const page of pages) {
     const blocks = await fetchAllBlocks(notion, page.id);
-    const body_html = await blocksToHtml(blocks, page.id);
     const cover_url = await copyCoverToGcs(page.coverSourceUrl, page.id);
+    const coverVersion = page.notionLastEdited
+      ? new Date(page.notionLastEdited).getTime()
+      : Date.now();
+    const body_html = await blocksToHtml(blocks, page.id, undefined, {
+      coverUrl: cover_url,
+      coverSourceUrl: page.coverSourceUrl,
+    });
 
     await upsertBlogPost(db, {
       id: page.id,
       slug: page.slug,
       title: page.title,
       summary: page.summary,
-      cover_url,
+      cover_url: cover_url ? `${cover_url}${cover_url.includes('?') ? '&' : '?'}v=${coverVersion}` : null,
       body_html,
       status: 'Published',
       published_at: page.publishedAt || page.notionLastEdited,

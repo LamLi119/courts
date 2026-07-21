@@ -72,13 +72,25 @@ async function resolveImageUrl(block, pageId, copyImage) {
   return copyImage(sourceUrl, pageId, block.id);
 }
 
+function readBlockImageSourceUrl(block) {
+  const image = block?.image || {};
+  if (image.type === 'file' && image.file?.url) return image.file.url;
+  if (image.type === 'external' && image.external?.url) return image.external.url;
+  return null;
+}
+
+function normalizeComparableUrl(value) {
+  if (!value) return '';
+  return String(value).trim().replace(/[?#].*$/, '');
+}
+
 function renderList(items, tag) {
   if (!items.length) return '';
   const inner = items.map((item) => `<li>${item}</li>`).join('');
   return `<${tag}>${inner}</${tag}>`;
 }
 
-async function blockToHtml(block, pageId, copyImage) {
+async function blockToHtml(block, pageId, copyImage, options = {}) {
   const type = block.type;
   const data = block[type] || {};
 
@@ -103,7 +115,7 @@ async function blockToHtml(block, pageId, copyImage) {
   if (type === 'bulleted_list_item') {
     const inner = richTextToHtml(data.rich_text);
     const childHtml = block.children?.length
-      ? await blocksToHtml(block.children, pageId, copyImage)
+      ? await blocksToHtml(block.children, pageId, copyImage, options)
       : '';
     return `<li>${inner}${childHtml}</li>`;
   }
@@ -111,7 +123,7 @@ async function blockToHtml(block, pageId, copyImage) {
   if (type === 'numbered_list_item') {
     const inner = richTextToHtml(data.rich_text);
     const childHtml = block.children?.length
-      ? await blocksToHtml(block.children, pageId, copyImage)
+      ? await blocksToHtml(block.children, pageId, copyImage, options)
       : '';
     return `<li>${inner}${childHtml}</li>`;
   }
@@ -143,8 +155,19 @@ async function blockToHtml(block, pageId, copyImage) {
   }
 
   if (type === 'image') {
+    const sourceUrl = readBlockImageSourceUrl(block);
+    const normalizedSource = normalizeComparableUrl(sourceUrl);
+    if (!options.coverConsumed && normalizedSource && normalizedSource === normalizeComparableUrl(options.coverSourceUrl)) {
+      options.coverConsumed = true;
+      return '';
+    }
     const src = await resolveImageUrl(block, pageId, copyImage);
     if (!src) return '';
+    const normalizedSrc = normalizeComparableUrl(src);
+    if (!options.coverConsumed && normalizedSrc && normalizedSrc === normalizeComparableUrl(options.coverUrl)) {
+      options.coverConsumed = true;
+      return '';
+    }
     const caption = plainTextFromRichText(data.caption);
     const alt = escapeHtml(caption || 'Blog image');
     const img = `<img src="${escapeHtml(src)}" alt="${alt}" loading="lazy" />`;
@@ -164,7 +187,7 @@ async function blockToHtml(block, pageId, copyImage) {
   if (type === 'toggle') {
     const inner = richTextToHtml(data.rich_text);
     const childHtml = block.children?.length
-      ? await blocksToHtml(block.children, pageId, copyImage)
+      ? await blocksToHtml(block.children, pageId, copyImage, options)
       : '';
     return inner || childHtml ? `<div class="blog-toggle"><p><strong>${inner}</strong></p>${childHtml}</div>` : '';
   }
@@ -181,7 +204,7 @@ async function blockToHtml(block, pageId, copyImage) {
   return '';
 }
 
-async function groupListBlocks(blocks, pageId, copyImage) {
+async function groupListBlocks(blocks, pageId, copyImage, options = {}) {
   const parts = [];
   let i = 0;
   while (i < blocks.length) {
@@ -190,7 +213,7 @@ async function groupListBlocks(blocks, pageId, copyImage) {
     if (type === 'bulleted_list_item') {
       const items = [];
       while (i < blocks.length && blocks[i].type === 'bulleted_list_item') {
-        items.push(await blockToHtml(blocks[i], pageId, copyImage));
+        items.push(await blockToHtml(blocks[i], pageId, copyImage, options));
         i += 1;
       }
       parts.push(renderList(items.filter(Boolean), 'ul'));
@@ -199,7 +222,7 @@ async function groupListBlocks(blocks, pageId, copyImage) {
     if (type === 'numbered_list_item') {
       const items = [];
       while (i < blocks.length && blocks[i].type === 'numbered_list_item') {
-        items.push(await blockToHtml(blocks[i], pageId, copyImage));
+        items.push(await blockToHtml(blocks[i], pageId, copyImage, options));
         i += 1;
       }
       parts.push(renderList(items.filter(Boolean), 'ol'));
@@ -208,20 +231,20 @@ async function groupListBlocks(blocks, pageId, copyImage) {
     if (type === 'to_do') {
       const items = [];
       while (i < blocks.length && blocks[i].type === 'to_do') {
-        items.push(await blockToHtml(blocks[i], pageId, copyImage));
+        items.push(await blockToHtml(blocks[i], pageId, copyImage, options));
         i += 1;
       }
       parts.push(renderList(items.filter(Boolean), 'ul'));
       continue;
     }
-    parts.push(await blockToHtml(block, pageId, copyImage));
+    parts.push(await blockToHtml(block, pageId, copyImage, options));
     i += 1;
   }
   return parts.filter(Boolean).join('\n');
 }
 
-export async function blocksToHtml(blocks, pageId, copyImage = copyRemoteImageToBlogGcs) {
-  const html = await groupListBlocks(blocks || [], pageId, copyImage);
+export async function blocksToHtml(blocks, pageId, copyImage = copyRemoteImageToBlogGcs, options = {}) {
+  const html = await groupListBlocks(blocks || [], pageId, copyImage, options);
   return sanitizeArticleHtml(html);
 }
 

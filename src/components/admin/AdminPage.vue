@@ -12,6 +12,7 @@ const props = defineProps<{
   t: (key: string) => string;
   darkMode: boolean;
   isSuperAdmin: boolean;
+  superAdminSyncPassword?: string;
   adminStatus: { type: 'none' | 'super' | 'court'; allowedIds: number[] };
 }>();
 
@@ -269,7 +270,21 @@ const syncBlogFromNotion = async () => {
   if (!props.isSuperAdmin || isBlogSyncing.value) return;
   isBlogSyncing.value = true;
   try {
-    const result = await db.syncBlogFromNotion();
+    let result;
+    try {
+      result = await db.syncBlogFromNotion(props.superAdminSyncPassword || undefined);
+    } catch (err: any) {
+      const msg = String(err?.message || '');
+      const needsPassword = msg.toLowerCase().includes('super admin');
+      if (!needsPassword || props.superAdminSyncPassword) throw err;
+      const pwd = window.prompt(
+        props.language === 'en'
+          ? 'Enter the global super admin password to sync from Notion:'
+          : '請輸入全域超級管理員密碼以從 Notion 同步：',
+      );
+      if (!pwd) throw new Error(props.t('blogSyncFailed'));
+      result = await db.syncBlogFromNotion(pwd);
+    }
     const count = result?.synced ?? 0;
     emit(
       'notify',

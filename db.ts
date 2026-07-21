@@ -325,8 +325,12 @@ export const db = {
     return res.json();
   },
 
-  async syncBlogFromNotion(): Promise<{ success: boolean; synced: number; removed: number; slugs: string[] }> {
-    const res = await apiFetch('/api/blog/sync', { method: 'POST' });
+  async syncBlogFromNotion(password?: string): Promise<{ success: boolean; synced: number; removed: number; slugs: string[] }> {
+    const body = password ? JSON.stringify({ password }) : undefined;
+    const res = await apiFetch('/api/blog/sync', {
+      method: 'POST',
+      ...(body ? { body } : {}),
+    });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: res.statusText }));
       throw new Error(err.error || res.statusText);

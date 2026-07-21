@@ -72,7 +72,7 @@ watch(
     class="w-full min-h-[calc(100vh-4rem)] flex flex-col"
     :class="darkMode ? 'bg-gray-900' : 'bg-white'"
   >
-    <div class="flex-1 w-full max-w-3xl mx-auto px-4 md:px-6 py-10 md:py-14">
+    <div class="flex-1 w-full max-w-5xl mx-auto px-4 md:px-6 py-10 md:py-14">
       <a
         href="/blog"
         class="inline-flex items-center gap-2 text-sm font-bold text-[#007a67] no-underline mb-8"

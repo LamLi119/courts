@@ -99,6 +99,7 @@ const invalidateVenuesCache = () => {
 };
 
 const adminStatus = ref<{ type: 'none' | 'super' | 'court'; allowedIds: number[] }>({ type: 'none', allowedIds: [] });
+const superAdminSyncPassword = ref('');
 const isSuperAdmin = computed(() => adminStatus.value.type === 'super');
 const isAnyAdmin = computed(() => adminStatus.value.type !== 'none');
 
@@ -357,14 +358,7 @@ onMounted(() => {
   (window as any).__adminPopState = onPopState;
 
   const restoreAdminSession = async () => {
-    // Avoid a guaranteed 401 for anonymous visitors (no admin cookie).
-    const hasAdminCookie =
-      typeof document !== 'undefined' &&
-      document.cookie.split(';').some((c) => c.trim().startsWith('courts_admin_session='));
-    if (!hasAdminCookie) {
-      adminStatus.value = { type: 'none', allowedIds: [] };
-      return;
-    }
+    // Session cookie is httpOnly — always verify with the API (document.cookie cannot see it).
     try {
       const res = await fetch(courtApiUrl('/api/auth/session'), { method: 'GET', credentials: 'include' });
       if (!res.ok) throw new Error('No admin session');
@@ -374,6 +368,7 @@ onMounted(() => {
       if (isAdminPath()) currentTab.value = 'admin';
     } catch {
       adminStatus.value = { type: 'none', allowedIds: [] };
+      superAdminSyncPassword.value = '';
     }
   };
   void loadData();
@@ -490,6 +485,11 @@ const handleAdminLogin = async () => {
     if (res.ok) {
       const data = await res.json();
       adminStatus.value = { type: data.type === 'super' ? 'super' : 'court', allowedIds: data.allowedVenueIds || [] };
+      if (data.type === 'super') {
+        superAdminSyncPassword.value = adminPassword.value;
+      } else {
+        superAdminSyncPassword.value = '';
+      }
       showAdminLogin.value = false;
       adminPassword.value = '';
       currentTab.value = 'admin';
@@ -522,6 +522,11 @@ const handleAdminLoginFromUserLoginPage = async (password: string) => {
     if (res.ok) {
       const data = await res.json();
       adminStatus.value = { type: data.type === 'super' ? 'super' : 'court', allowedIds: data.allowedVenueIds || [] };
+      if (data.type === 'super') {
+        superAdminSyncPassword.value = pwd;
+      } else {
+        superAdminSyncPassword.value = '';
+      }
       currentTab.value = 'admin';
       invalidateVenuesCache();
       await loadData();
@@ -545,6 +550,7 @@ const handleAdminLogout = async () => {
     // ignore logout request failure; clear local state anyway
   }
   adminStatus.value = { type: 'none', allowedIds: [] };
+  superAdminSyncPassword.value = '';
   currentTab.value = 'explore';
   if (route.name === 'admin') {
     await router.push('/');
@@ -914,6 +920,7 @@ const handleSaveVenue = async (venueData: any) => {
         :t="t"
         :dark-mode="darkMode"
         :is-super-admin="isSuperAdmin"
+        :super-admin-sync-password="superAdminSyncPassword"
         :admin-status="adminStatus"
         @add-venue="() => { editingVenue = null; showVenueForm = true; }"
         @edit-venue="(v) => { editingVenue = v; showVenueForm = true; }"

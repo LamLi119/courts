@@ -345,6 +345,16 @@ function getAdminSession(req) {
   return { sid, ...session };
 }
 
+/** Super-admin via session cookie or password (cross-origin cookie fallback). */
+function isSuperAdminRequest(req) {
+  const session = getAdminSession(req);
+  if (session?.type === 'super') return true;
+  const pwd = req.body?.password
+    || req.body?.superAdminPassword
+    || req.query?.superAdminPassword;
+  return typeof pwd === 'string' && pwd === SUPER_ADMIN_PASSWORD;
+}
+
 function adminCookieOptions(req) {
   const forwardedProto = (req.get('x-forwarded-proto') || '').split(',')[0].trim();
   const secure = req.secure || forwardedProto === 'https';
@@ -1618,9 +1628,10 @@ app.get('/api/blog/:slug', async (req, res) => {
 /** Super-admin: sync published Notion database pages into MySQL. */
 app.post('/api/blog/sync', async (req, res) => {
   try {
-    const session = getAdminSession(req);
-    if (!session || session.type !== 'super') {
-      return res.status(403).json({ error: 'Super admin required' });
+    if (!isSuperAdminRequest(req)) {
+      return res.status(403).json({
+        error: 'Super admin required. Log in with the global super admin password (not a venue password).',
+      });
     }
     const db = getPool();
     const result = await syncBlogFromNotion(db);
