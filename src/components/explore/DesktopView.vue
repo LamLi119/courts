@@ -293,7 +293,9 @@ const leftListVenues = computed(() =>
             :class="darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'"
             @input="e => setSearchQuery((e.target as HTMLInputElement).value)" />
           <button type="button" class="absolute right-2 p-2 rounded-[8px] transition-all"
-            :class="showFilterPanel ? 'bg-[#007a67] text-white' : (darkMode ? 'text-gray-400 hover:bg-gray-600' : 'text-gray-500 hover:bg-gray-200')"
+            :class="showFilterPanel ? 'bg-[#007a67] text-white' : (darkMode ? 'text-gray-300 hover:bg-gray-600' : 'text-gray-600 hover:bg-gray-200')"
+            :aria-label="language === 'en' ? 'Filters' : '篩選'"
+            :aria-expanded="showFilterPanel"
             @click="showFilterPanel = !showFilterPanel">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24"
               stroke="currentColor">
@@ -343,8 +345,9 @@ const leftListVenues = computed(() =>
               {{ getDistrictDisplayName(slug, language) }}
               <button type="button"
                 class="w-5 h-5 rounded-full flex items-center justify-center hover:bg-white/20 text-[14px] leading-none"
+                :aria-label="language === 'en' ? `Remove ${getDistrictDisplayName(slug, language)}` : `移除${getDistrictDisplayName(slug, language)}`"
                 @click="setDistrictFilter(districtFilter.filter((s) => s !== slug))">
-                ×
+                <span aria-hidden="true">×</span>
               </button>
             </span>
           </template>
@@ -354,8 +357,9 @@ const leftListVenues = computed(() =>
               {{ getStationDisplayName(station, language) }}
               <button type="button"
                 class="w-5 h-5 rounded-full flex items-center justify-center hover:bg-white/20 text-[14px] leading-none"
+                :aria-label="language === 'en' ? `Remove ${getStationDisplayName(station, language)}` : `移除${getStationDisplayName(station, language)}`"
                 @click="setMtrFilter(mtrFilter.filter(s => s !== station))">
-                ×
+                <span aria-hidden="true">×</span>
               </button>
             </span>
           </template>

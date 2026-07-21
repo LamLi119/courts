@@ -569,7 +569,9 @@ async function imageUrlToPngDataUrl(imageUrl: string, size = 96): Promise<string
 }
 
 async function fetchIconViaProxy(iconUrl: string): Promise<string> {
-  const proxiedUrl = courtApiUrl(`/api/image-proxy?url=${encodeURIComponent(iconUrl)}`);
+  const proxiedUrl = courtApiUrl(
+    `/api/image-proxy?url=${encodeURIComponent(iconUrl)}&w=128`,
+  );
   const res = await fetch(proxiedUrl, { method: 'GET', credentials: 'omit' });
   if (!res.ok) return '';
   const blob = await res.blob();

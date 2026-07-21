@@ -4,9 +4,12 @@
  */
 export function loadGoogleMapsScript(): void {
   if (typeof window === 'undefined') return;
+  const logError = (...args: unknown[]) => {
+    if (import.meta.env.DEV) console.error(...args);
+  };
   const apiKey = (import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined)?.trim();
   if (!apiKey) {
-    console.error('VITE_GOOGLE_MAPS_API_KEY is not defined in .env');
+    logError('VITE_GOOGLE_MAPS_API_KEY is not defined in .env');
     window.dispatchEvent(new Event('google-maps-auth-error'));
     return;
   }
@@ -20,7 +23,7 @@ export function loadGoogleMapsScript(): void {
   script.async = true;
   script.defer = true;
   script.onerror = () => {
-    console.error('Failed to load Google Maps API');
+    logError('Failed to load Google Maps API');
     window.dispatchEvent(new Event('google-maps-auth-error'));
   };
   document.head.appendChild(script);

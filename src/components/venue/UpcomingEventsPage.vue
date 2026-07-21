@@ -14,7 +14,7 @@ const { loading, error, events, refresh } = useGrindUpcomingEvents();
 
 onMounted(() => {
   document.title = 'Upcoming Events | Courts';
-  void refresh();
+  void refresh({ maxPages: 20 });
 });
 </script>
 
@@ -32,7 +32,7 @@ onMounted(() => {
         :dark-mode="darkMode"
         :language="language"
         :t="t"
-        @retry="refresh"
+        @retry="() => refresh({ maxPages: 20 })"
       />
     </div>
   </div>

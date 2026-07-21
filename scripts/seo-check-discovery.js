@@ -25,10 +25,22 @@ async function main() {
   const rows = [];
 
   rows.push(
-    await check('llms.txt', `${base}/llms.txt`, (res) => ({
-      ok: res.status === 200 && /Courts/i.test(res.body) && /sitemap\.xml/i.test(res.body),
-      detail: res.status === 200 ? `${res.body.length} bytes` : '',
-    }))
+    await check('llms.txt', `${base}/llms.txt`, (res) => {
+      const hasMarkdownLinks = /\[[^\]]+\]\(https?:\/\/[^)]+\)/.test(res.body);
+      const hasH1 = /^#\s+\S/m.test(res.body);
+      const ok =
+        res.status === 200 &&
+        /Courts/i.test(res.body) &&
+        /sitemap\.xml/i.test(res.body) &&
+        hasMarkdownLinks &&
+        hasH1;
+      return {
+        ok,
+        detail: res.status === 200
+          ? `${res.body.length} bytes${hasMarkdownLinks ? ', markdown links' : ', missing markdown links'}`
+          : '',
+      };
+    })
   );
 
   rows.push(

@@ -1432,7 +1432,7 @@ const inputClass =
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div class="flex items-center gap-3">
               <span class="flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center overflow-hidden" :class="darkMode ? 'bg-gray-700' : 'bg-gray-100'" aria-hidden="true">
-                <img src="https://static.cdninstagram.com/rsrc.php/v4/yG/r/De-Dwpd5CHc.png" alt="" class="w-9 h-9 object-contain" />
+                <img src="https://cdn.simpleicons.org/instagram" alt="" class="w-9 h-9 object-contain" />
               </span>
               <div class="flex-1 min-w-0 flex items-center rounded-[12px] border overflow-hidden" :class="darkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'">
                 <span class="pl-3 text-[12px] font-[700] shrink-0" :class="darkMode ? 'text-gray-400' : 'text-gray-500'">instagram.com/</span>
