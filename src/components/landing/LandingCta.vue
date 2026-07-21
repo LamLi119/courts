@@ -115,7 +115,7 @@ onUnmounted(() => {
           <h2 class="text-2xl md:text-3xl lg:text-4xl font-black text-white leading-tight">
             {{ t('landingCtaTitle') }}
           </h2>
-          <p class="mt-3 text-sm md:text-base text-white/80 leading-relaxed">
+          <p class="mt-3 text-sm md:text-base text-gray-100 leading-relaxed">
             {{ t('landingCtaSubtitle') }}
           </p>
          <!-- <button
@@ -125,7 +125,7 @@ onUnmounted(() => {
           >
             {{ t('landingCtaButton') }}
           </button> -->
-          <p class="mt-6 text-sm md:text-base text-white/90">
+          <p class="mt-6 text-sm md:text-base text-white">
             {{ t('landingCtaEmailPrompt') }}
             <a
               :href="`mailto:${CONTACT_EMAIL}`"

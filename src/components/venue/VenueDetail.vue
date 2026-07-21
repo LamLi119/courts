@@ -458,7 +458,7 @@ watch(
         <span class="truncate">{{ venue.name }}</span>
       </h1>
       <div class="flex items-center gap-2">
-        <button type="button" id="share-button" class="btn btn-utility btn-utility-round" aria-label="Share"
+        <button type="button" class="btn btn-utility btn-utility-round" :aria-label="t('share')"
           :class="darkMode ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-100'"
           @click="handleShare">
           <svg :id="`${venue.name}-share-icon`" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none"
@@ -471,12 +471,16 @@ watch(
           shareFeedback
         }}</span>
         <button v-if="(canEdit !== undefined ? canEdit : isAdmin)" type="button"
-          class="btn btn-utility btn-utility-round bg-blue-500 text-white hover:bg-blue-600" @click="onEdit">
-          ✏️
+          class="btn btn-utility btn-utility-round bg-blue-500 text-white hover:bg-blue-600"
+          :aria-label="language === 'en' ? 'Edit venue' : '編輯場地'"
+          @click="onEdit">
+          <span aria-hidden="true">✏️</span>
         </button>
         <button type="button" class="btn btn-utility btn-utility-round"
-          :class="isSaved() ? 'bg-red-500 text-white hover:bg-red-600' : ''" @click="toggleSave(venue.id)">
-          {{ isSaved() ? '❤️' : '🤍' }}
+          :class="isSaved() ? 'bg-red-500 text-white hover:bg-red-600' : ''"
+          :aria-label="isSaved() ? t('saved') : t('saveCourt')"
+          @click="toggleSave(venue.id)">
+          <span aria-hidden="true">{{ isSaved() ? '❤️' : '🤍' }}</span>
         </button>
       </div>
     </div>

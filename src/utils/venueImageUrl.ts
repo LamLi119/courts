@@ -25,7 +25,24 @@ export function venueImageSrc(url: string | undefined | null, useProxy = false):
   return u;
 }
 
-/** Prefer a smaller display width hint for card grids (browser + CDN still serve full object). */
-export function venueCardImageSrc(url: string | undefined | null, useProxy = false): string {
+/**
+ * Card-sized image URL. Uses the image proxy for GCS assets so repeat visits hit cache.
+ * `width` is passed as a hint for future CDN resizing; display size is enforced via img width/height.
+ */
+export function venueCardImageSrc(
+  url: string | undefined | null,
+  useProxy = false,
+  width = 400,
+): string {
+  const u = (url || '').trim();
+  if (!u || u.startsWith('data:') || u.startsWith('/')) {
+    return venueImageSrc(url, useProxy);
+  }
+  if (isGcsImageUrl(u)) {
+    const proxyUrl = courtApiUrl(
+      `/api/image-proxy?url=${encodeURIComponent(u)}&w=${encodeURIComponent(String(width))}`,
+    );
+    return useProxy ? proxyUrl : u;
+  }
   return venueImageSrc(url, useProxy);
 }

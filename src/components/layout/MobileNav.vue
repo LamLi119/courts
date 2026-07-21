@@ -31,7 +31,7 @@ const goHome = () => {
     <button
       type="button"
       class="flex-1 flex flex-col items-center justify-center gap-0.5 min-h-[44px] min-w-[44px] py-2 transition-all"
-      :class="isHome ? 'text-[#007a67]' : 'text-gray-400'"
+      :class="isHome ? 'text-[#007a67]' : (darkMode ? 'text-gray-300' : 'text-gray-500')"
       @click="goHome"
     >
       <span class="text-xl leading-none" aria-hidden="true">🏠</span>
@@ -43,7 +43,7 @@ const goHome = () => {
     <button
       type="button"
       class="flex-1 flex flex-col items-center justify-center gap-0.5 min-h-[44px] min-w-[44px] py-2 transition-all"
-      :class="!isHome && currentTab === 'explore' ? 'text-[#007a67]' : 'text-gray-400'"
+      :class="!isHome && currentTab === 'explore' ? 'text-[#007a67]' : (darkMode ? 'text-gray-300' : 'text-gray-500')"
       @click="setTab('explore')"
     >
       <span class="text-xl leading-none" aria-hidden="true">📍</span>
@@ -55,7 +55,7 @@ const goHome = () => {
     <button
       type="button"
       class="flex-1 flex flex-col items-center justify-center gap-0.5 min-h-[44px] min-w-[44px] py-2 transition-all"
-      :class="currentTab === 'saved' ? 'text-red-500' : 'text-gray-400'"
+      :class="currentTab === 'saved' ? 'text-red-500' : (darkMode ? 'text-gray-300' : 'text-gray-500')"
       @click="setTab('saved')"
     >
       <span class="text-xl leading-none" aria-hidden="true">❤️</span>
@@ -68,7 +68,7 @@ const goHome = () => {
       v-if="isAdmin"
       type="button"
       class="flex-1 flex flex-col items-center justify-center gap-0.5 min-h-[44px] min-w-[44px] py-2 transition-all"
-      :class="currentTab === 'admin' ? 'text-blue-500' : 'text-gray-400'"
+      :class="currentTab === 'admin' ? 'text-blue-500' : (darkMode ? 'text-gray-300' : 'text-gray-500')"
       @click="setTab('admin')"
     >
       <span class="text-xl leading-none" aria-hidden="true">🔑</span>

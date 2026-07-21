@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import type { Venue, Language, AppTab } from '../types';
 import { translate } from './utils/translations';
@@ -10,30 +10,36 @@ import { resetSeoToDefault, applySearchPageSeo, applyDistrictSportPageSeo, apply
 import { useVenueSlug } from './router';
 import { db } from '../db';
 import Header from './components/layout/Header.vue';
-import AdminLogin from './components/auth/AdminLogin.vue';
-import UserLoginPage from './components/auth/UserLoginPage.vue';
-import UserSignUpPage from './components/auth/UserSignUpPage.vue';
-import TokenLoginPage from './components/auth/TokenLoginPage.vue';
-import CompletePhonePage from './components/auth/CompletePhonePage.vue';
-import DesktopView from './components/explore/DesktopView.vue';
-import MobileView from './components/explore/MobileView.vue';
 import MobileNav from './components/layout/MobileNav.vue';
-import VenueDetail from './components/venue/VenueDetail.vue';
-import UpcomingEventsPage from './components/venue/UpcomingEventsPage.vue';
-import VenueForm from './components/admin/VenueForm.vue';
-import AdminPage from './components/admin/AdminPage.vue';
 import LandingPage from './components/landing/LandingPage.vue';
-import AboutPage from './components/about/AboutPage.vue';
 import { useAuth } from './composables/auth';
 import { useIsMobile } from './composables/useIsMobile';
 import { useGrindUpcomingEvents } from './composables/useGrindUpcomingEvents';
 import {
   hydrateInitialVenueData,
   setVenuesCache,
+  isVenuesCacheFresh,
+  readSessionCacheMeta,
 } from './utils/venuesBootstrap';
 import { courtApiUrl } from './utils/courtApiUrl';
 
+const AdminLogin = defineAsyncComponent(() => import('./components/auth/AdminLogin.vue'));
+const UserLoginPage = defineAsyncComponent(() => import('./components/auth/UserLoginPage.vue'));
+const UserSignUpPage = defineAsyncComponent(() => import('./components/auth/UserSignUpPage.vue'));
+const TokenLoginPage = defineAsyncComponent(() => import('./components/auth/TokenLoginPage.vue'));
+const CompletePhonePage = defineAsyncComponent(() => import('./components/auth/CompletePhonePage.vue'));
+const DesktopView = defineAsyncComponent(() => import('./components/explore/DesktopView.vue'));
+const MobileView = defineAsyncComponent(() => import('./components/explore/MobileView.vue'));
+const VenueDetail = defineAsyncComponent(() => import('./components/venue/VenueDetail.vue'));
+const UpcomingEventsPage = defineAsyncComponent(() => import('./components/venue/UpcomingEventsPage.vue'));
+const VenueForm = defineAsyncComponent(() => import('./components/admin/VenueForm.vue'));
+const AdminPage = defineAsyncComponent(() => import('./components/admin/AdminPage.vue'));
+const AboutPage = defineAsyncComponent(() => import('./components/about/AboutPage.vue'));
+
 const initialVenueData = hydrateInitialVenueData();
+if (initialVenueData.hasData) {
+  setVenuesCache(initialVenueData.venues, initialVenueData.sports, Date.now());
+}
 
 const route = useRoute();
 const { refresh: refreshGrindUpcomingEvents } = useGrindUpcomingEvents();
@@ -106,8 +112,14 @@ function canEditVenue(venueId: number): boolean {
   return false;
 }
 
-const loadData = async () => {
+const loadData = async (force = false) => {
   const hadData = venues.value.length > 0;
+  const cacheMeta = readSessionCacheMeta();
+  if (!force && hadData && cacheMeta && isVenuesCacheFresh(cacheMeta.ts)) {
+    isLoading.value = false;
+    return;
+  }
+
   try {
     if (!hadData) {
       isLoading.value = true;
@@ -122,9 +134,8 @@ const loadData = async () => {
       sports.value = sportsList;
     }
   } catch (err) {
-    console.error('Error fetching venues from DB:', err);
-    if (!venues.value.length) {
-      console.error('No cached venues available after API failure.');
+    if (!venues.value.length && import.meta.env.DEV) {
+      console.error('Error fetching venues from DB:', err);
     }
   } finally {
     isLoading.value = false;
@@ -838,13 +849,6 @@ const handleSaveVenue = async (venueData: any) => {
       :darkMode="darkMode"
     />
     
-    <AdminManagePage
-      v-else-if="route.name === 'admin-manage'"
-      :language="language"
-      :t="t"
-      :darkMode="darkMode"
-    />
-
     <UpcomingEventsPage
       v-else-if="route.name === 'upcoming-events'"
       :language="language"
