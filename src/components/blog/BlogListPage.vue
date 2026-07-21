@@ -48,11 +48,11 @@ onMounted(async () => {
 <template>
   <div
     class="w-full min-h-[calc(100vh-4rem)] flex flex-col"
-    :class="darkMode ? 'bg-gray-900' : 'bg-white'"
+    :class="darkMode ? 'bg-gray-800' : 'bg-gray-50'"
   >
     <div class="flex-1 w-full max-w-5xl mx-auto px-4 md:px-6 py-10 md:py-14">
       <header class="mb-10 md:mb-12">
-        <p class="text-xs font-bold uppercase tracking-[0.2em] text-[#007a67] mb-3">
+        <p class="text-xs font-bold uppercase tracking-[0.2em] text-[#007a67] mb-3" :class="darkMode ? 'text-green-300' : 'text-gray-900'">
           {{ t('blogEyebrow') }}
         </p>
         <h1 class="text-3xl md:text-5xl font-black tracking-tight" :class="darkMode ? 'text-white' : 'text-gray-900'">
@@ -75,7 +75,8 @@ onMounted(async () => {
         <article
           v-for="post in posts"
           :key="post.slug"
-          class="group cursor-pointer"
+          class="p-4 group cursor-pointer shadow-md rounded-lg transition-shadow duration-300"
+          :class="darkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'"
           @click="openPost(post.slug)"
         >
           <a
@@ -91,7 +92,7 @@ onMounted(async () => {
               <img
                 :src="post.cover_url"
                 :alt="post.title"
-                class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+                class="w-full h-full rounded-lg shadow-md object-cover transition-transform duration-300 group-hover:scale-[1.02]"
                 loading="lazy"
               />
             </div>
