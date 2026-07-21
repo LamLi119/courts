@@ -5,7 +5,7 @@ import { getStationDisplayName } from '../../utils/mtrStations';
 import { getVenueDistrictSlug, getDistrictDisplayName } from '../../utils/hkDistricts';
 import { getVenueImageAlt } from '../../utils/seo';
 import { slugify } from '../../utils/slugify';
-import { isGcsImageUrl, venueCardImageSrc } from '../../utils/venueImageUrl';
+import { venueCardImageSrc } from '../../utils/venueImageUrl';
 
 const props = defineProps<{
   venue: Venue;
@@ -25,11 +25,11 @@ const isExpanded = ref(false);
 const imageAlt = computed(() => getVenueImageAlt(props.venue));
 const venueHref = computed(() => `/venues/${slugify(props.venue.name)}`);
 const imgFailed = ref(false);
-const useProxy = ref(false);
 const imageSrc = computed(() => {
   if (imgFailed.value) return '/placeholder.svg';
   const raw = props.venue.images?.[0] || '/placeholder.svg';
-  return venueCardImageSrc(raw === '/placeholder.svg' ? raw : raw, useProxy.value, props.isMobile ? 128 : 400);
+  // Mobile list thumbs are ~64–80px; landing/desktop cards are wider.
+  return venueCardImageSrc(raw, true, props.isMobile ? 160 : 800);
 });
 
 const expandLabel = computed(() => {
@@ -44,11 +44,6 @@ const saveLabel = computed(() =>
 );
 
 function onImageError() {
-  const raw = props.venue.images?.[0] || '';
-  if (!useProxy.value && isGcsImageUrl(raw)) {
-    useProxy.value = true;
-    return;
-  }
   imgFailed.value = true;
 }
 

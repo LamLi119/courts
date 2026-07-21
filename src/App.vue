@@ -339,10 +339,17 @@ watch(
       clearInterval(grindUpcomingPollTimer);
       grindUpcomingPollTimer = null;
     }
-    if (name === 'home' || name === 'upcoming-events') {
-      void refreshGrindUpcomingEvents();
+    // Home: 1 page only (warm cache, avoid multi‑MB parallel fetches).
+    // Upcoming list: full fetch for the standalone page.
+    if (name === 'home') {
+      void refreshGrindUpcomingEvents({ maxPages: 1 });
       grindUpcomingPollTimer = setInterval(() => {
-        void refreshGrindUpcomingEvents();
+        void refreshGrindUpcomingEvents({ maxPages: 1 });
+      }, HOME_GRIND_POLL_MS);
+    } else if (name === 'upcoming-events') {
+      void refreshGrindUpcomingEvents({ maxPages: 20 });
+      grindUpcomingPollTimer = setInterval(() => {
+        void refreshGrindUpcomingEvents({ maxPages: 20 });
       }, HOME_GRIND_POLL_MS);
     }
   },

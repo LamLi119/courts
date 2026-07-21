@@ -856,11 +856,44 @@ function isAllowedImageProxyUrl(rawUrl) {
   }
 }
 
+/** Clamp card/detail width hints; ignore invalid values. */
+function parseImageProxyWidth(rawWidth) {
+  const n = Number.parseInt(String(rawWidth || ''), 10);
+  if (!Number.isFinite(n) || n < 16) return null;
+  return Math.min(1600, Math.max(16, n));
+}
+
+/**
+ * Downscale + WebP when `w` is provided. Falls back to null on any sharp failure
+ * so the proxy can still return the original bytes.
+ */
+async function resizeImageBuffer(buffer, targetWidth) {
+  if (!targetWidth) return null;
+  try {
+    const { default: sharp } = await import('sharp');
+    const meta = await sharp(buffer, { failOn: 'none', animated: false }).metadata();
+    let pipeline = sharp(buffer, { failOn: 'none', animated: false }).rotate();
+    if (meta.width && meta.width > targetWidth) {
+      pipeline = pipeline.resize({
+        width: targetWidth,
+        withoutEnlargement: true,
+        fit: 'inside',
+      });
+    }
+    const out = await pipeline.webp({ quality: 72, effort: 4 }).toBuffer();
+    return { buffer: out, contentType: 'image/webp' };
+  } catch {
+    return null;
+  }
+}
+
 app.get('/api/image-proxy', async (req, res) => {
   try {
     const raw = (req.query?.url || '').toString().trim();
     if (!raw) return res.status(400).json({ error: 'Missing url' });
     if (!isAllowedImageProxyUrl(raw)) return res.status(400).json({ error: 'Invalid image url' });
+
+    const targetWidth = parseImageProxyWidth(req.query?.w);
 
     const response = await axios.get(raw, {
       responseType: 'arraybuffer',
@@ -869,12 +902,23 @@ app.get('/api/image-proxy', async (req, res) => {
       validateStatus: (status) => status >= 200 && status < 300
     });
 
-    const contentType = String(response.headers?.['content-type'] || 'application/octet-stream');
-    // Keep cache-friendly defaults; the underlying GCS objects are immutable in this app.
+    const original = Buffer.from(response.data);
+    const resized = await resizeImageBuffer(original, targetWidth);
+    const body = resized?.buffer || original;
+    const contentType = resized?.contentType
+      || String(response.headers?.['content-type'] || 'application/octet-stream');
+
+    // GCS objects are immutable; resized variants are keyed by `w` in the URL.
     res.setHeader('Content-Type', contentType);
-    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.setHeader(
+      'Cache-Control',
+      resized
+        ? 'public, max-age=2592000, immutable'
+        : 'public, max-age=86400',
+    );
     res.setHeader('Access-Control-Allow-Origin', '*');
-    return res.status(200).send(Buffer.from(response.data));
+    if (resized) res.setHeader('X-Image-Proxy-Resized', '1');
+    return res.status(200).send(body);
   } catch (err) {
     const msg = err?.message || 'Proxy failed';
     return res.status(502).json({ error: msg });

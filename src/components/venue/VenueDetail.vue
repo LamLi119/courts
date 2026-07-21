@@ -395,7 +395,7 @@ const showVenueRating = computed(() => {
 });
 
 onMounted(() => {
-  void refreshUpcoming();
+  void refreshUpcoming({ maxPages: 20 });
 });
 
 watch(
