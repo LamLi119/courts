@@ -414,7 +414,7 @@ const goNextVenueFromDetail = async () => {
 <template>
   <VenueDetail
     v-if="showDetailPage && selectedVenue"
-    :key="selectedVenue.id"
+    :key="`${selectedVenue.id}-${selectedVenue.mtrStation || ''}-${selectedVenue.walkingDistance || 0}`"
     :venue="selectedVenue"
     :onBack="() => { showDetailPage = false; props.onBackFromDetail?.(); }"
     :onPrevVenue="goPrevVenueFromDetail"

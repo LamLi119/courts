@@ -234,6 +234,20 @@ function prepareRowForDb(row) {
   return row;
 }
 
+/** Strip ZWJ/BOM/format chars that break slug matching (e.g. venue id 8 name). */
+function cleanDisplayText(text) {
+  if (text == null || typeof text !== 'string') return text;
+  return text.replace(/\p{Cf}/gu, '').replace(/\uFEFF/g, '').trim().replace(/\s+/g, ' ');
+}
+
+function normalizeVenueRowForClient(row) {
+  if (!row || typeof row !== 'object') return row;
+  if (typeof row.name === 'string') row.name = cleanDisplayText(row.name);
+  if (typeof row.mtrStation === 'string') row.mtrStation = cleanDisplayText(row.mtrStation);
+  if (typeof row.mtrExit === 'string') row.mtrExit = cleanDisplayText(row.mtrExit);
+  return row;
+}
+
 /** Helper: ensure pricing image is a GCS URL (not base64) before DB write. */
 async function normalizePricingForStorage(rawPricing) {
   if (rawPricing == null || rawPricing === '') return rawPricing;
@@ -714,7 +728,7 @@ async function getVenueWithSports(db, venueId, includePassword = false) {
   } catch (_) {
     r.sport_data = [];
   }
-  return r;
+  return normalizeVenueRowForClient(r);
 }
 
 function sanitizeRow(body) {
@@ -740,6 +754,8 @@ function sanitizeRow(body) {
         if (v == null || v === '') row[k] = null;
         else if (typeof v === 'string') row[k] = v;
         else row[k] = JSON.stringify(v);
+      } else if ((k === 'name' || k === 'mtrStation' || k === 'mtrExit') && typeof v === 'string') {
+        row[k] = cleanDisplayText(v);
       } else {
         row[k] = (v === undefined) ? null : v;
       }
@@ -1549,6 +1565,7 @@ app.get('/api/venues', async (req, res) => {
       rows.forEach((r) => { r.sport_data = byVenue[r.id] || []; });
     } catch (_) {}
     rows.forEach((r) => attachHasAdminPassword(r, includePasswords));
+    rows.forEach((r) => normalizeVenueRowForClient(r));
     if (!includePasswords) {
       res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
     }

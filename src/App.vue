@@ -168,14 +168,18 @@ function resolveVenueBySlug(slug: string): Venue | null {
 function syncSelectedVenueFromList() {
   if (route.name === 'venue' && typeof route.params.slug === 'string') {
     const slug = String(route.params.slug).toLowerCase().trim();
-    // Prefer same id when slug still matches (avoids wrong venue on slug collisions).
-    let venue: Venue | null = null;
     const currentId = selectedVenue.value?.id;
+    // Once we know the venue id, always rebind from the fresh list (bootstrap → API).
+    // Do not require slug re-match — invisible chars in names previously broke this for id 8.
     if (currentId != null) {
-      const byId = venues.value.find((v) => v.id === currentId) ?? null;
-      if (byId && slugify(byId.name) === slug) venue = byId;
+      const byId = venues.value.find((v) => v.id === currentId);
+      if (byId) {
+        selectedVenue.value = byId;
+        showDesktopDetail.value = true;
+        return;
+      }
     }
-    if (!venue) venue = resolveVenueBySlug(slug);
+    const venue = resolveVenueBySlug(slug);
     if (venue) {
       selectedVenue.value = venue;
       showDesktopDetail.value = true;
@@ -186,6 +190,17 @@ function syncSelectedVenueFromList() {
     const fresh = venues.value.find((v) => v.id === selectedVenue.value!.id);
     if (fresh) selectedVenue.value = fresh;
   }
+}
+
+/** Always open the form with the latest list row (avoids empty MTR from a stale selectedVenue). */
+function openVenueForm(venue: Venue | null) {
+  if (!venue) {
+    editingVenue.value = null;
+    showVenueForm.value = true;
+    return;
+  }
+  editingVenue.value = venues.value.find((v) => v.id === venue.id) ?? venue;
+  showVenueForm.value = true;
 }
 
 watch(
@@ -278,6 +293,10 @@ watch(
   () => venues.value,
   () => {
     syncSelectedVenueFromList();
+    if (editingVenue.value?.id != null) {
+      const fresh = venues.value.find((v) => v.id === editingVenue.value!.id);
+      if (fresh) editingVenue.value = fresh;
+    }
     if (route.name === 'home' && venues.value.length > 0) {
       applyLandingPageSeo(venues.value, sports.value, language.value);
     }
@@ -936,8 +955,8 @@ const handleSaveVenue = async (venueData: any) => {
         :dark-mode="darkMode"
         :is-super-admin="isSuperAdmin"
         :admin-status="adminStatus"
-        @add-venue="() => { editingVenue = null; showVenueForm = true; }"
-        @edit-venue="(v) => { editingVenue = v; showVenueForm = true; }"
+        @add-venue="() => openVenueForm(null)"
+        @edit-venue="(v) => openVenueForm(v)"
         @delete-venue="(v) => { venueToDelete = v; }"
         @logout="handleAdminLogout"
         @update:venues="(v) => { venues = v; invalidateVenuesCache(); }"
@@ -1022,8 +1041,8 @@ const handleSaveVenue = async (venueData: any) => {
           :setTab="(tab: AppTab) => { currentTab = tab; }"
           :isAdmin="isAnyAdmin"
           :canEditVenue="canEditVenue"
-          :onAddVenue="() => { editingVenue = null; showVenueForm = true; }"
-          :onEditVenue="(id: number, v: Venue) => { editingVenue = v; showVenueForm = true; }"
+          :onAddVenue="() => openVenueForm(null)"
+          :onEditVenue="(id: number, v: Venue) => openVenueForm(v)"
           :onDeleteVenue="(id: number) => {
             const target = venues.find(v => v.id === id);
             if (target) venueToDelete = target;
@@ -1066,7 +1085,7 @@ const handleSaveVenue = async (venueData: any) => {
           :toggleSave="toggleSaveVenue"
           :isAdmin="isAnyAdmin"
           :canEditVenue="canEditVenue"
-          :onEditVenue="(id: number, v: any) => { editingVenue = v; showVenueForm = true; }"
+          :onEditVenue="(id: number, v: any) => openVenueForm(v)"
           :availableStations="availableStations"
           :onClearFilters="clearFilters"
           :sportFilter="sportFilter"
@@ -1086,7 +1105,7 @@ const handleSaveVenue = async (venueData: any) => {
 
         <VenueDetail
           v-else-if="showDesktopDetail && selectedVenue"
-          :key="selectedVenue.id"
+          :key="`${selectedVenue.id}-${selectedVenue.mtrStation || ''}-${selectedVenue.walkingDistance || 0}`"
           :venue="selectedVenue"
           :onBack="() => { selectedVenue = null; showDesktopDetail = false; goBackFromVenue(); }"
           :onPrevVenue="goToPrevVenue"
@@ -1100,7 +1119,7 @@ const handleSaveVenue = async (venueData: any) => {
           :toggleSave="toggleSaveVenue"
           :isAdmin="isAnyAdmin"
           :canEdit="canEditVenue(selectedVenue.id)"
-          :onEdit="() => { editingVenue = selectedVenue; showVenueForm = true; }"
+          :onEdit="() => openVenueForm(selectedVenue)"
         />
 
         <template
@@ -1130,8 +1149,8 @@ const handleSaveVenue = async (venueData: any) => {
           :toggleSave="toggleSaveVenue"
           :isAdmin="isAnyAdmin"
           :canEditVenue="canEditVenue"
-          :onAddVenue="() => { editingVenue = null; showVenueForm = true; }"
-          :onEditVenue="(id: number, v: any) => { editingVenue = v; showVenueForm = true; }"
+          :onAddVenue="() => openVenueForm(null)"
+          :onEditVenue="(id: number, v: any) => openVenueForm(v)"
           :onDeleteVenue="(id: number) => {
             const target = venues.find(v => v.id === id);
             if (target) venueToDelete = target;
@@ -1167,6 +1186,7 @@ const handleSaveVenue = async (venueData: any) => {
 
     <VenueForm
       v-if="showVenueForm"
+      :key="editingVenue?.id ?? 'new'"
       :venue="editingVenue"
       :sports="sports"
       :isSuperAdmin="isSuperAdmin"
