@@ -169,29 +169,56 @@ const defaultForm = {
   operating_hours_enabled: true,
 };
 
+function venueToFormFields(venue: Venue) {
+  return {
+    ...defaultForm,
+    ...venue,
+    name: String((venue as any).name || '').replace(/\p{Cf}/gu, '').replace(/\uFEFF/g, '').trim(),
+    mtrStation: String((venue as any).mtrStation || (venue as any).mtr_station || '').replace(/\p{Cf}/gu, '').trim(),
+    mtrExit: String((venue as any).mtrExit || (venue as any).mtr_exit || '').replace(/\p{Cf}/gu, '').trim(),
+    walkingDistance: Number(
+      (venue as any).walkingDistance ?? (venue as any).walking_distance ?? 0
+    ) || 0,
+    socialLinks: parseSocialLinks(venue.socialLink),
+    sport_data: Array.isArray(venue.sport_data)
+      ? venue.sport_data.map((d: any) => ({
+          sport_id: Number(d.sport_id),
+          name: d.name,
+          name_zh: d.name_zh ?? null,
+          slug: d.slug,
+          sort_order: Number(d.sort_order) || 0,
+        }))
+      : [],
+    admin_password: (venue as any).admin_password ?? '',
+  };
+}
+
 const formData = reactive<any>(
-  props.venue
-    ? {
-        ...defaultForm,
-        ...props.venue,
-        socialLinks: parseSocialLinks(props.venue.socialLink),
-        sport_data: Array.isArray(props.venue.sport_data)
-          ? props.venue.sport_data.map((d: any) => ({
-              sport_id: Number(d.sport_id),
-              name: d.name,
-              name_zh: d.name_zh ?? null,
-              slug: d.slug,
-              sort_order: Number(d.sort_order) || 0,
-            }))
-          : [],
-        admin_password: (props.venue as any).admin_password ?? '',
-      }
-    : { ...defaultForm }
+  props.venue ? venueToFormFields(props.venue) : { ...defaultForm }
 );
 const hasCourtAdminPassword = ref(
   !!(props.venue?.has_admin_password || (props.venue as any)?.admin_password)
 );
 const clearCourtAdminPassword = ref(false);
+
+watch(
+  () =>
+    props.venue
+      ? [
+          props.venue.id,
+          (props.venue as any).mtrStation,
+          (props.venue as any).mtrExit,
+          (props.venue as any).walkingDistance,
+          props.venue.name,
+        ]
+      : null,
+  () => {
+    if (!props.venue) return;
+    Object.assign(formData, venueToFormFields(props.venue));
+    hasCourtAdminPassword.value = !!(props.venue.has_admin_password || (props.venue as any).admin_password);
+    clearCourtAdminPassword.value = false;
+  }
+);
 if (!formData.sport_data) formData.sport_data = [];
 if (formData.admin_password === undefined) formData.admin_password = '';
 if (formData.membership_enabled === undefined) formData.membership_enabled = false;
@@ -853,6 +880,15 @@ const handleSubmit = async (e?: Event) => {
     }
 
     const payload: Record<string, unknown> = { ...formData };
+    if (typeof payload.name === 'string') {
+      payload.name = payload.name.replace(/\p{Cf}/gu, '').replace(/\uFEFF/g, '').trim().replace(/\s+/g, ' ');
+    }
+    if (typeof payload.mtrStation === 'string') {
+      payload.mtrStation = payload.mtrStation.replace(/\p{Cf}/gu, '').trim();
+    }
+    if (typeof payload.mtrExit === 'string') {
+      payload.mtrExit = payload.mtrExit.replace(/\p{Cf}/gu, '').trim();
+    }
     if (props.isSuperAdmin) {
       const newPassword = String(formData.admin_password || '').trim();
       if (clearCourtAdminPassword.value) {
@@ -1432,7 +1468,7 @@ const inputClass =
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div class="flex items-center gap-3">
               <span class="flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center overflow-hidden" :class="darkMode ? 'bg-gray-700' : 'bg-gray-100'" aria-hidden="true">
-                <img src="https://static.cdninstagram.com/rsrc.php/v4/yG/r/De-Dwpd5CHc.png" alt="" class="w-9 h-9 object-contain" />
+                <img src="https://cdn.simpleicons.org/instagram" alt="" class="w-9 h-9 object-contain" />
               </span>
               <div class="flex-1 min-w-0 flex items-center rounded-[12px] border overflow-hidden" :class="darkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'">
                 <span class="pl-3 text-[12px] font-[700] shrink-0" :class="darkMode ? 'text-gray-400' : 'text-gray-500'">instagram.com/</span>

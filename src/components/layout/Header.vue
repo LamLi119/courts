@@ -137,7 +137,7 @@ function setLangFromMenu(lang: Language) {
             中文
           </button>
           <button type="button" class="btn btn-sm rounded-[6px] min-h-[44px] min-w-[44px] px-2 md:px-3 text-[11px] md:text-[12px]"
-            :class="language === 'en' ? 'btn-cta' : 'btn-nav'" @click="setLanguage('en')" aria-label="English">
+            :class="language === 'en' ? 'btn-cta' : 'btn-nav'" @click="setLanguage('en')">
             EN
           </button>
         </div>

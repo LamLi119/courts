@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import type { Venue, Language, AppTab } from '../types';
 import { translate } from './utils/translations';
@@ -10,18 +10,7 @@ import { resetSeoToDefault, applySearchPageSeo, applyDistrictSportPageSeo, apply
 import { useVenueSlug } from './router';
 import { db } from '../db';
 import Header from './components/layout/Header.vue';
-import AdminLogin from './components/auth/AdminLogin.vue';
-import UserLoginPage from './components/auth/UserLoginPage.vue';
-import UserSignUpPage from './components/auth/UserSignUpPage.vue';
-import TokenLoginPage from './components/auth/TokenLoginPage.vue';
-import CompletePhonePage from './components/auth/CompletePhonePage.vue';
-import DesktopView from './components/explore/DesktopView.vue';
-import MobileView from './components/explore/MobileView.vue';
 import MobileNav from './components/layout/MobileNav.vue';
-import VenueDetail from './components/venue/VenueDetail.vue';
-import UpcomingEventsPage from './components/venue/UpcomingEventsPage.vue';
-import VenueForm from './components/admin/VenueForm.vue';
-import AdminPage from './components/admin/AdminPage.vue';
 import LandingPage from './components/landing/LandingPage.vue';
 import AboutPage from './components/about/AboutPage.vue';
 import BlogListPage from './components/blog/BlogListPage.vue';
@@ -32,10 +21,27 @@ import { useGrindUpcomingEvents } from './composables/useGrindUpcomingEvents';
 import {
   hydrateInitialVenueData,
   setVenuesCache,
+  isVenuesCacheFresh,
+  readSessionCacheMeta,
 } from './utils/venuesBootstrap';
 import { courtApiUrl } from './utils/courtApiUrl';
 
+const AdminLogin = defineAsyncComponent(() => import('./components/auth/AdminLogin.vue'));
+const UserLoginPage = defineAsyncComponent(() => import('./components/auth/UserLoginPage.vue'));
+const UserSignUpPage = defineAsyncComponent(() => import('./components/auth/UserSignUpPage.vue'));
+const TokenLoginPage = defineAsyncComponent(() => import('./components/auth/TokenLoginPage.vue'));
+const CompletePhonePage = defineAsyncComponent(() => import('./components/auth/CompletePhonePage.vue'));
+const DesktopView = defineAsyncComponent(() => import('./components/explore/DesktopView.vue'));
+const MobileView = defineAsyncComponent(() => import('./components/explore/MobileView.vue'));
+const VenueDetail = defineAsyncComponent(() => import('./components/venue/VenueDetail.vue'));
+const UpcomingEventsPage = defineAsyncComponent(() => import('./components/venue/UpcomingEventsPage.vue'));
+const VenueForm = defineAsyncComponent(() => import('./components/admin/VenueForm.vue'));
+const AdminPage = defineAsyncComponent(() => import('./components/admin/AdminPage.vue'));
+const AboutPage = defineAsyncComponent(() => import('./components/about/AboutPage.vue'));
+
 const initialVenueData = hydrateInitialVenueData();
+/** True after a successful /api/venues fetch this page load. Bootstrap alone must not skip the API. */
+let venuesFetchedFromApi = false;
 
 const route = useRoute();
 const { refresh: refreshGrindUpcomingEvents } = useGrindUpcomingEvents();
@@ -109,8 +115,16 @@ function canEditVenue(venueId: number): boolean {
   return false;
 }
 
-const loadData = async () => {
+const loadData = async (force = false) => {
   const hadData = venues.value.length > 0;
+  const cacheMeta = readSessionCacheMeta();
+  // Only skip when this session already fetched the API and the cache is still fresh.
+  // Bootstrap/session hydrate must not block the first network refresh (stale mtrStation etc.).
+  if (!force && venuesFetchedFromApi && hadData && cacheMeta && isVenuesCacheFresh(cacheMeta.ts)) {
+    isLoading.value = false;
+    return;
+  }
+
   try {
     if (!hadData) {
       isLoading.value = true;
@@ -120,14 +134,17 @@ const loadData = async () => {
     if (fresh?.length !== undefined) {
       venues.value = fresh;
       setVenuesCache(fresh, sportsList || [], Date.now());
+      venuesFetchedFromApi = true;
+      // Re-bind after the venues watch/route state settle (bootstrap → API).
+      await nextTick();
+      syncSelectedVenueFromList();
     }
     if (sportsList?.length !== undefined) {
       sports.value = sportsList;
     }
   } catch (err) {
-    console.error('Error fetching venues from DB:', err);
-    if (!venues.value.length) {
-      console.error('No cached venues available after API failure.');
+    if (!venues.value.length && import.meta.env.DEV) {
+      console.error('Error fetching venues from DB:', err);
     }
   } finally {
     isLoading.value = false;
@@ -149,6 +166,45 @@ function resolveVenueBySlug(slug: string): Venue | null {
   const s = (slug || '').toLowerCase().trim();
   if (!s) return null;
   return venues.value.find((v) => slugify(v.name) === s) ?? null;
+}
+
+/** Keep detail view on the current list object after venues are replaced (bootstrap → API). */
+function syncSelectedVenueFromList() {
+  if (route.name === 'venue' && typeof route.params.slug === 'string') {
+    const slug = String(route.params.slug).toLowerCase().trim();
+    const currentId = selectedVenue.value?.id;
+    // Once we know the venue id, always rebind from the fresh list (bootstrap → API).
+    // Do not require slug re-match — invisible chars in names previously broke this for id 8.
+    if (currentId != null) {
+      const byId = venues.value.find((v) => v.id === currentId);
+      if (byId) {
+        selectedVenue.value = byId;
+        showDesktopDetail.value = true;
+        return;
+      }
+    }
+    const venue = resolveVenueBySlug(slug);
+    if (venue) {
+      selectedVenue.value = venue;
+      showDesktopDetail.value = true;
+    }
+    return;
+  }
+  if (selectedVenue.value) {
+    const fresh = venues.value.find((v) => v.id === selectedVenue.value!.id);
+    if (fresh) selectedVenue.value = fresh;
+  }
+}
+
+/** Always open the form with the latest list row (avoids empty MTR from a stale selectedVenue). */
+function openVenueForm(venue: Venue | null) {
+  if (!venue) {
+    editingVenue.value = null;
+    showVenueForm.value = true;
+    return;
+  }
+  editingVenue.value = venues.value.find((v) => v.id === venue.id) ?? venue;
+  showVenueForm.value = true;
 }
 
 watch(
@@ -245,14 +301,12 @@ watch(
 );
 
 watch(
-  () => venues.value.length,
+  () => venues.value,
   () => {
-    if (route.name === 'venue' && typeof route.params.slug === 'string' && !selectedVenue.value) {
-      const venue = resolveVenueBySlug(route.params.slug);
-      if (venue) {
-        selectedVenue.value = venue;
-        showDesktopDetail.value = true;
-      }
+    syncSelectedVenueFromList();
+    if (editingVenue.value?.id != null) {
+      const fresh = venues.value.find((v) => v.id === editingVenue.value!.id);
+      if (fresh) editingVenue.value = fresh;
     }
     if (route.name === 'home' && venues.value.length > 0) {
       applyLandingPageSeo(venues.value, sports.value, language.value);
@@ -341,10 +395,17 @@ watch(
       clearInterval(grindUpcomingPollTimer);
       grindUpcomingPollTimer = null;
     }
-    if (name === 'home' || name === 'upcoming-events') {
-      void refreshGrindUpcomingEvents();
+    // Home: 1 page only (warm cache, avoid multi‑MB parallel fetches).
+    // Upcoming list: full fetch for the standalone page.
+    if (name === 'home') {
+      void refreshGrindUpcomingEvents({ maxPages: 1 });
       grindUpcomingPollTimer = setInterval(() => {
-        void refreshGrindUpcomingEvents();
+        void refreshGrindUpcomingEvents({ maxPages: 1 });
+      }, HOME_GRIND_POLL_MS);
+    } else if (name === 'upcoming-events') {
+      void refreshGrindUpcomingEvents({ maxPages: 20 });
+      grindUpcomingPollTimer = setInterval(() => {
+        void refreshGrindUpcomingEvents({ maxPages: 20 });
       }, HOME_GRIND_POLL_MS);
     }
   },
@@ -856,13 +917,6 @@ const handleSaveVenue = async (venueData: any) => {
       :darkMode="darkMode"
     />
     
-    <AdminManagePage
-      v-else-if="route.name === 'admin-manage'"
-      :language="language"
-      :t="t"
-      :darkMode="darkMode"
-    />
-
     <UpcomingEventsPage
       v-else-if="route.name === 'upcoming-events'"
       :language="language"
@@ -922,8 +976,8 @@ const handleSaveVenue = async (venueData: any) => {
         :is-super-admin="isSuperAdmin"
         :super-admin-sync-password="superAdminSyncPassword"
         :admin-status="adminStatus"
-        @add-venue="() => { editingVenue = null; showVenueForm = true; }"
-        @edit-venue="(v) => { editingVenue = v; showVenueForm = true; }"
+        @add-venue="() => openVenueForm(null)"
+        @edit-venue="(v) => openVenueForm(v)"
         @delete-venue="(v) => { venueToDelete = v; }"
         @logout="handleAdminLogout"
         @update:venues="(v) => { venues = v; invalidateVenuesCache(); }"
@@ -1008,8 +1062,8 @@ const handleSaveVenue = async (venueData: any) => {
           :setTab="(tab: AppTab) => { currentTab = tab; }"
           :isAdmin="isAnyAdmin"
           :canEditVenue="canEditVenue"
-          :onAddVenue="() => { editingVenue = null; showVenueForm = true; }"
-          :onEditVenue="(id: number, v: Venue) => { editingVenue = v; showVenueForm = true; }"
+          :onAddVenue="() => openVenueForm(null)"
+          :onEditVenue="(id: number, v: Venue) => openVenueForm(v)"
           :onDeleteVenue="(id: number) => {
             const target = venues.find(v => v.id === id);
             if (target) venueToDelete = target;
@@ -1069,7 +1123,7 @@ const handleSaveVenue = async (venueData: any) => {
           :toggleSave="toggleSaveVenue"
           :isAdmin="isAnyAdmin"
           :canEditVenue="canEditVenue"
-          :onEditVenue="(id: number, v: any) => { editingVenue = v; showVenueForm = true; }"
+          :onEditVenue="(id: number, v: any) => openVenueForm(v)"
           :availableStations="availableStations"
           :onClearFilters="clearFilters"
           :sportFilter="sportFilter"
@@ -1089,6 +1143,7 @@ const handleSaveVenue = async (venueData: any) => {
 
         <VenueDetail
           v-else-if="showDesktopDetail && selectedVenue"
+          :key="`${selectedVenue.id}-${selectedVenue.mtrStation || ''}-${selectedVenue.walkingDistance || 0}`"
           :venue="selectedVenue"
           :onBack="() => { selectedVenue = null; showDesktopDetail = false; goBackFromVenue(); }"
           :onPrevVenue="goToPrevVenue"
@@ -1102,7 +1157,7 @@ const handleSaveVenue = async (venueData: any) => {
           :toggleSave="toggleSaveVenue"
           :isAdmin="isAnyAdmin"
           :canEdit="canEditVenue(selectedVenue.id)"
-          :onEdit="() => { editingVenue = selectedVenue; showVenueForm = true; }"
+          :onEdit="() => openVenueForm(selectedVenue)"
         />
 
         <template
@@ -1132,8 +1187,8 @@ const handleSaveVenue = async (venueData: any) => {
           :toggleSave="toggleSaveVenue"
           :isAdmin="isAnyAdmin"
           :canEditVenue="canEditVenue"
-          :onAddVenue="() => { editingVenue = null; showVenueForm = true; }"
-          :onEditVenue="(id: number, v: any) => { editingVenue = v; showVenueForm = true; }"
+          :onAddVenue="() => openVenueForm(null)"
+          :onEditVenue="(id: number, v: any) => openVenueForm(v)"
           :onDeleteVenue="(id: number) => {
             const target = venues.find(v => v.id === id);
             if (target) venueToDelete = target;
@@ -1169,6 +1224,7 @@ const handleSaveVenue = async (venueData: any) => {
 
     <VenueForm
       v-if="showVenueForm"
+      :key="editingVenue?.id ?? 'new'"
       :venue="editingVenue"
       :sports="sports"
       :isSuperAdmin="isSuperAdmin"

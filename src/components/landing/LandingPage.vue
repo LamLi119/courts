@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import type { Venue, Language, AppTab } from '../../../types';
 import LandingHero from './LandingHero.vue';
 import CourtCard from '../explore/CourtCard.vue';
@@ -145,8 +145,10 @@ function districtVenueCountLabel(count: number) {
 
 const heroDistricts = ref<string[]>([]);
 const heroSport = ref('');
-const embeddedMobileMode = ref<'map' | 'list'>('map');
+const embeddedMobileMode = ref<'map' | 'list'>('list');
 const partnershipIndex = ref(0);
+const exploreSectionVisible = ref(false);
+let exploreSectionObserver: IntersectionObserver | null = null;
 const DESKTOP_PARTNERSHIP_CARDS_PER_PAGE = 3;
 
 const partnershipVenues = computed(() =>
@@ -195,6 +197,30 @@ watch(partnershipVenues, (venues) => {
   } else {
     partnershipIndex.value = partnershipIndex.value % venues.length;
   }
+});
+
+onMounted(() => {
+  const section = document.getElementById('explore-section');
+  if (!section) {
+    exploreSectionVisible.value = true;
+    return;
+  }
+  exploreSectionObserver = new IntersectionObserver(
+    ([entry]) => {
+      if (entry?.isIntersecting) {
+        exploreSectionVisible.value = true;
+        exploreSectionObserver?.disconnect();
+        exploreSectionObserver = null;
+      }
+    },
+    { rootMargin: '240px 0px' },
+  );
+  exploreSectionObserver.observe(section);
+});
+
+onUnmounted(() => {
+  exploreSectionObserver?.disconnect();
+  exploreSectionObserver = null;
 });
 
 function activeHeroSportSlug() {
@@ -385,7 +411,7 @@ function goNextPartnership() {
         </h2>
         <p
           class="mt-2 text-sm md:text-base"
-          :class="darkMode ? 'text-gray-400' : 'text-gray-500'"
+          :class="darkMode ? 'text-gray-300' : 'text-gray-600'"
         >
           {{ t('landingMapSubtitle') }}
         </p>
@@ -402,7 +428,7 @@ function goNextPartnership() {
 
       <div class="w-full max-w-7xl mx-auto" :class="isMobile ? 'px-0' : 'px-4 md:px-6'">
         <DesktopView
-          v-if="!isMobile"
+          v-if="!isMobile && exploreSectionVisible"
           embedded
           :venues="filteredVenues"
           :listVenues="listVenues"
@@ -444,7 +470,7 @@ function goNextPartnership() {
         />
 
         <MobileView
-          v-else
+          v-else-if="isMobile && exploreSectionVisible"
           embedded
           :mode="embeddedMobileMode"
           :setMode="(m: 'map' | 'list') => { embeddedMobileMode = m; }"
@@ -482,6 +508,14 @@ function goNextPartnership() {
           :onOpenDetail="onViewVenue"
           :force-show-detail="false"
         />
+        <div
+          v-else
+          class="w-full h-[min(80vh,720px)] rounded-2xl border flex items-center justify-center text-sm font-semibold"
+          :class="darkMode ? 'border-gray-700 text-gray-300 bg-gray-900' : 'border-gray-200 text-gray-600 bg-white'"
+          aria-hidden="true"
+        >
+          {{ language === 'en' ? 'Loading map…' : '地圖載入中…' }}
+        </div>
       </div>
     </section>
 

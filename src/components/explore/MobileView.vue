@@ -345,6 +345,8 @@ watch(
     if (val === 'map') {
       selectInitialVenue();
     } else if (val === 'list') {
+      // On hard refresh of /venues/:slug, selectedVenue may arrive one tick after mount.
+      // Never clear selection / hide detail while deep-linking into a venue page.
       if (props.forceShowDetail) return;
       showDetailPage.value = false;
       props.onSelectVenue(null);
@@ -356,7 +358,7 @@ watch(
 watch(
   () => props.embedded,
   (embedded) => {
-    if (embedded && props.mode === 'list' && props.selectedVenue) {
+    if (embedded && props.mode === 'list' && props.selectedVenue && !props.forceShowDetail) {
       props.onSelectVenue(null);
     }
   }
@@ -412,6 +414,7 @@ const goNextVenueFromDetail = async () => {
 <template>
   <VenueDetail
     v-if="showDetailPage && selectedVenue"
+    :key="`${selectedVenue.id}-${selectedVenue.mtrStation || ''}-${selectedVenue.walkingDistance || 0}`"
     :venue="selectedVenue"
     :onBack="() => { showDetailPage = false; props.onBackFromDetail?.(); }"
     :onPrevVenue="goPrevVenueFromDetail"

@@ -137,13 +137,13 @@ watch(
           <h1 class="text-3xl font-black text-white leading-tight tracking-tight">
             {{ t('landingHeroTitle') }}
           </h1>
-          <p class="mt-3 text-base text-white/80">
+          <p class="mt-3 text-base text-gray-100">
             {{ t('landingHeroSubtitle') }}
           </p>
         </div>
 
         <div class="w-full rounded-2xl bg-white/95 backdrop-blur-md p-4 shadow-2xl space-y-3 border border-white/20">
-          <button type="button" :class="fieldClass" @click="openDistrictSheet">
+          <button type="button" :class="fieldClass" :aria-label="language === 'en' ? 'Select district' : '選擇地區'" @click="openDistrictSheet">
             <span class="flex items-center gap-2 truncate min-w-0">
               <span class="text-[#007a67]">📍</span>
               <span class="truncate">{{ selectedDistrictLabel }}</span>
@@ -153,7 +153,7 @@ watch(
             </svg>
           </button>
 
-          <button type="button" :class="fieldClass" @click="openSportSheet">
+          <button type="button" :class="fieldClass" :aria-label="language === 'en' ? 'Select sport' : '選擇運動'" @click="openSportSheet">
             <span class="flex items-center gap-2 truncate min-w-0">
               <span class="text-[#007a67]">🏸</span>
               <span class="truncate">{{ selectedSportLabel }}</span>
@@ -175,14 +175,14 @@ watch(
           <h1 class="text-4xl md:text-5xl lg:text-[3.25rem] font-black text-white leading-tight tracking-tight">
             {{ t('landingHeroTitle') }}
           </h1>
-          <p class="mt-4 text-base md:text-lg text-white/80 max-w-2xl mx-auto">
+          <p class="mt-4 text-base md:text-lg text-gray-100 max-w-2xl mx-auto">
             {{ t('landingHeroSubtitle') }}
           </p>
         </div>
 
         <div class="max-w-4xl mx-auto">
           <div class="w-full rounded-2xl bg-white/95 backdrop-blur-md p-4 shadow-2xl border border-white/20 flex items-stretch gap-3">
-            <button type="button" :class="fieldClass" class="flex-1 min-w-0" @click="openDistrictSheet">
+            <button type="button" :class="fieldClass" class="flex-1 min-w-0" :aria-label="language === 'en' ? 'Select district' : '選擇地區'" @click="openDistrictSheet">
               <span class="flex items-center gap-2 truncate min-w-0">
                 <span class="text-[#007a67]">📍</span>
                 <span class="truncate">{{ selectedDistrictLabel }}</span>
@@ -192,7 +192,7 @@ watch(
               </svg>
             </button>
 
-            <button type="button" :class="fieldClass" class="flex-1 min-w-0" @click="openSportSheet">
+            <button type="button" :class="fieldClass" class="flex-1 min-w-0" :aria-label="language === 'en' ? 'Select sport' : '選擇運動'" @click="openSportSheet">
               <span class="flex items-center gap-2 truncate min-w-0">
                 <span class="text-[#007a67]">🏸</span>
                 <span class="truncate">{{ selectedSportLabel }}</span>
@@ -233,7 +233,7 @@ watch(
         >
           <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
             <h3 class="text-base font-bold text-gray-900">{{ t('district') }}</h3>
-            <button type="button" class="w-8 h-8 rounded-full bg-gray-100 text-gray-600" @click="closeSheets">×</button>
+            <button type="button" class="w-8 h-8 rounded-full bg-gray-100 text-gray-600" :aria-label="language === 'en' ? 'Close' : '關閉'" @click="closeSheets"><span aria-hidden="true">×</span></button>
           </div>
           <div class="p-4 border-b border-gray-100">
             <input
@@ -300,7 +300,7 @@ watch(
         >
           <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
             <h3 class="text-base font-bold text-gray-900">{{ t('sportType') }}</h3>
-            <button type="button" class="w-8 h-8 rounded-full bg-gray-100 text-gray-600" @click="closeSheets">×</button>
+            <button type="button" class="w-8 h-8 rounded-full bg-gray-100 text-gray-600" :aria-label="language === 'en' ? 'Close' : '關閉'" @click="closeSheets"><span aria-hidden="true">×</span></button>
           </div>
           <div class="flex-1 overflow-y-auto p-2 custom-scrollbar">
             <button
