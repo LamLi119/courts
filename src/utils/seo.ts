@@ -1,4 +1,4 @@
-import type { OperatingDayKey, OperatingHours, Venue } from '../../types';
+import type { OperatingDayKey, OperatingHours, Venue, BlogPost } from '../../types';
 import {
   getDistrictBySlug,
   getDistrictDisplayName,
@@ -858,8 +858,110 @@ function injectListingJsonLd({
 function removeJsonLd(): void {
   document
     .querySelectorAll(
-      'script[data-seo-venue="1"], script[data-seo-landing="1"], script[data-seo-listing="1"], script[data-seo-breadcrumb="1"]',
+      'script[data-seo-venue="1"], script[data-seo-landing="1"], script[data-seo-listing="1"], script[data-seo-breadcrumb="1"], script[data-seo-blog="1"]',
     )
     .forEach((el) => el.remove());
+}
+
+/** Blog index SEO. */
+export function applyBlogListSeo(lang: 'en' | 'zh' = 'en', baseUrl?: string): void {
+  const origin = typeof window !== 'undefined' ? window.location.origin : (baseUrl || '').replace(/\/$/, '');
+  const pageUrl = origin ? `${origin}/blog` : `${baseUrl || ''}/blog`;
+  const defaultImageUrl = origin ? new URL(DEFAULT_OG_IMAGE_PATH, origin).href : '';
+  const title = lang === 'zh' ? `網誌 | ${BRAND}` : `Blog | ${BRAND}`;
+  const description = lang === 'zh'
+    ? 'Courts 網誌：香港運動場地貼士、場館資訊及社群故事。'
+    : 'Courts blog: Hong Kong sports court tips, venue guides, and community stories.';
+
+  document.title = title;
+  setMeta('description', description);
+  setMeta('keywords', DEFAULT_KEYWORDS);
+  if (pageUrl) setCanonical(pageUrl);
+
+  setOgTag('og:title', title);
+  setOgTag('og:description', description);
+  setOgTag('og:type', 'website');
+  if (pageUrl) setOgTag('og:url', pageUrl);
+  setOgTag('og:site_name', SITE_NAME);
+
+  setMeta('twitter:card', 'summary_large_image');
+  setMeta('twitter:title', title);
+  setMeta('twitter:description', description);
+  if (pageUrl) setMeta('twitter:url', pageUrl);
+  if (defaultImageUrl) {
+    setOgTag('og:image', defaultImageUrl);
+    setMeta('twitter:image', defaultImageUrl);
+  }
+
+  removeJsonLd();
+  const blogLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Blog',
+    name: `${BRAND} Blog`,
+    url: pageUrl,
+    publisher: { '@type': 'Organization', name: BRAND },
+  };
+  const script = document.createElement('script');
+  script.type = 'application/ld+json';
+  script.textContent = JSON.stringify(blogLd);
+  script.setAttribute('data-seo-blog', '1');
+  document.head.appendChild(script);
+}
+
+/** Single blog post SEO. */
+export function applyBlogPostSeo(post: BlogPost, lang: 'en' | 'zh' = 'en', baseUrl?: string): void {
+  const origin = typeof window !== 'undefined' ? window.location.origin : (baseUrl || '').replace(/\/$/, '');
+  const pageUrl = origin
+    ? `${origin}/blog/${post.slug}`
+    : `${baseUrl || ''}/blog/${post.slug}`;
+  const title = `${post.title} | ${BRAND}`;
+  const description = cleanText(post.summary)
+    || (lang === 'zh' ? 'Courts 網誌文章' : 'Courts blog article');
+  const image = post.cover_url || '';
+  const defaultImageUrl = origin ? new URL(DEFAULT_OG_IMAGE_PATH, origin).href : '';
+
+  document.title = title;
+  setMeta('description', description);
+  setMeta('keywords', DEFAULT_KEYWORDS);
+  if (pageUrl) setCanonical(pageUrl);
+
+  setOgTag('og:title', title);
+  setOgTag('og:description', description);
+  setOgTag('og:type', 'article');
+  if (pageUrl) setOgTag('og:url', pageUrl);
+  setOgTag('og:site_name', SITE_NAME);
+
+  setMeta('twitter:card', 'summary_large_image');
+  setMeta('twitter:title', title);
+  setMeta('twitter:description', description);
+  if (pageUrl) setMeta('twitter:url', pageUrl);
+
+  const imageUrl = image
+    ? (image.startsWith('http') ? image : new URL(image, origin).href)
+    : defaultImageUrl;
+  if (imageUrl) {
+    setOgTag('og:image', imageUrl);
+    setMeta('twitter:image', imageUrl);
+  }
+
+  removeJsonLd();
+  const articleLd = {
+    '@context': 'https://schema.org',
+    '@type': 'BlogPosting',
+    headline: post.title,
+    description,
+    image: imageUrl ? [imageUrl] : undefined,
+    datePublished: post.published_at || undefined,
+    dateModified: post.updated_at || post.synced_at || post.published_at || undefined,
+    author: { '@type': 'Organization', name: BRAND },
+    publisher: { '@type': 'Organization', name: BRAND },
+    mainEntityOfPage: pageUrl,
+    url: pageUrl,
+  };
+  const script = document.createElement('script');
+  script.type = 'application/ld+json';
+  script.textContent = JSON.stringify(articleLd);
+  script.setAttribute('data-seo-blog', '1');
+  document.head.appendChild(script);
 }
 

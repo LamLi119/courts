@@ -57,6 +57,11 @@ function navToAbout() {
   router.push('/about');
 }
 
+function navToBlog() {
+  closeMobileNav();
+  router.push('/blog');
+}
+
 function toggleDarkFromMenu() {
   props.setDarkMode(!props.darkMode);
 }
@@ -96,9 +101,17 @@ function setLangFromMenu(lang: Language) {
             href="/explore"
             class="btn btn-nav no-underline"
             :class="!isHome && currentTab === 'explore' ? 'btn-nav-active' : ''"
-            @click.prevent="setTab('explore')"
+            @click.prevent="navToExplore"
           >
             {{ t('explore') }}
+          </a>
+          <a
+            href="/blog"
+            class="btn btn-nav no-underline"
+            :class="route.name === 'blog' || route.name === 'blog-post' ? 'btn-nav-active' : ''"
+            @click.prevent="navToBlog"
+          >
+            {{ t('blog') }}
           </a>
           <button type="button" class="btn btn-nav min-h-[44px]"
             :class="currentTab === 'saved' ? 'text-red-500' : ''" @click="setTab('saved')">
@@ -171,6 +184,7 @@ function setLangFromMenu(lang: Language) {
     >
       <a href="/" class="btn btn-nav justify-start no-underline min-h-[44px]" :class="isHome ? 'btn-nav-active' : ''" @click.prevent="goHome">{{ t('home') }}</a>
       <a href="/explore" class="btn btn-nav justify-start no-underline min-h-[44px]" @click.prevent="navToExplore">{{ t('explore') }}</a>
+      <a href="/blog" class="btn btn-nav justify-start no-underline min-h-[44px]" @click.prevent="navToBlog">{{ t('blog') }}</a>
       <button type="button" class="btn btn-nav justify-start min-h-[44px]" @click="openFindEvents">{{ t('findEvents') }}</button>
       <a href="/about" class="btn btn-nav justify-start no-underline min-h-[44px]" @click.prevent="navToAbout">{{ t('aboutUs') }}</a>
       <button type="button" class="btn btn-nav justify-start min-h-[44px]" @click="toggleDarkFromMenu">

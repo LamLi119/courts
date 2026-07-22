@@ -9,8 +9,10 @@ const props = defineProps<{
   venues: Venue[];
   sports: SportItem[];
   language: Language;
+  t: (key: string) => string;
   darkMode: boolean;
   isSuperAdmin: boolean;
+  superAdminSyncPassword?: string;
   adminStatus: { type: 'none' | 'super' | 'court'; allowedIds: number[] };
 }>();
 
@@ -262,6 +264,41 @@ const deleteSportApiCall = async (sportId: number) => {
 };
 
 const isReorderingSports = ref(false);
+const isBlogSyncing = ref(false);
+
+const syncBlogFromNotion = async () => {
+  if (!props.isSuperAdmin || isBlogSyncing.value) return;
+  isBlogSyncing.value = true;
+  try {
+    let result;
+    try {
+      result = await db.syncBlogFromNotion(props.superAdminSyncPassword || undefined);
+    } catch (err: any) {
+      const msg = String(err?.message || '');
+      const needsPassword = msg.toLowerCase().includes('super admin');
+      if (!needsPassword || props.superAdminSyncPassword) throw err;
+      const pwd = window.prompt(
+        props.language === 'en'
+          ? 'Enter the global super admin password to sync from Notion:'
+          : '請輸入全域超級管理員密碼以從 Notion 同步：',
+      );
+      if (!pwd) throw new Error(props.t('blogSyncFailed'));
+      result = await db.syncBlogFromNotion(pwd);
+    }
+    const count = result?.synced ?? 0;
+    emit(
+      'notify',
+      'success',
+      props.language === 'en'
+        ? `${props.t('blogSyncSuccess')} (${count})`
+        : `${props.t('blogSyncSuccess')}（${count}）`,
+    );
+  } catch (err: any) {
+    emit('notify', 'error', err?.message || props.t('blogSyncFailed'));
+  } finally {
+    isBlogSyncing.value = false;
+  }
+};
 
 const moveSportType = async (sportId: number, direction: -1 | 1) => {
   if (isReorderingSports.value) return;
@@ -290,6 +327,29 @@ const moveSportType = async (sportId: number, direction: -1 | 1) => {
 
 <template>
   <div class="container mx-auto p-4 md:p-8 pb-32 md:pb-8 space-y-8 animate-in fade-in duration-500">
+    <div
+      v-if="isSuperAdmin"
+      class="p-4 md:p-5 rounded-2xl border flex flex-col md:flex-row md:items-center md:justify-between gap-4"
+      :class="darkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-200'"
+    >
+      <div>
+        <p class="text-xs font-bold uppercase tracking-wider text-[#007a67] mb-1">Blog</p>
+        <p class="text-sm" :class="darkMode ? 'text-gray-300' : 'text-gray-600'">
+          {{ language === 'en'
+            ? 'Pull published posts from your Notion database into Courts.'
+            : '從 Notion 資料庫拉取已發佈文章至 Courts。' }}
+        </p>
+      </div>
+      <button
+        type="button"
+        class="px-4 py-3 rounded-lg font-black text-sm bg-[#007a67] text-white disabled:opacity-60"
+        :disabled="isBlogSyncing"
+        @click="syncBlogFromNotion"
+      >
+        {{ isBlogSyncing ? t('blogSyncing') : t('blogSync') }}
+      </button>
+    </div>
+
     <div class="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
       <div class="flex flex-col gap-2">
         <h2 class="text-3xl md:text-4xl font-black tracking-tight">Manage Courts</h2>

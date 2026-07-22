@@ -78,7 +78,26 @@ Each venue page shows:
 
 - `/search/:sport` — filtered explore view for a sport slug.
 
-### 2.5 PWA
+### 2.5 Blog (`/blog`, `/blog/:slug`)
+
+- **Source:** Notion database (each page = one post).
+- **Sync:** Super-admin → **Sync blog from Notion** in `/admin` (pulls `Status = Published` rows into MySQL).
+- **Images:** Cover + inline body images copied to GCS `blog/` during sync (Notion URLs expire).
+- **Notion DB properties:** `Name`, `Slug`, `Status`, `Summary`, `Published`, `Cover` (+ page body blocks).
+
+**Env (server only):** `NOTION_API_TOKEN`, `NOTION_BLOG_DATABASE_ID`
+
+**API:**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/blog` | Published post list |
+| GET | `/api/blog/:slug` | Full post (`body_html`) |
+| POST | `/api/blog/sync` | Super-admin sync from Notion |
+
+**Migration:** `scripts/add-blog_posts.sql`
+
+### 2.6 PWA
 
 - Installable web app (manifest, service worker via `vite-plugin-pwa`).
 - Offline-friendly shell; data requires network.

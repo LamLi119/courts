@@ -136,6 +136,15 @@ function hasValidCache() {
   }
 }
 
+function hasValidBlogCache() {
+  try {
+    readCache('blogPosts');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function writeCache(name, data) {
   fs.mkdirSync(CACHE_DIR, { recursive: true });
   fs.writeFileSync(path.join(CACHE_DIR, `${name}.json`), JSON.stringify(data));
@@ -147,11 +156,12 @@ function stripVenueForBootstrap(venue) {
   return rest;
 }
 
-function writeVenuesBootstrap({ sports, venues }) {
+function writeVenuesBootstrap({ sports, venues, blogPosts }) {
   const payload = {
     generatedAt: new Date().toISOString(),
     sports: sports || [],
     venues: (venues || []).map(stripVenueForBootstrap),
+    blogPosts: blogPosts || [],
   };
   fs.mkdirSync(path.dirname(BOOTSTRAP_PATH), { recursive: true });
   fs.writeFileSync(BOOTSTRAP_PATH, JSON.stringify(payload));
@@ -163,22 +173,32 @@ async function loadData({ cacheOnly = false } = {}) {
     return {
       sports: readCache('sports'),
       venues: readCache('venues'),
+      blogPosts: readCache('blogPosts'),
     };
   }
 
   try {
     const sports = await fetchJson(`${API_URL}/api/sports`);
     const venues = await fetchJson(`${API_URL}/api/venues`);
+    let blogPosts = [];
+    try {
+      blogPosts = await fetchJson(`${API_URL}/api/blog`);
+    } catch (blogErr) {
+      console.warn('Blog fetch failed (continuing without blog URLs):', blogErr?.message || blogErr);
+      blogPosts = hasValidBlogCache() ? readCache('blogPosts') : [];
+    }
     await writeCache('sports', sports);
     await writeCache('venues', venues);
+    await writeCache('blogPosts', blogPosts);
     console.log('Cached API responses to scripts/.sitemap-cache/');
-    return { sports, venues };
+    return { sports, venues, blogPosts };
   } catch (err) {
     if (hasValidCache()) {
       console.warn('Live fetch failed; falling back to cached API data.\n' + formatFetchError(err));
       return {
         sports: readCache('sports'),
         venues: readCache('venues'),
+        blogPosts: hasValidBlogCache() ? readCache('blogPosts') : [],
       };
     }
     throw err;
@@ -191,9 +211,9 @@ async function main() {
   console.log(`Sitemap base URL: ${BASE_URL}`);
   console.log(`API URL: ${API_URL}`);
 
-  const { sports, venues } = await loadData({ cacheOnly });
-  const xml = buildSitemapXml({ sports, venues, baseUrl: BASE_URL });
-  writeVenuesBootstrap({ sports, venues });
+  const { sports, venues, blogPosts } = await loadData({ cacheOnly });
+  const xml = buildSitemapXml({ sports, venues, blogPosts, baseUrl: BASE_URL });
+  writeVenuesBootstrap({ sports, venues, blogPosts });
 
   fs.mkdirSync(path.dirname(OUT_PATH), { recursive: true });
   fs.writeFileSync(OUT_PATH, xml, 'utf8');

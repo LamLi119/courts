@@ -163,6 +163,17 @@ MYSQL_DATABASE=...   # courts-db (prod) or courts_staging (staging)
 GCS_BUCKET_NAME=courts-image-bucket   # no spaces around =
 THE_GRIND_BACKEND_URL=https://api.thegrind-app.com
 COURTS_FRONTEND_URL=https://courts.theground.io
+
+# Notion blog sync (internal integration token + database id)
+NOTION_API_TOKEN=secret_xxxxxxxx
+NOTION_BLOG_DATABASE_ID=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
+```
+
+**Blog:** run `scripts/add-blog_posts.sql` once on the database, then set Notion env vars. Super-admin → **Sync blog from Notion** in `/admin` after publishing posts in Notion.
+
+```bash
+# Example: apply blog migration (adjust host/user as needed)
+mysql -h "$MYSQL_HOST" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE" < scripts/add-blog_posts.sql
 ```
 
 **Image uploads** require `GCS_BUCKET_NAME` and GCS write access (VM service account or a service-account JSON in `api/`). The server defaults to `courts-image-bucket` if unset. If staging saves venues but `images` comes back as `[]`, deploy latest code and run on the VM:

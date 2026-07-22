@@ -10,6 +10,8 @@ import { buildSitemapXml } from '../lib/sitemap.js';
 import { notifyIndexNowForVenue, submitIndexNowUrls, venuePublicUrl } from '../lib/indexnow.js';
 import { loadPublicCatalog } from '../lib/catalogData.js';
 import { buildOkfBundle } from '../lib/okf.js';
+import { listPublishedBlogPosts, getBlogPostBySlug } from './blogRepo.js';
+import { syncBlogFromNotion } from './blogSync.js';
 
 const app = express();
 // Venue form sends base64 images; keep payload limit high enough for multi-image saves.
@@ -29,9 +31,40 @@ const PUBLIC_EVENTS_PREWARM_QS = [
 ];
 const OKF_CACHE_TTL_MS = 1000 * 60 * 5;
 let okfCache = null;
+const BLOG_LIST_CACHE_TTL_MS = 1000 * 60;
+let blogListCache = { createdAt: 0, data: null };
+const blogPostCache = new Map();
 
 function invalidateOkfCache() {
   okfCache = null;
+}
+
+function invalidateBlogCache() {
+  blogListCache = { createdAt: 0, data: null };
+  blogPostCache.clear();
+}
+
+async function getCachedBlogList(db) {
+  const now = Date.now();
+  if (blogListCache.data && now - blogListCache.createdAt < BLOG_LIST_CACHE_TTL_MS) {
+    return blogListCache.data;
+  }
+  const rows = await listPublishedBlogPosts(db);
+  blogListCache = { createdAt: now, data: rows };
+  return rows;
+}
+
+async function getCachedBlogPost(db, slug) {
+  const key = String(slug || '').trim();
+  if (!key) return null;
+  const cached = blogPostCache.get(key);
+  const now = Date.now();
+  if (cached && now - cached.createdAt < BLOG_LIST_CACHE_TTL_MS) {
+    return cached.data;
+  }
+  const row = await getBlogPostBySlug(db, key);
+  blogPostCache.set(key, { createdAt: now, data: row });
+  return row;
 }
 
 async function getOkfBundle(db) {
@@ -324,6 +357,16 @@ function getAdminSession(req) {
     return null;
   }
   return { sid, ...session };
+}
+
+/** Super-admin via session cookie or password (cross-origin cookie fallback). */
+function isSuperAdminRequest(req) {
+  const session = getAdminSession(req);
+  if (session?.type === 'super') return true;
+  const pwd = req.body?.password
+    || req.body?.superAdminPassword
+    || req.query?.superAdminPassword;
+  return typeof pwd === 'string' && pwd === SUPER_ADMIN_PASSWORD;
 }
 
 function adminCookieOptions(req) {
@@ -804,6 +847,13 @@ app.use('/api', (req, res, next) => {
   }
   // Public catalog reads used by the SPA.
   if (req.method === 'GET' && (req.path === '/sports' || req.path === '/venues' || /^\/venues\/[^/]+$/.test(req.path))) {
+    return next();
+  }
+  // Public blog reads + super-admin sync (session cookie).
+  if (req.method === 'GET' && (req.path === '/blog' || /^\/blog\/[^/]+$/.test(req.path))) {
+    return next();
+  }
+  if (req.method === 'POST' && req.path === '/blog/sync') {
     return next();
   }
   // Public read-only proxy for venue detail "upcoming events" (browser-facing).
@@ -1580,10 +1630,19 @@ app.get('/api/sitemap.xml', async (req, res) => {
   try {
     const db = getPool();
     const { sports, venues } = await loadPublicCatalog(db, { listSportsRows });
+    let blogPosts = [];
+    try {
+      blogPosts = await listPublishedBlogPosts(db);
+    } catch (blogErr) {
+      if (blogErr?.code !== 'ER_NO_SUCH_TABLE') {
+        console.warn('[sitemap] blog_posts load failed:', blogErr?.message || blogErr);
+      }
+    }
 
     const xml = buildSitemapXml({
       sports,
       venues: venues || [],
+      blogPosts,
       baseUrl: process.env.SITEMAP_BASE_URL || 'https://courts.theground.io',
     });
     res.setHeader('Content-Type', 'application/xml; charset=utf-8');
@@ -1591,6 +1650,56 @@ app.get('/api/sitemap.xml', async (req, res) => {
     res.send(xml);
   } catch (err) {
     res.status(500).type('text/plain').send(`Failed to generate sitemap: ${dbErrorMessage(err)}`);
+  }
+});
+
+/** Public blog list (synced from Notion). */
+app.get('/api/blog', async (_req, res) => {
+  try {
+    const db = getPool();
+    const rows = await getCachedBlogList(db);
+    res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
+    res.json(rows);
+  } catch (err) {
+    if (err?.code === 'ER_NO_SUCH_TABLE') {
+      return res.json([]);
+    }
+    res.status(500).json({ error: dbErrorMessage(err) });
+  }
+});
+
+/** Public blog post by slug. */
+app.get('/api/blog/:slug', async (req, res) => {
+  try {
+    const slug = String(req.params.slug || '').trim();
+    if (!slug) return res.status(400).json({ error: 'Slug required' });
+    const db = getPool();
+    const row = await getCachedBlogPost(db, slug);
+    if (!row) return res.status(404).json({ error: 'Post not found' });
+    res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
+    res.json(row);
+  } catch (err) {
+    if (err?.code === 'ER_NO_SUCH_TABLE') {
+      return res.status(404).json({ error: 'Post not found' });
+    }
+    res.status(500).json({ error: dbErrorMessage(err) });
+  }
+});
+
+/** Super-admin: sync published Notion database pages into MySQL. */
+app.post('/api/blog/sync', async (req, res) => {
+  try {
+    if (!isSuperAdminRequest(req)) {
+      return res.status(403).json({
+        error: 'Super admin required. Log in with the global super admin password (not a venue password).',
+      });
+    }
+    const db = getPool();
+    const result = await syncBlogFromNotion(db);
+    invalidateBlogCache();
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(500).json({ error: err?.message || dbErrorMessage(err) });
   }
 });
 

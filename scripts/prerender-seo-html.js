@@ -15,6 +15,7 @@ import {
   buildDistrictSportPageMeta,
   HK_DISTRICTS,
 } from '../lib/pageSeoMeta.js';
+import { buildBlogListPageMeta, buildBlogPostPageMeta } from '../lib/blogSeoMeta.js';
 import { venueMatchesSportSlug } from '../lib/sitemap.js';
 import { venueMatchesDistricts } from '../lib/hkDistricts.js';
 
@@ -44,12 +45,14 @@ function main() {
   const shell = fs.readFileSync(indexPath, 'utf8');
   let venues = [];
   let sports = [];
+  let blogPosts = [];
 
   if (fs.existsSync(BOOTSTRAP_PATH)) {
     try {
       const bootstrap = JSON.parse(fs.readFileSync(BOOTSTRAP_PATH, 'utf8'));
       venues = Array.isArray(bootstrap.venues) ? bootstrap.venues : [];
       sports = Array.isArray(bootstrap.sports) ? bootstrap.sports : [];
+      blogPosts = Array.isArray(bootstrap.blogPosts) ? bootstrap.blogPosts : [];
     } catch (err) {
       console.warn('prerender-seo-html: failed to parse venues-bootstrap.json:', err?.message || err);
     }
@@ -62,6 +65,16 @@ function main() {
 
   const exploreMeta = buildExplorePageMeta({ venues, origin: BASE_URL, lang: 'en' });
   writeHtml(path.join('explore', 'index.html'), injectPageSeoIntoHtml(shell, exploreMeta));
+
+  const blogListMeta = buildBlogListPageMeta({ posts: blogPosts, origin: BASE_URL, lang: 'en' });
+  writeHtml(path.join('blog', 'index.html'), injectPageSeoIntoHtml(shell, blogListMeta));
+
+  for (const post of blogPosts) {
+    const slug = String(post?.slug || '').trim();
+    if (!slug) continue;
+    const postMeta = buildBlogPostPageMeta(post, { origin: BASE_URL, lang: 'en' });
+    writeHtml(path.join('blog', slug, 'index.html'), injectPageSeoIntoHtml(shell, postMeta));
+  }
 
   const sportSlugs = new Set(sports.map((s) => s.slug).filter(Boolean));
   // Always include known high-traffic slugs from sitemap even if sports list is empty.
@@ -115,7 +128,7 @@ function main() {
   }
 
   console.log(
-    `prerender-seo-html: wrote home + explore + ${sportSlugs.size} search pages (+ district variants) + ${venueCount} venue pages`
+    `prerender-seo-html: wrote home + explore + blog + ${blogPosts.length} blog posts + ${sportSlugs.size} search pages (+ district variants) + ${venueCount} venue pages`
   );
 }
 

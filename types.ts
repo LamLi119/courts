@@ -90,3 +90,18 @@ export interface Venue {
 
 export type Language = 'en' | 'zh';
 export type AppTab = 'explore' | 'saved' | 'admin';
+
+export interface BlogPostSummary {
+  id?: string;
+  slug: string;
+  title: string;
+  summary?: string | null;
+  cover_url?: string | null;
+  published_at?: string | null;
+  synced_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface BlogPost extends BlogPostSummary {
+  body_html: string;
+}
