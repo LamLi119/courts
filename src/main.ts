@@ -1,8 +1,6 @@
 import './style.css';
 import { registerSW } from 'virtual:pwa-register';
 import { createApp } from 'vue';
-import App from './App.vue';
-import { installRouter } from './router';
 import { prefetchVenuesBootstrap } from './utils/venuesBootstrap';
 
 const updateSW = registerSW({
@@ -33,7 +31,13 @@ function registerServiceWorkerDeferred(): void {
 }
 
 async function bootstrap(): Promise<void> {
+  // Load bootstrap JSON before App.vue so hydrateInitialVenueData() can use it.
   await prefetchVenuesBootstrap();
+
+  const [{ default: App }, { installRouter }] = await Promise.all([
+    import('./App.vue'),
+    import('./router'),
+  ]);
 
   const rootElement = document.getElementById('root');
   if (!rootElement) throw new Error('Could not find root element to mount to');

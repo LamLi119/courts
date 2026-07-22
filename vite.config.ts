@@ -33,6 +33,15 @@ export default defineConfig(({ mode }) => {
         output: {
           manualChunks: {
             vue: ['vue'],
+            router: ['vue-router'],
+            maps: ['./src/components/explore/MapView.vue', './src/utils/googleMapsScript.ts'],
+            admin: ['./src/components/admin/AdminPage.vue', './src/components/admin/VenueForm.vue'],
+            auth: [
+              './src/components/auth/UserLoginPage.vue',
+              './src/components/auth/UserSignUpPage.vue',
+              './src/components/auth/TokenLoginPage.vue',
+              './src/components/auth/CompletePhonePage.vue',
+            ],
           },
         },
       },

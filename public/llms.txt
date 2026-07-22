@@ -3,22 +3,22 @@
 Courts is a Hong Kong sports venue directory by The Ground. It helps people find courts by district, sport, and nearby MTR stations.
 
 ## Main pages
-- https://courts.theground.io/
-- https://courts.theground.io/explore
-- https://courts.theground.io/about
+- [Home](https://courts.theground.io/)
+- [Explore](https://courts.theground.io/explore)
+- [About](https://courts.theground.io/about)
 
 ## Key sport pages
-- https://courts.theground.io/search/pickleball
+- [Pickleball courts](https://courts.theground.io/search/pickleball)
 
 ## Structured discovery
-- Sitemap: https://courts.theground.io/sitemap.xml
-- OKF index: https://courts.theground.io/okf
-- OKF bundle: https://courts.theground.io/okf.tar.gz
-- AI catalog (ARD): https://courts.theground.io/.well-known/ai-catalog.json
+- [Sitemap](https://courts.theground.io/sitemap.xml)
+- [OKF index](https://courts.theground.io/okf)
+- [OKF bundle](https://courts.theground.io/okf.tar.gz)
+- [AI catalog (ARD)](https://courts.theground.io/.well-known/ai-catalog.json)
 
 ## Notes for agents
-- Prefer the sitemap for broad URL discovery.
-- Prefer OKF (`/okf` or `/okf.tar.gz`) for structured venue and sport content in Markdown.
-- Prefer the AI catalog for machine-readable discovery of those resources.
+- Prefer the [sitemap](https://courts.theground.io/sitemap.xml) for broad URL discovery.
+- Prefer [OKF](https://courts.theground.io/okf) or the [OKF bundle](https://courts.theground.io/okf.tar.gz) for structured venue and sport content in Markdown.
+- Prefer the [AI catalog](https://courts.theground.io/.well-known/ai-catalog.json) for machine-readable discovery of those resources.
 - Venue detail pages contain SEO metadata, structured data, amenities, and location-specific overview copy.
 - For free/public LCSD courts, prefer official LCSD facilities directories; Courts focuses on bookable and partner venues.
