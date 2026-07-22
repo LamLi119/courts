@@ -37,9 +37,8 @@ const AdminPage = defineAsyncComponent(() => import('./components/admin/AdminPag
 const AboutPage = defineAsyncComponent(() => import('./components/about/AboutPage.vue'));
 
 const initialVenueData = hydrateInitialVenueData();
-if (initialVenueData.hasData) {
-  setVenuesCache(initialVenueData.venues, initialVenueData.sports, Date.now());
-}
+/** True after a successful /api/venues fetch this page load. Bootstrap alone must not skip the API. */
+let venuesFetchedFromApi = false;
 
 const route = useRoute();
 const { refresh: refreshGrindUpcomingEvents } = useGrindUpcomingEvents();
@@ -115,7 +114,9 @@ function canEditVenue(venueId: number): boolean {
 const loadData = async (force = false) => {
   const hadData = venues.value.length > 0;
   const cacheMeta = readSessionCacheMeta();
-  if (!force && hadData && cacheMeta && isVenuesCacheFresh(cacheMeta.ts)) {
+  // Only skip when this session already fetched the API and the cache is still fresh.
+  // Bootstrap/session hydrate must not block the first network refresh (stale mtrStation etc.).
+  if (!force && venuesFetchedFromApi && hadData && cacheMeta && isVenuesCacheFresh(cacheMeta.ts)) {
     isLoading.value = false;
     return;
   }
@@ -129,6 +130,8 @@ const loadData = async (force = false) => {
     if (fresh?.length !== undefined) {
       venues.value = fresh;
       setVenuesCache(fresh, sportsList || [], Date.now());
+      venuesFetchedFromApi = true;
+      syncSelectedVenueFromList();
     }
     if (sportsList?.length !== undefined) {
       sports.value = sportsList;
@@ -157,6 +160,22 @@ function resolveVenueBySlug(slug: string): Venue | null {
   const s = (slug || '').toLowerCase().trim();
   if (!s) return null;
   return venues.value.find((v) => slugify(v.name) === s) ?? null;
+}
+
+/** Keep detail view on the current list object after venues are replaced (bootstrap → API). */
+function syncSelectedVenueFromList() {
+  if (route.name === 'venue' && typeof route.params.slug === 'string') {
+    const venue = resolveVenueBySlug(route.params.slug);
+    if (venue) {
+      selectedVenue.value = venue;
+      showDesktopDetail.value = true;
+    }
+    return;
+  }
+  if (selectedVenue.value) {
+    const fresh = venues.value.find((v) => v.id === selectedVenue.value!.id);
+    if (fresh) selectedVenue.value = fresh;
+  }
 }
 
 watch(
@@ -246,15 +265,9 @@ watch(
 );
 
 watch(
-  () => venues.value.length,
+  () => venues.value,
   () => {
-    if (route.name === 'venue' && typeof route.params.slug === 'string' && !selectedVenue.value) {
-      const venue = resolveVenueBySlug(route.params.slug);
-      if (venue) {
-        selectedVenue.value = venue;
-        showDesktopDetail.value = true;
-      }
-    }
+    syncSelectedVenueFromList();
     if (route.name === 'home' && venues.value.length > 0) {
       applyLandingPageSeo(venues.value, sports.value, language.value);
     }
