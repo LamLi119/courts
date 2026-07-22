@@ -234,6 +234,20 @@ function prepareRowForDb(row) {
   return row;
 }
 
+/** Strip ZWJ/BOM/format chars that break slug matching (e.g. venue id 8 name). */
+function cleanDisplayText(text) {
+  if (text == null || typeof text !== 'string') return text;
+  return text.replace(/\p{Cf}/gu, '').replace(/\uFEFF/g, '').trim().replace(/\s+/g, ' ');
+}
+
+function normalizeVenueRowForClient(row) {
+  if (!row || typeof row !== 'object') return row;
+  if (typeof row.name === 'string') row.name = cleanDisplayText(row.name);
+  if (typeof row.mtrStation === 'string') row.mtrStation = cleanDisplayText(row.mtrStation);
+  if (typeof row.mtrExit === 'string') row.mtrExit = cleanDisplayText(row.mtrExit);
+  return row;
+}
+
 /** Helper: ensure pricing image is a GCS URL (not base64) before DB write. */
 async function normalizePricingForStorage(rawPricing) {
   if (rawPricing == null || rawPricing === '') return rawPricing;
@@ -714,7 +728,7 @@ async function getVenueWithSports(db, venueId, includePassword = false) {
   } catch (_) {
     r.sport_data = [];
   }
-  return r;
+  return normalizeVenueRowForClient(r);
 }
 
 function sanitizeRow(body) {
@@ -740,6 +754,8 @@ function sanitizeRow(body) {
         if (v == null || v === '') row[k] = null;
         else if (typeof v === 'string') row[k] = v;
         else row[k] = JSON.stringify(v);
+      } else if ((k === 'name' || k === 'mtrStation' || k === 'mtrExit') && typeof v === 'string') {
+        row[k] = cleanDisplayText(v);
       } else {
         row[k] = (v === undefined) ? null : v;
       }
@@ -856,11 +872,44 @@ function isAllowedImageProxyUrl(rawUrl) {
   }
 }
 
+/** Clamp card/detail width hints; ignore invalid values. */
+function parseImageProxyWidth(rawWidth) {
+  const n = Number.parseInt(String(rawWidth || ''), 10);
+  if (!Number.isFinite(n) || n < 16) return null;
+  return Math.min(1600, Math.max(16, n));
+}
+
+/**
+ * Downscale + WebP when `w` is provided. Falls back to null on any sharp failure
+ * so the proxy can still return the original bytes.
+ */
+async function resizeImageBuffer(buffer, targetWidth) {
+  if (!targetWidth) return null;
+  try {
+    const { default: sharp } = await import('sharp');
+    const meta = await sharp(buffer, { failOn: 'none', animated: false }).metadata();
+    let pipeline = sharp(buffer, { failOn: 'none', animated: false }).rotate();
+    if (meta.width && meta.width > targetWidth) {
+      pipeline = pipeline.resize({
+        width: targetWidth,
+        withoutEnlargement: true,
+        fit: 'inside',
+      });
+    }
+    const out = await pipeline.webp({ quality: 72, effort: 4 }).toBuffer();
+    return { buffer: out, contentType: 'image/webp' };
+  } catch {
+    return null;
+  }
+}
+
 app.get('/api/image-proxy', async (req, res) => {
   try {
     const raw = (req.query?.url || '').toString().trim();
     if (!raw) return res.status(400).json({ error: 'Missing url' });
     if (!isAllowedImageProxyUrl(raw)) return res.status(400).json({ error: 'Invalid image url' });
+
+    const targetWidth = parseImageProxyWidth(req.query?.w);
 
     const response = await axios.get(raw, {
       responseType: 'arraybuffer',
@@ -869,12 +918,23 @@ app.get('/api/image-proxy', async (req, res) => {
       validateStatus: (status) => status >= 200 && status < 300
     });
 
-    const contentType = String(response.headers?.['content-type'] || 'application/octet-stream');
-    // Keep cache-friendly defaults; the underlying GCS objects are immutable in this app.
+    const original = Buffer.from(response.data);
+    const resized = await resizeImageBuffer(original, targetWidth);
+    const body = resized?.buffer || original;
+    const contentType = resized?.contentType
+      || String(response.headers?.['content-type'] || 'application/octet-stream');
+
+    // GCS objects are immutable; resized variants are keyed by `w` in the URL.
     res.setHeader('Content-Type', contentType);
-    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.setHeader(
+      'Cache-Control',
+      resized
+        ? 'public, max-age=2592000, immutable'
+        : 'public, max-age=86400',
+    );
     res.setHeader('Access-Control-Allow-Origin', '*');
-    return res.status(200).send(Buffer.from(response.data));
+    if (resized) res.setHeader('X-Image-Proxy-Resized', '1');
+    return res.status(200).send(body);
   } catch (err) {
     const msg = err?.message || 'Proxy failed';
     return res.status(502).json({ error: msg });
@@ -1505,6 +1565,7 @@ app.get('/api/venues', async (req, res) => {
       rows.forEach((r) => { r.sport_data = byVenue[r.id] || []; });
     } catch (_) {}
     rows.forEach((r) => attachHasAdminPassword(r, includePasswords));
+    rows.forEach((r) => normalizeVenueRowForClient(r));
     if (!includePasswords) {
       res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
     }

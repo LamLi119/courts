@@ -256,6 +256,23 @@ const districtName = computed(() => {
   return slug ? getDistrictDisplayName(slug, props.language) : null;
 });
 
+/** Defensive reads — API/bootstrap may expose snake_case or lowercased keys. */
+const mtrStationLabel = computed(() => {
+  const v = props.venue as any;
+  return String(v?.mtrStation || v?.mtr_station || v?.mtrstation || '').trim();
+});
+const mtrExitLabel = computed(() => {
+  const v = props.venue as any;
+  return String(v?.mtrExit || v?.mtr_exit || v?.mtrexit || '').trim();
+});
+const walkingMinutes = computed(() => {
+  const v = props.venue as any;
+  const raw = v?.walkingDistance ?? v?.walking_distance ?? v?.walkingdistance;
+  const n = typeof raw === 'number' ? raw : parseFloat(String(raw ?? ''));
+  return Number.isFinite(n) && n > 0 ? n : 0;
+});
+const showMtrBadge = computed(() => !!mtrStationLabel.value || walkingMinutes.value > 0);
+
 const OPERATING_DAY_KEYS: OperatingDayKey[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 const OPERATING_DAY_LABELS: Record<OperatingDayKey, { en: string; zh: string }> = {
   mon: { en: 'Mon', zh: '週一' },
@@ -395,7 +412,7 @@ const showVenueRating = computed(() => {
 });
 
 onMounted(() => {
-  void refreshUpcoming();
+  void refreshUpcoming({ maxPages: 20 });
 });
 
 watch(
@@ -458,7 +475,7 @@ watch(
         <span class="truncate">{{ venue.name }}</span>
       </h1>
       <div class="flex items-center gap-2">
-        <button type="button" id="share-button" class="btn btn-utility btn-utility-round" aria-label="Share"
+        <button type="button" class="btn btn-utility btn-utility-round" :aria-label="t('share')"
           :class="darkMode ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-100'"
           @click="handleShare">
           <svg :id="`${venue.name}-share-icon`" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none"
@@ -471,12 +488,16 @@ watch(
           shareFeedback
         }}</span>
         <button v-if="(canEdit !== undefined ? canEdit : isAdmin)" type="button"
-          class="btn btn-utility btn-utility-round bg-blue-500 text-white hover:bg-blue-600" @click="onEdit">
-          ✏️
+          class="btn btn-utility btn-utility-round bg-blue-500 text-white hover:bg-blue-600"
+          :aria-label="language === 'en' ? 'Edit venue' : '編輯場地'"
+          @click="onEdit">
+          <span aria-hidden="true">✏️</span>
         </button>
         <button type="button" class="btn btn-utility btn-utility-round"
-          :class="isSaved() ? 'bg-red-500 text-white hover:bg-red-600' : ''" @click="toggleSave(venue.id)">
-          {{ isSaved() ? '❤️' : '🤍' }}
+          :class="isSaved() ? 'bg-red-500 text-white hover:bg-red-600' : ''"
+          :aria-label="isSaved() ? t('saved') : t('saveCourt')"
+          @click="toggleSave(venue.id)">
+          <span aria-hidden="true">{{ isSaved() ? '❤️' : '🤍' }}</span>
         </button>
       </div>
     </div>
@@ -529,8 +550,8 @@ watch(
               :class="darkMode ? 'text-gray-400' : 'text-gray-600'">
               <span v-if="districtName" class="rounded-md px-2.5 py-0.5 text-xs font-medium shrink-0"
                 :class="darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'">📍 {{ districtName }}</span>
-              <span v-if="venue.mtrStation || venue.walkingDistance > 0" class="rounded-md px-2.5 py-0.5 text-xs font-medium shrink-0"
-                :class="darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'"><template v-if="venue.mtrStation">🚇 {{ getStationDisplayName(venue.mtrStation, language) }}<template v-if="venue.mtrExit"> ({{ venue.mtrExit }})</template> </template><template v-if="venue.mtrStation && venue.walkingDistance > 0"> • </template><template v-if="venue.walkingDistance > 0"> {{ venue.walkingDistance }} {{ t('min') }}</template></span>
+              <span v-if="showMtrBadge" class="rounded-md px-2.5 py-0.5 text-xs font-medium shrink-0"
+                :class="darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'"><template v-if="mtrStationLabel">🚇 {{ getStationDisplayName(mtrStationLabel, language) }}<template v-if="mtrExitLabel"> ({{ mtrExitLabel }})</template> </template><template v-if="mtrStationLabel && walkingMinutes > 0"> • </template><template v-if="walkingMinutes > 0"> {{ walkingMinutes }} {{ t('min') }}</template></span>
                 <!--<span
   v-if="getSportTypeLabel(venue, language) && getSportTypeLabel(venue, language) !== 'Court'"
   class="rounded-md px-2.5 py-0.5 text-xs font-medium shrink-0"
