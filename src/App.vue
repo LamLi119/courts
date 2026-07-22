@@ -37,7 +37,6 @@ const VenueDetail = defineAsyncComponent(() => import('./components/venue/VenueD
 const UpcomingEventsPage = defineAsyncComponent(() => import('./components/venue/UpcomingEventsPage.vue'));
 const VenueForm = defineAsyncComponent(() => import('./components/admin/VenueForm.vue'));
 const AdminPage = defineAsyncComponent(() => import('./components/admin/AdminPage.vue'));
-const AboutPage = defineAsyncComponent(() => import('./components/about/AboutPage.vue'));
 
 const initialVenueData = hydrateInitialVenueData();
 /** True after a successful /api/venues fetch this page load. Bootstrap alone must not skip the API. */

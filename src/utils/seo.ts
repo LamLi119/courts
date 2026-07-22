@@ -908,32 +908,46 @@ export function applyBlogListSeo(lang: 'en' | 'zh' = 'en', baseUrl?: string): vo
   document.head.appendChild(script);
 }
 
-/** Single blog post SEO. */
+function formatBlogPublished(value?: string | null): string {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
+/** Single blog post SEO. Meta title/description use Published + Summary. */
 export function applyBlogPostSeo(post: BlogPost, lang: 'en' | 'zh' = 'en', baseUrl?: string): void {
   const origin = typeof window !== 'undefined' ? window.location.origin : (baseUrl || '').replace(/\/$/, '');
   const pageUrl = origin
     ? `${origin}/blog/${post.slug}`
     : `${baseUrl || ''}/blog/${post.slug}`;
-  const title = `${post.title} | ${BRAND}`;
-  const description = cleanText(post.summary)
+  const published = formatBlogPublished(post.published_at);
+  const summary = cleanText(post.summary)
+    || cleanText(post.title)
     || (lang === 'zh' ? 'Courts 網誌文章' : 'Courts blog article');
+  const metaText = [published, summary].filter(Boolean).join(' ');
   const image = post.cover_url || '';
   const defaultImageUrl = origin ? new URL(DEFAULT_OG_IMAGE_PATH, origin).href : '';
 
-  document.title = title;
-  setMeta('description', description);
+  document.title = metaText;
+  setMeta('description', metaText);
+  setMeta('content', metaText);
   setMeta('keywords', DEFAULT_KEYWORDS);
   if (pageUrl) setCanonical(pageUrl);
 
-  setOgTag('og:title', title);
-  setOgTag('og:description', description);
+  setOgTag('og:title', metaText);
+  setOgTag('og:description', metaText);
   setOgTag('og:type', 'article');
   if (pageUrl) setOgTag('og:url', pageUrl);
   setOgTag('og:site_name', SITE_NAME);
 
   setMeta('twitter:card', 'summary_large_image');
-  setMeta('twitter:title', title);
-  setMeta('twitter:description', description);
+  setMeta('twitter:title', metaText);
+  setMeta('twitter:description', metaText);
   if (pageUrl) setMeta('twitter:url', pageUrl);
 
   const imageUrl = image
@@ -949,7 +963,7 @@ export function applyBlogPostSeo(post: BlogPost, lang: 'en' | 'zh' = 'en', baseU
     '@context': 'https://schema.org',
     '@type': 'BlogPosting',
     headline: post.title,
-    description,
+    description: summary,
     image: imageUrl ? [imageUrl] : undefined,
     datePublished: post.published_at || undefined,
     dateModified: post.updated_at || post.synced_at || post.published_at || undefined,

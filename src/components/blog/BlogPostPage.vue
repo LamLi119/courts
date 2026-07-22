@@ -101,13 +101,7 @@ watch(
           >
             {{ post.title }}
           </h1>
-          <p
-            v-if="post.summary"
-            class="mt-4 text-lg leading-relaxed"
-            :class="darkMode ? 'text-gray-300' : 'text-gray-600'"
-          >
-            {{ post.summary }}
-          </p>
+          
         </header>
 
         <div

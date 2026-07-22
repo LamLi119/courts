@@ -52,7 +52,7 @@ onMounted(async () => {
   >
     <div class="flex-1 w-full max-w-5xl mx-auto px-4 md:px-6 py-10 md:py-14">
       <header class="mb-10 md:mb-12">
-        <p class="text-xs font-bold uppercase tracking-[0.2em] text-[#007a67] mb-3" :class="darkMode ? 'text-green-300' : 'text-gray-900'">
+        <p class="text-xs font-bold uppercase tracking-[0.2em] mb-3" :class="darkMode ? 'text-green-300' : 'text-[#007a67]'">
           {{ t('blogEyebrow') }}
         </p>
         <h1 class="text-3xl md:text-5xl font-black tracking-tight" :class="darkMode ? 'text-white' : 'text-gray-900'">
@@ -109,13 +109,7 @@ onMounted(async () => {
             >
               {{ post.title }}
             </h2>
-            <p
-              v-if="post.summary"
-              class="mt-3 text-sm md:text-base leading-relaxed line-clamp-3"
-              :class="darkMode ? 'text-gray-300' : 'text-gray-600'"
-            >
-              {{ post.summary }}
-            </p>
+            
             <span class="mt-4 inline-flex text-sm font-bold text-[#007a67]">
               {{ t('blogReadMore') }} →
             </span>
