@@ -21,7 +21,7 @@ declare global {
 export async function prefetchVenuesBootstrap(): Promise<void> {
   if (typeof window === 'undefined') return;
   try {
-    const res = await fetch('/venues-bootstrap.json', { cache: 'force-cache' });
+    const res = await fetch('/venues-bootstrap.json', { cache: 'no-cache' });
     if (res.ok) {
       window.__VENUES_BOOTSTRAP__ = await res.json();
     }
@@ -63,7 +63,7 @@ export function hydrateInitialVenueData(): {
   const cached = readSessionCache();
   if (cached?.venues.length) {
     return {
-      venues: cached.venues,
+      venues: cached.venues.map((row) => rowToVenue(row)),
       sports: cached.sports,
       hasData: true,
     };

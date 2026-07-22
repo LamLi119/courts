@@ -11,6 +11,30 @@ if (import.meta.env.DEV && !API_BASE) {
   );
 }
 
+/** Strip ZWJ/BOM/format chars (match src/utils/slugify.ts). */
+function cleanDisplayText(text: string): string {
+  return text.replace(/\p{Cf}/gu, '').replace(/\uFEFF/g, '').trim().replace(/\s+/g, ' ');
+}
+
+/** Prefer camelCase app fields; MySQL/drivers may also return snake_case or lowercased keys. */
+function pickStr(...vals: unknown[]): string {
+  for (const v of vals) {
+    if (v == null) continue;
+    const s = cleanDisplayText(String(v));
+    if (s) return s;
+  }
+  return '';
+}
+
+function pickNum(...vals: unknown[]): number {
+  for (const v of vals) {
+    if (v == null || v === '') continue;
+    const n = typeof v === 'number' ? v : parseFloat(String(v));
+    if (Number.isFinite(n)) return n;
+  }
+  return 0;
+}
+
 // DB uses quoted camelCase ("mtrStation", "socialLink", "orgIcon"). App uses org_icon.
 export function rowToVenue(row: any): Venue {
   if (!row) return row;
@@ -101,14 +125,21 @@ export function rowToVenue(row: any): Venue {
   const { orgIcon, sport_data: _sd, ...rest } = row;
   const has_admin_password = Boolean(row.has_admin_password)
     || !!(row.admin_password && String(row.admin_password).trim());
+  const org_icon = orgIcon ?? row.org_icon ?? row.orgicon ?? null;
+  const rawName = row.name ?? rest.name;
   return {
     ...rest,
     has_admin_password,
+    // Strip ZWJ/BOM/etc. so slug resolve + display stay stable (e.g. venue id 8).
+    name: typeof rawName === 'string' ? cleanDisplayText(rawName) : rawName,
+    mtrStation: pickStr(row.mtrStation, row.mtr_station, row.mtrstation),
+    mtrExit: pickStr(row.mtrExit, row.mtr_exit, row.mtrexit),
+    walkingDistance: pickNum(row.walkingDistance, row.walking_distance, row.walkingdistance),
     images: Array.isArray(images) ? images : [],
     coordinates: coords,
     pricing: pricing,
     amenities: Array.isArray(amenities) ? amenities : [],
-    org_icon: orgIcon ?? null,
+    org_icon,
     sport_types,
     sport_orders: Object.keys(sport_orders).length ? sport_orders : undefined,
     sport_data: Array.isArray(sport_data) ? sport_data : undefined,

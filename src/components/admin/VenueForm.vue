@@ -169,29 +169,56 @@ const defaultForm = {
   operating_hours_enabled: true,
 };
 
+function venueToFormFields(venue: Venue) {
+  return {
+    ...defaultForm,
+    ...venue,
+    name: String((venue as any).name || '').replace(/\p{Cf}/gu, '').replace(/\uFEFF/g, '').trim(),
+    mtrStation: String((venue as any).mtrStation || (venue as any).mtr_station || '').replace(/\p{Cf}/gu, '').trim(),
+    mtrExit: String((venue as any).mtrExit || (venue as any).mtr_exit || '').replace(/\p{Cf}/gu, '').trim(),
+    walkingDistance: Number(
+      (venue as any).walkingDistance ?? (venue as any).walking_distance ?? 0
+    ) || 0,
+    socialLinks: parseSocialLinks(venue.socialLink),
+    sport_data: Array.isArray(venue.sport_data)
+      ? venue.sport_data.map((d: any) => ({
+          sport_id: Number(d.sport_id),
+          name: d.name,
+          name_zh: d.name_zh ?? null,
+          slug: d.slug,
+          sort_order: Number(d.sort_order) || 0,
+        }))
+      : [],
+    admin_password: (venue as any).admin_password ?? '',
+  };
+}
+
 const formData = reactive<any>(
-  props.venue
-    ? {
-        ...defaultForm,
-        ...props.venue,
-        socialLinks: parseSocialLinks(props.venue.socialLink),
-        sport_data: Array.isArray(props.venue.sport_data)
-          ? props.venue.sport_data.map((d: any) => ({
-              sport_id: Number(d.sport_id),
-              name: d.name,
-              name_zh: d.name_zh ?? null,
-              slug: d.slug,
-              sort_order: Number(d.sort_order) || 0,
-            }))
-          : [],
-        admin_password: (props.venue as any).admin_password ?? '',
-      }
-    : { ...defaultForm }
+  props.venue ? venueToFormFields(props.venue) : { ...defaultForm }
 );
 const hasCourtAdminPassword = ref(
   !!(props.venue?.has_admin_password || (props.venue as any)?.admin_password)
 );
 const clearCourtAdminPassword = ref(false);
+
+watch(
+  () =>
+    props.venue
+      ? [
+          props.venue.id,
+          (props.venue as any).mtrStation,
+          (props.venue as any).mtrExit,
+          (props.venue as any).walkingDistance,
+          props.venue.name,
+        ]
+      : null,
+  () => {
+    if (!props.venue) return;
+    Object.assign(formData, venueToFormFields(props.venue));
+    hasCourtAdminPassword.value = !!(props.venue.has_admin_password || (props.venue as any).admin_password);
+    clearCourtAdminPassword.value = false;
+  }
+);
 if (!formData.sport_data) formData.sport_data = [];
 if (formData.admin_password === undefined) formData.admin_password = '';
 if (formData.membership_enabled === undefined) formData.membership_enabled = false;
@@ -853,6 +880,15 @@ const handleSubmit = async (e?: Event) => {
     }
 
     const payload: Record<string, unknown> = { ...formData };
+    if (typeof payload.name === 'string') {
+      payload.name = payload.name.replace(/\p{Cf}/gu, '').replace(/\uFEFF/g, '').trim().replace(/\s+/g, ' ');
+    }
+    if (typeof payload.mtrStation === 'string') {
+      payload.mtrStation = payload.mtrStation.replace(/\p{Cf}/gu, '').trim();
+    }
+    if (typeof payload.mtrExit === 'string') {
+      payload.mtrExit = payload.mtrExit.replace(/\p{Cf}/gu, '').trim();
+    }
     if (props.isSuperAdmin) {
       const newPassword = String(formData.admin_password || '').trim();
       if (clearCourtAdminPassword.value) {
