@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import type { Venue, Language, AppTab } from '../types';
 import { translate } from './utils/translations';
@@ -131,6 +131,8 @@ const loadData = async (force = false) => {
       venues.value = fresh;
       setVenuesCache(fresh, sportsList || [], Date.now());
       venuesFetchedFromApi = true;
+      // Re-bind after the venues watch/route state settle (bootstrap → API).
+      await nextTick();
       syncSelectedVenueFromList();
     }
     if (sportsList?.length !== undefined) {
@@ -165,7 +167,15 @@ function resolveVenueBySlug(slug: string): Venue | null {
 /** Keep detail view on the current list object after venues are replaced (bootstrap → API). */
 function syncSelectedVenueFromList() {
   if (route.name === 'venue' && typeof route.params.slug === 'string') {
-    const venue = resolveVenueBySlug(route.params.slug);
+    const slug = String(route.params.slug).toLowerCase().trim();
+    // Prefer same id when slug still matches (avoids wrong venue on slug collisions).
+    let venue: Venue | null = null;
+    const currentId = selectedVenue.value?.id;
+    if (currentId != null) {
+      const byId = venues.value.find((v) => v.id === currentId) ?? null;
+      if (byId && slugify(byId.name) === slug) venue = byId;
+    }
+    if (!venue) venue = resolveVenueBySlug(slug);
     if (venue) {
       selectedVenue.value = venue;
       showDesktopDetail.value = true;
@@ -1076,6 +1086,7 @@ const handleSaveVenue = async (venueData: any) => {
 
         <VenueDetail
           v-else-if="showDesktopDetail && selectedVenue"
+          :key="selectedVenue.id"
           :venue="selectedVenue"
           :onBack="() => { selectedVenue = null; showDesktopDetail = false; goBackFromVenue(); }"
           :onPrevVenue="goToPrevVenue"

@@ -11,6 +11,25 @@ if (import.meta.env.DEV && !API_BASE) {
   );
 }
 
+/** Prefer camelCase app fields; MySQL/drivers may also return snake_case or lowercased keys. */
+function pickStr(...vals: unknown[]): string {
+  for (const v of vals) {
+    if (v == null) continue;
+    const s = String(v).trim();
+    if (s) return s;
+  }
+  return '';
+}
+
+function pickNum(...vals: unknown[]): number {
+  for (const v of vals) {
+    if (v == null || v === '') continue;
+    const n = typeof v === 'number' ? v : parseFloat(String(v));
+    if (Number.isFinite(n)) return n;
+  }
+  return 0;
+}
+
 // DB uses quoted camelCase ("mtrStation", "socialLink", "orgIcon"). App uses org_icon.
 export function rowToVenue(row: any): Venue {
   if (!row) return row;
@@ -101,14 +120,18 @@ export function rowToVenue(row: any): Venue {
   const { orgIcon, sport_data: _sd, ...rest } = row;
   const has_admin_password = Boolean(row.has_admin_password)
     || !!(row.admin_password && String(row.admin_password).trim());
+  const org_icon = orgIcon ?? row.org_icon ?? row.orgicon ?? null;
   return {
     ...rest,
     has_admin_password,
+    mtrStation: pickStr(row.mtrStation, row.mtr_station, row.mtrstation),
+    mtrExit: pickStr(row.mtrExit, row.mtr_exit, row.mtrexit),
+    walkingDistance: pickNum(row.walkingDistance, row.walking_distance, row.walkingdistance),
     images: Array.isArray(images) ? images : [],
     coordinates: coords,
     pricing: pricing,
     amenities: Array.isArray(amenities) ? amenities : [],
-    org_icon: orgIcon ?? null,
+    org_icon,
     sport_types,
     sport_orders: Object.keys(sport_orders).length ? sport_orders : undefined,
     sport_data: Array.isArray(sport_data) ? sport_data : undefined,
