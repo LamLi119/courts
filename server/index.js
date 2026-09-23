@@ -602,9 +602,20 @@ function cleanupPublicEventsCache(now = Date.now()) {
 }
 
 /**
- * The Grind `/events/getExploreEvents` response shape has varied across deployments
- * (top-level array, `data`, `events`, nested `data.items`, etc.). Normalize so the
- * Courts frontend always receives `{ data: [...], meta?: {...} }`.
+ * Alias web/v2 pagination fields so the Courts frontend can keep using pageCount/total.
+ */
+function normalizeEventsMeta(meta) {
+  if (!meta || typeof meta !== 'object') return {};
+  const out = { ...meta };
+  if (out.pageCount == null && out.totalPages != null) out.pageCount = out.totalPages;
+  if (out.total == null && out.totalItems != null) out.total = out.totalItems;
+  return out;
+}
+
+/**
+ * The Grind `/events/web/v2` (and older explore) response shape has varied across
+ * deployments (top-level array, `data`, `events`, nested `data.items`, etc.).
+ * Normalize so the Courts frontend always receives `{ data: [...], meta?: {...} }`.
  */
 function normalizeExploreEventsBody(raw) {
   if (raw == null) return { data: [], meta: {} };
@@ -617,7 +628,10 @@ function normalizeExploreEventsBody(raw) {
   for (const k of arrayKeys) {
     const v = raw[k];
     if (Array.isArray(v)) {
-      return { data: v, meta: typeof topMeta === 'object' && topMeta ? { ...topMeta } : {} };
+      return {
+        data: v,
+        meta: normalizeEventsMeta(typeof topMeta === 'object' && topMeta ? topMeta : {}),
+      };
     }
   }
 
@@ -629,17 +643,20 @@ function normalizeExploreEventsBody(raw) {
       if (Array.isArray(v)) {
         return {
           data: v,
-          meta: { ...topMeta, ...innerMeta },
+          meta: normalizeEventsMeta({ ...topMeta, ...innerMeta }),
         };
       }
     }
   }
 
-  return { data: [], meta: typeof topMeta === 'object' && topMeta ? { ...topMeta } : {} };
+  return {
+    data: [],
+    meta: normalizeEventsMeta(typeof topMeta === 'object' && topMeta ? topMeta : {}),
+  };
 }
 
 async function fetchPublicEventsWithCache(qs) {
-  const cacheKey = `events-public:${qs}`;
+  const cacheKey = `events-public:web-v2:${qs}`;
   const now = Date.now();
   const cached = publicEventsCache.get(cacheKey);
   if (cached && cached.expiresAt > now) {
@@ -652,7 +669,9 @@ async function fetchPublicEventsWithCache(qs) {
     return { data, cacheStatus: 'WAIT' };
   }
 
-  const request = grindFetch(`/events/getExploreEvents?${qs}`)
+  const request = grindFetch(`/events/web/v2?${qs}`, {
+    headers: { Accept: 'application/json' },
+  })
     .then((raw) => {
       const normalized = normalizeExploreEventsBody(raw);
       const t = Date.now();

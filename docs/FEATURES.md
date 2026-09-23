@@ -234,7 +234,7 @@ Base URLs:
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/events/public` | Aggregated public events (cached 90s) |
+| GET | `/api/events/public` | Proxies Grind `/events/web/v2` (`tab`/`order`/`page`/`pageSize`; cached 90s) |
 | GET | `/api/image-proxy?url=` | Proxy GCS images (CORS workaround) |
 
 ---
