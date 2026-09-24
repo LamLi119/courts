@@ -27,7 +27,7 @@ const PUBLIC_EVENTS_CACHE_TTL_MS = 1000 * 90; // 90s short cache
 const publicEventsCache = new Map();
 const publicEventsInflight = new Map();
 const PUBLIC_EVENTS_PREWARM_QS = [
-  'order=ASC&tab=upcoming&page=1&pageSize=8',
+  'order=DESC&tab=upcoming&page=1&pageSize=8',
 ];
 const OKF_CACHE_TTL_MS = 1000 * 60 * 5;
 let okfCache = null;

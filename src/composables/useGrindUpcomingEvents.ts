@@ -31,7 +31,7 @@ const events = ref<GrindEventRow[]>([]);
 const pagesFetched = ref(0);
 let activeRequestId = 0;
 
-const LOCAL_CACHE_KEY = 'venue_upcoming_events_cache_v4';
+const LOCAL_CACHE_KEY = 'venue_upcoming_events_cache_v5';
 const LOCAL_CACHE_TTL_MS = 1000 * 60 * 5; // 5 minutes
 const DEFAULT_MAX_PAGES = 20;
 const PAGE_SIZE = 8;
@@ -169,7 +169,7 @@ function writeLocalCache(
 
 async function fetchPage(page: number, pageSize: number): Promise<GrindUpcomingEventsPayload> {
   const url = courtApiUrl(
-    `/api/events/public?tab=upcoming&order=ASC&page=${page}&pageSize=${pageSize}`,
+    `/api/events/public?tab=upcoming&order=DESC&page=${page}&pageSize=${pageSize}`,
   );
   const res = await fetch(url, { credentials: 'include' });
   if (!res.ok) {
