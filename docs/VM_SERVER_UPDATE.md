@@ -62,7 +62,7 @@ ssh team@instance-courts   # or gcloud compute ssh ...
 cd /opt/courts-new         # use WorkingDirectory from above
 
 git fetch
-git checkout dev  # e.g. dev, or main for a staging test
+git checkout Fix/Upcoming-Event  # e.g. dev, or main for a staging test
 git pull
 
 npm ci
@@ -181,7 +181,9 @@ MYSQL_PASSWORD='...'   # use single quotes if password has $ ! & etc.
 MYSQL_DATABASE=...   # courts-db (prod) or courts_staging (staging)
 
 GCS_BUCKET_NAME=courts-image-bucket   # no spaces around =
-THE_GRIND_BACKEND_URL=https://api.thegrind-app.com
+# Staging: use Grind dev so /events/web/v2 is public (prod host currently 401s that route).
+# Prod:    THE_GRIND_BACKEND_URL=https://api.thegrind-app.com
+THE_GRIND_BACKEND_URL=https://api.dev.thegrind-app.com
 COURTS_FRONTEND_URL=https://courts.theground.io
 
 # Notion blog sync (internal integration token + database id)
@@ -240,7 +242,7 @@ Do **not** set `PROXY_SECRET` when the browser calls the API directly (causes `4
 | `CHDIR` error                            | `WorkingDirectory` in systemd doesn’t exist — fix path                                      |
 | HTTPS 404                                | nginx config — `/staging/` → 3002, `/` → 3001                                               |
 | HTTPS timeout                            | VM network tag `courts-api` + firewall 80/443                                               |
-| `401` from API                           | Remove `PROXY_SECRET` from env file                                                         |
+| `401` from API                           | Remove `PROXY_SECRET` from env file; for `/api/events/public`, also set staging `THE_GRIND_BACKEND_URL=https://api.dev.thegrind-app.com` (prod Grind web/v2 is 401) |
 | Save OK but `images: "[]"`               | Add `GCS_BUCKET_NAME=courts-image-bucket` to env; check `journalctl` for `GCS upload error` |
 | `Image upload failed` / stream destroyed | Remove stale `api/*.json` in code folder; use VM service account; check bucket permissions  |
 | `MYSQL_PASSWORD: command not found`      | Quote password in env file: `MYSQL_PASSWORD='...'`                                          |

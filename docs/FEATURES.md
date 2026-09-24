@@ -133,7 +133,7 @@ End-user login integrates with **The Grind** (`api.thegrind-app.com`).
 |----------|---------|
 | `VITE_API_URL` | Courts API base (auth proxied through it) |
 | `VITE_THE_GRIND_API_URL` | Optional override for auth base |
-| `THE_GRIND_BACKEND_URL` | Server-side Grind API (VM env) |
+| `THE_GRIND_BACKEND_URL` | Server-side Grind API (VM env). Staging should use `https://api.dev.thegrind-app.com` so `/events/web/v2` is public; prod uses `https://api.thegrind-app.com`. |
 
 ---
 
@@ -234,7 +234,7 @@ Base URLs:
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/events/public` | Aggregated public events (cached 90s) |
+| GET | `/api/events/public` | Proxies Grind `/events/web/v2` (`tab`/`order`/`page`/`pageSize`; cached 90s). Falls back to `/events/getExploreEvents` if web/v2 returns 401/403/404. |
 | GET | `/api/image-proxy?url=` | Proxy GCS images (CORS workaround) |
 
 ---
@@ -284,12 +284,15 @@ MYSQL_PASSWORD='...'   # quote if special chars
 MYSQL_DATABASE=courts-db
 
 GCS_BUCKET_NAME=courts-image-bucket
+# Staging: https://api.dev.thegrind-app.com  |  Prod: https://api.thegrind-app.com
 THE_GRIND_BACKEND_URL=https://api.thegrind-app.com
 COURTS_FRONTEND_URL=https://courts.theground.io
 SUPER_ADMIN_PASSWORD=...   # optional, has default in code
 ```
 
 **Do not set** `PROXY_SECRET` when the browser calls the API directly (causes 401).
+
+**Upcoming events 401:** Courts proxies Grind `/events/web/v2`. That route is public on **api.dev**; **api.thegrind-app.com** currently returns 401. Point staging `THE_GRIND_BACKEND_URL` at `https://api.dev.thegrind-app.com`, redeploy/restart the API, or rely on the `getExploreEvents` fallback in code.
 
 ### 6.4 Images (GCS)
 

@@ -9,7 +9,9 @@ export type GrindUpcomingEventsPayload = {
     page?: number;
     pageSize?: number;
     total?: number;
+    totalItems?: number;
     pageCount?: number;
+    totalPages?: number;
   };
 };
 
@@ -29,7 +31,7 @@ const events = ref<GrindEventRow[]>([]);
 const pagesFetched = ref(0);
 let activeRequestId = 0;
 
-const LOCAL_CACHE_KEY = 'venue_upcoming_events_cache_v3';
+const LOCAL_CACHE_KEY = 'venue_upcoming_events_cache_v5';
 const LOCAL_CACHE_TTL_MS = 1000 * 60 * 5; // 5 minutes
 const DEFAULT_MAX_PAGES = 20;
 const PAGE_SIZE = 8;
@@ -41,10 +43,21 @@ type LocalCachePayload = {
   pageCount?: number;
 };
 
+function parseEventTime(value: string | null | undefined): number {
+  if (value == null || String(value).trim() === '') return Number.NaN;
+  return new Date(value).getTime();
+}
+
+/** Keep when endDate is missing/invalid; drop only when endDate is parseable and <= now. */
 function isNotFinished(ev: GrindEventRow): boolean {
-  const end = new Date(ev.endDate).getTime();
-  if (!Number.isFinite(end)) return false;
+  const end = parseEventTime(ev.endDate);
+  if (!Number.isFinite(end)) return true;
   return end > Date.now();
+}
+
+function metaPageCount(meta: GrindUpcomingEventsPayload['meta']): number {
+  const raw = meta?.pageCount ?? meta?.totalPages ?? 1;
+  return Math.max(1, Number(raw) || 1);
 }
 
 function readItems(payload: GrindUpcomingEventsPayload): GrindEventRow[] {
@@ -68,10 +81,21 @@ function readItems(payload: GrindUpcomingEventsPayload): GrindEventRow[] {
 
 function normalizeEvents(list: GrindEventRow[]): GrindEventRow[] {
   return list.filter(isNotFinished).sort((a, b) => {
-    const endA = new Date(a.endDate).getTime();
-    const endB = new Date(b.endDate).getTime();
-    if (endA !== endB) return endA - endB;
-    return new Date(a.startDate).getTime() - new Date(b.startDate).getTime();
+    const endA = parseEventTime(a.endDate);
+    const endB = parseEventTime(b.endDate);
+    const endAOk = Number.isFinite(endA);
+    const endBOk = Number.isFinite(endB);
+    if (endAOk && endBOk && endA !== endB) return endA - endB;
+    if (endAOk && !endBOk) return -1;
+    if (!endAOk && endBOk) return 1;
+    const startA = parseEventTime(a.startDate);
+    const startB = parseEventTime(b.startDate);
+    const startAOk = Number.isFinite(startA);
+    const startBOk = Number.isFinite(startB);
+    if (startAOk && startBOk && startA !== startB) return startA - startB;
+    if (startAOk && !startBOk) return -1;
+    if (!startAOk && startBOk) return 1;
+    return Number(a.id) - Number(b.id);
   });
 }
 
@@ -145,7 +169,7 @@ function writeLocalCache(
 
 async function fetchPage(page: number, pageSize: number): Promise<GrindUpcomingEventsPayload> {
   const url = courtApiUrl(
-    `/api/events/public?tab=upcoming&order=ASC&page=${page}&pageSize=${pageSize}`,
+    `/api/events/public?tab=upcoming&order=DESC&page=${page}&pageSize=${pageSize}`,
   );
   const res = await fetch(url, { credentials: 'include' });
   if (!res.ok) {
@@ -176,7 +200,7 @@ async function loadGrindUpcomingEvents(
     const first = await fetchPage(1, PAGE_SIZE);
     if (requestId !== activeRequestId) return;
     const firstItems = readItems(first);
-    const totalPages = Math.max(1, Number(first.meta?.pageCount || 1));
+    const totalPages = metaPageCount(first.meta);
     const pagesToFetch = Math.min(totalPages, maxPages);
     const normalizedFirst = normalizeEvents(firstItems);
 

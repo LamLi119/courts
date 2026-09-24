@@ -6,11 +6,11 @@ export type GrindEventRow = {
   name: string;
   companyName?: string;
   company?: { id?: number; name?: string };
-  startDate: string;
-  endDate: string;
-  location: string;
-  joinCount: number;
-  isDisplayHeadCount: boolean;
+  startDate?: string;
+  endDate?: string;
+  location?: string;
+  joinCount?: number;
+  isDisplayHeadCount?: boolean;
   profile?: { filePath?: string | null } | null;
 };
 
@@ -20,6 +20,17 @@ function sameCalendarDay(a: Date, b: Date): boolean {
     && a.getMonth() === b.getMonth()
     && a.getDate() === b.getDate()
   );
+}
+
+export function hasGrindEventDates(
+  startIso?: string | null,
+  endIso?: string | null,
+): boolean {
+  if (startIso == null || endIso == null) return false;
+  if (String(startIso).trim() === '' || String(endIso).trim() === '') return false;
+  const start = new Date(startIso).getTime();
+  const end = new Date(endIso).getTime();
+  return Number.isFinite(start) && Number.isFinite(end);
 }
 
 /** One line like "Tue, May 12 • 7:15 PM – 8:45 PM" (en) or zh-HK equivalents. */

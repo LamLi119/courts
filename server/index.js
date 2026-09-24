@@ -27,7 +27,7 @@ const PUBLIC_EVENTS_CACHE_TTL_MS = 1000 * 90; // 90s short cache
 const publicEventsCache = new Map();
 const publicEventsInflight = new Map();
 const PUBLIC_EVENTS_PREWARM_QS = [
-  'order=ASC&tab=upcoming&page=1&pageSize=8',
+  'order=DESC&tab=upcoming&page=1&pageSize=8',
 ];
 const OKF_CACHE_TTL_MS = 1000 * 60 * 5;
 let okfCache = null;
@@ -525,6 +525,20 @@ async function grindFetch(pathname, options) {
   }
   const normalizedPath = pathname.startsWith('/') ? pathname : `/${pathname}`;
   const base = THE_GRIND_BACKEND_URL.replace(/\/$/, '');
+  const method = options?.method || 'GET';
+  const hasBody = options?.body != null;
+  // GET without body: do not send Content-Type (matches public Grind curls that only set Accept).
+  const headers = {
+    ...(hasBody || (method !== 'GET' && method !== 'HEAD')
+      ? { 'Content-Type': 'application/json' }
+      : {}),
+    ...(options?.headers || {}),
+  };
+  const tryAlternateOnStatuses = new Set(
+    Array.isArray(options?.tryAlternateOnStatuses)
+      ? options.tryAlternateOnStatuses
+      : [404],
+  );
 
   const tryUrls = [];
   // Try both "with /api" and "without /api" mounting styles.
@@ -556,9 +570,9 @@ async function grindFetch(pathname, options) {
     let res;
     try {
       res = await fetch(url, {
-        method: options?.method || 'GET',
-        headers: { 'Content-Type': 'application/json', ...(options?.headers || {}) },
-        body: options?.body ? JSON.stringify(options.body) : undefined,
+        method,
+        headers,
+        body: hasBody ? JSON.stringify(options.body) : undefined,
       });
     } catch (e) {
       // Important: fetch() errors (DNS/connection refused/etc) would otherwise lose context.
@@ -571,8 +585,8 @@ async function grindFetch(pathname, options) {
     lastStatus = res.status;
     lastText = await res.text().catch(() => '');
 
-    // If it's not a 404, don't try alternate mount points.
-    if (res.status !== 404) break;
+    // Default: only try the alternate /api mount on 404. Callers can widen this.
+    if (!tryAlternateOnStatuses.has(res.status)) break;
   }
 
   let msg = lastText && lastText.length < 500 ? lastText : 'Request failed';
@@ -602,9 +616,20 @@ function cleanupPublicEventsCache(now = Date.now()) {
 }
 
 /**
- * The Grind `/events/getExploreEvents` response shape has varied across deployments
- * (top-level array, `data`, `events`, nested `data.items`, etc.). Normalize so the
- * Courts frontend always receives `{ data: [...], meta?: {...} }`.
+ * Alias web/v2 pagination fields so the Courts frontend can keep using pageCount/total.
+ */
+function normalizeEventsMeta(meta) {
+  if (!meta || typeof meta !== 'object') return {};
+  const out = { ...meta };
+  if (out.pageCount == null && out.totalPages != null) out.pageCount = out.totalPages;
+  if (out.total == null && out.totalItems != null) out.total = out.totalItems;
+  return out;
+}
+
+/**
+ * The Grind `/events/web/v2` (and older explore) response shape has varied across
+ * deployments (top-level array, `data`, `events`, nested `data.items`, etc.).
+ * Normalize so the Courts frontend always receives `{ data: [...], meta?: {...} }`.
  */
 function normalizeExploreEventsBody(raw) {
   if (raw == null) return { data: [], meta: {} };
@@ -617,7 +642,10 @@ function normalizeExploreEventsBody(raw) {
   for (const k of arrayKeys) {
     const v = raw[k];
     if (Array.isArray(v)) {
-      return { data: v, meta: typeof topMeta === 'object' && topMeta ? { ...topMeta } : {} };
+      return {
+        data: v,
+        meta: normalizeEventsMeta(typeof topMeta === 'object' && topMeta ? topMeta : {}),
+      };
     }
   }
 
@@ -629,17 +657,42 @@ function normalizeExploreEventsBody(raw) {
       if (Array.isArray(v)) {
         return {
           data: v,
-          meta: { ...topMeta, ...innerMeta },
+          meta: normalizeEventsMeta({ ...topMeta, ...innerMeta }),
         };
       }
     }
   }
 
-  return { data: [], meta: typeof topMeta === 'object' && topMeta ? { ...topMeta } : {} };
+  return {
+    data: [],
+    meta: normalizeEventsMeta(typeof topMeta === 'object' && topMeta ? topMeta : {}),
+  };
+}
+
+async function fetchGrindPublicEventsRaw(qs) {
+  const opts = {
+    headers: { Accept: 'application/json' },
+    // Prod may 401 on one mount style while the other works; try both.
+    tryAlternateOnStatuses: [404, 401, 403],
+  };
+  try {
+    return await grindFetch(`/events/web/v2?${qs}`, opts);
+  } catch (err) {
+    const code = err?.statusCode;
+    // api.thegrind-app.com currently 401s public web/v2; keep explore as safety net
+    // until Grind opens the same public contract on prod (staging should use api.dev).
+    if (code === 401 || code === 403 || code === 404) {
+      console.warn(
+        `[events/public] /events/web/v2 failed (${code || 'error'}); falling back to getExploreEvents`,
+      );
+      return await grindFetch(`/events/getExploreEvents?${qs}`, opts);
+    }
+    throw err;
+  }
 }
 
 async function fetchPublicEventsWithCache(qs) {
-  const cacheKey = `events-public:${qs}`;
+  const cacheKey = `events-public:web-v2:${qs}`;
   const now = Date.now();
   const cached = publicEventsCache.get(cacheKey);
   if (cached && cached.expiresAt > now) {
@@ -652,7 +705,7 @@ async function fetchPublicEventsWithCache(qs) {
     return { data, cacheStatus: 'WAIT' };
   }
 
-  const request = grindFetch(`/events/getExploreEvents?${qs}`)
+  const request = fetchGrindPublicEventsRaw(qs)
     .then((raw) => {
       const normalized = normalizeExploreEventsBody(raw);
       const t = Date.now();

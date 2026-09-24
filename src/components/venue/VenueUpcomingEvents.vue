@@ -7,6 +7,7 @@ import {
   grindExploreEventsUrl,
   grindPublicEventUrl,
   eventImageSrc,
+  hasGrindEventDates,
 } from '../../utils/grindEventFormat';
 
 const props = defineProps<{
@@ -90,6 +91,13 @@ const showSkeleton = computed(
 function goingLabel(n: number): string {
   const tpl = props.t('attendeesGoing');
   return tpl.includes('{{n}}') ? tpl.replace(/\{\{n\}\}/g, String(n)) : `${n} ${tpl}`;
+}
+
+function eventTimeLabel(ev: GrindEventRow): string {
+  if (hasGrindEventDates(ev.startDate, ev.endDate)) {
+    return formatGrindEventCardLine(ev.startDate!, ev.endDate!, props.language);
+  }
+  return props.t('eventTimeTbd');
 }
 </script>
 
@@ -223,7 +231,7 @@ function goingLabel(n: number): string {
               :class="darkMode ? 'text-sky-300/90' : 'text-sky-700'"
             >
               <span class="shrink-0 mt-0.5 opacity-80" aria-hidden="true">🕐</span>
-              <span>{{ formatGrindEventCardLine(ev.startDate, ev.endDate, language) }}</span>
+              <span>{{ eventTimeLabel(ev) }}</span>
             </p>
             <h3
               class="text-[15px] font-black leading-snug line-clamp-2 m-0"
